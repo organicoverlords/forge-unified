@@ -53,7 +53,17 @@ impl Provider for NvidiaNimProvider {
         });
         
         if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
-            body["tools"] = serde_json::to_value(tools)?;
+            let oai_tools: Vec<serde_json::Value> = tools.iter().map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    }
+                })
+            }).collect();
+            body["tools"] = serde_json::to_value(oai_tools)?;
             body["tool_choice"] = json!(request.tool_choice.as_deref().unwrap_or("auto"));
         }
         
@@ -62,16 +72,19 @@ impl Provider for NvidiaNimProvider {
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
             .send()
-            .await?;
+            .await
+            .map_err(|e| anyhow::anyhow!("NIM request failed: {}", e))?;
         
         let status = response.status();
-        let text = response.text().await?;
+        let text = response.text().await
+            .map_err(|e| anyhow::anyhow!("NIM response body read failed: {}", e))?;
         
         if !status.is_success() {
             anyhow::bail!("NIM API error {}: {}", status, text);
         }
         
-        let nims_response: NimResponse = serde_json::from_str(&text)?;
+        let nims_response: NimResponse = serde_json::from_str(&text)
+            .map_err(|e| anyhow::anyhow!("NIM response parse failed: {} | body: {}", e, text.chars().take(500).collect::<String>()))?;
         let choice = nims_response.choices.into_iter().next()
             .context("No response from model")?;
         
@@ -108,13 +121,28 @@ impl Provider for NvidiaNimProvider {
     async fn chat_stream(&self, request: ChatRequest) -> Result<ChatStream> {
         let api_key = self.api_key()?;
         
-        let body = json!({
+        let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
             "temperature": request.temperature.unwrap_or(0.7),
             "max_tokens": request.max_tokens.unwrap_or(8192),
             "stream": true,
         });
+        
+        if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
+            let oai_tools: Vec<serde_json::Value> = tools.iter().map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    }
+                })
+            }).collect();
+            body["tools"] = serde_json::to_value(oai_tools)?;
+            body["tool_choice"] = json!(request.tool_choice.as_deref().unwrap_or("auto"));
+        }
         
         let response = self.client
             .post(format!("{}/chat/completions", self.config.api_base))
@@ -180,10 +208,37 @@ impl NvidiaNimProvider {
                 MessageRole::Assistant => "assistant",
                 MessageRole::Tool => "tool",
             };
-            json!({
-                "role": role,
-                "content": m.content,
-            })
+            let mut obj = serde_json::Map::new();
+            obj.insert("role".to_string(), json!(role));
+
+            if m.role == MessageRole::Tool {
+                let content = if let Some(ref results) = m.tool_results {
+                    results.iter().map(|r| {
+                        if r.success { r.output.clone() }
+                        else { format!("Error: {}", r.error.as_deref().unwrap_or("unknown")) }
+                    }).collect::<Vec<_>>().join("\n")
+                } else {
+                    m.content.clone()
+                };
+                obj.insert("content".to_string(), json!(content));
+            } else {
+                obj.insert("content".to_string(), json!(m.content));
+                if let Some(ref tool_calls) = m.tool_calls {
+                    let oai_calls: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
+                        let args_str = tc.args.to_string();
+                        json!({
+                            "id": tc.id.0.to_string(),
+                            "type": "function",
+                            "function": {
+                                "name": crate::provider::tool_kind_name(&tc.kind),
+                                "arguments": args_str,
+                            }
+                        })
+                    }).collect();
+                    obj.insert("tool_calls".to_string(), json!(oai_calls));
+                }
+            }
+            json!(obj)
         }).collect()
     }
 }

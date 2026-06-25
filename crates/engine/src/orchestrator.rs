@@ -29,14 +29,13 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, conversation_mgr: Arc<RwLock<ConversationManager>>) -> Self {
         let router = Arc::new(Router::from_config(&config));
         let tool_executor = Arc::new(ToolExecutor::new(
             config.workspace_root.clone(),
             config.tool_timeout_ms,
             config.max_parallel_tools,
         ));
-        let conversation_mgr = Arc::new(RwLock::new(ConversationManager::new()));
         let strategy = Arc::new(StrategyEngine::with_nim_catalog());
         let safety = Arc::new(SafetyChecker::new(config.approval_mode.clone()));
         let snapshot = Arc::new(SnapshotManager::new(&config.data_dir));
@@ -75,13 +74,16 @@ impl Orchestrator {
 
         while round < max_rounds {
             round += 1;
-            let conv_mgr = self.conversation_mgr.read().await;
-            let messages = conv_mgr.get_messages(&conversation_id);
+
+            let messages = {
+                let conv_mgr = self.conversation_mgr.read().await;
+                conv_mgr.get_messages(&conversation_id).to_vec()
+            };
 
             let tools = crate::tool::tool_definitions();
             let request = ChatRequest {
                 model: model.clone(),
-                messages: messages.to_vec(),
+                messages,
                 temperature: Some(0.7),
                 max_tokens: Some(4096),
                 stream: false,
@@ -92,6 +94,7 @@ impl Orchestrator {
             let response = match self.router.chat(request).await {
                 Ok(r) => r,
                 Err(e) => {
+                    tracing::warn!("LLM provider error: {}", e);
                     self.conversation_mgr.write().await.add_assistant_message(
                         &conversation_id,
                         format!("[Provider error: {}]", e),
@@ -101,9 +104,10 @@ impl Orchestrator {
             };
 
             let assistant_content = response.message.content.clone();
-            self.conversation_mgr.write().await.add_assistant_message(
+            self.conversation_mgr.write().await.add_assistant_message_with_tools(
                 &conversation_id,
                 assistant_content.clone(),
+                response.message.tool_calls.clone(),
             );
 
             if response.message.tool_calls.is_none() || response.message.tool_calls.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
@@ -113,7 +117,6 @@ impl Orchestrator {
             let tool_requests = response.message.tool_calls.unwrap();
             let decision = self.strategy.decide_for_requests(&provider, &model, &tool_requests);
 
-            // Filter allowed tools
             let mut allowed_requests = Vec::new();
             for req in tool_requests {
                 if self.safety.check_tool(&req.kind).await {

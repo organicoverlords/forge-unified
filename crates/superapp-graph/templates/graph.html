@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Code Graph</title>
+  <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.2/dist/vis-network.min.js"></script>
+  <style>
+    body { margin: 0; font-family: system-ui; background: #1a1a2e; color: #eee; }
+    #mynetwork { width: 100vw; height: 100vh; }
+    #controls { position: fixed; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; }
+    input { padding: 5px; margin: 5px; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <input type="text" id="search" placeholder="Search nodes...">
+    <select id="filter-type"><option value="">All Types</option></select>
+  </div>
+  <div id="mynetwork"></div>
+  <script>
+    const nodesData = {{ nodes_json }};
+    const edgesData = {{ edges_json }};
+    const nodes = new vis.DataSet(nodesData.map(n => ({
+      id: n.id, label: n.label, title: n.file_path || '',
+      group: n.node_type, color: colorFor(n.node_type)
+    })));
+    const edges = new vis.DataSet(edgesData.map(e => ({
+      from: e.source, to: e.target, label: e.edge_type, arrows: 'to'
+    })));
+    const container = document.getElementById('mynetwork');
+    const network = new vis.Network(container, { nodes, edges }, {
+      physics: { barnesHut: { gravitationalConstant: -2000 } },
+      interaction: { hover: true }
+    });
+    document.getElementById('search').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      nodes.forEach(n => { n.hidden = !n.label.toLowerCase().includes(q); nodes.update(n); });
+    });
+    function colorFor(t) {
+      const c = { File:'#444', Module:'#00bcd4', Class:'#ff9800', Function:'#4caf50',
+        Method:'#8bc34a', Struct:'#ff5722', Enum:'#9c27b0', Trait:'#009688',
+        Type:'#607d8b', Variable:'#795548', Constant:'#f44336', Import:'#2196f3' };
+      return c[t] || '#666';
+    }
+  </script>
+</body>
+</html>

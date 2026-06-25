@@ -8,6 +8,7 @@ use serde_json::json;
 pub mod batch;
 pub mod browser;
 pub mod file_ops;
+pub mod graph;
 pub mod shell_ops;
 pub mod task_ops;
 pub mod web_ops;
@@ -46,6 +47,8 @@ impl ToolExecutor {
             ToolKind::SwitchMode => self.execute_switch_mode(request).await,
             ToolKind::BrowserProof => self.execute_browser_proof(request).await,
             ToolKind::VisionReview => self.execute_vision_review(request).await,
+            ToolKind::GraphBuild => self.execute_graph_build(request).await,
+            ToolKind::GraphQuery => self.execute_graph_query(request).await,
         };
         
         let duration = start.elapsed().as_millis() as u64;
@@ -264,6 +267,29 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
                     "prompt": { "type": "string", "description": "Custom analysis prompt (optional)" }
                 },
                 "required": ["image_base64"]
+            }),
+        },
+        ToolConfig {
+            name: "graph_build".to_string(),
+            description: "Build a knowledge graph from code files in the workspace. Extracts imports, dependencies, and file structure into a queryable graph.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "pattern": { "type": "string", "description": "Glob pattern for files to include (default **/crates/**/*.rs)", "default": "**/crates/**/*.rs" }
+                },
+                "required": []
+            }),
+        },
+        ToolConfig {
+            name: "graph_query".to_string(),
+            description: "Query a previously built knowledge graph. Search for files, functions, or dependencies by keyword.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "graph_json": { "type": "string", "description": "JSON output from a previous graph_build call" },
+                    "query": { "type": "string", "description": "Search query (file name, function, import, etc.)" }
+                },
+                "required": ["graph_json", "query"]
             }),
         },
     ]

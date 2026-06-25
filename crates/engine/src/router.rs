@@ -17,10 +17,18 @@ impl Router {
         let enabled = config.provider_priority_order();
         let mut priority_order = Vec::new();
 
-        for pc in &enabled {
-            let provider = super::provider::create_provider((*pc).clone());
-            priority_order.push(pc.id.clone());
-            providers.insert(pc.id.clone(), provider);
+        if enabled.is_empty() {
+            let nim_config = super::provider::default_nim_config();
+            let nim_id = nim_config.id.clone();
+            let provider = super::provider::create_provider(nim_config);
+            providers.insert(nim_id.clone(), provider);
+            priority_order.push(nim_id);
+        } else {
+            for pc in &enabled {
+                let provider = super::provider::create_provider((*pc).clone());
+                priority_order.push(pc.id.clone());
+                providers.insert(pc.id.clone(), provider);
+            }
         }
 
         Self { providers, priority_order }

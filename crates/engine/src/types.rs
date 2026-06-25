@@ -39,6 +39,8 @@ pub enum ToolKind {
     SwitchMode,
     BrowserProof,
     VisionReview,
+    GraphBuild,
+    GraphQuery,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

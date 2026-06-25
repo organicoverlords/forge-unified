@@ -1,0 +1,63 @@
+[package]
+name = "superapp-graph"
+version = "2.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/organicoverlords/rust-ai-superapp"
+description = "Knowledge graph extraction and visualization for codebases"
+
+[lib]
+name = "superapp_graph"
+path = "src/lib.rs"
+
+[dependencies]
+# Tree-sitter for AST parsing
+tree-sitter = "0.25"
+tree-sitter-language = "0.1"
+
+# Tree-sitter language bindings
+tree-sitter-rust = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-c = "0.23"
+tree-sitter-java = "0.23"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Graph algorithms
+petgraph = "0.6"
+
+# File walking
+walkdir = "2.4"
+ignore = "0.4"
+
+# HTTP server for MCP
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Templating for HTML visualization
+askama = "0.12"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Utils
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[[bin]]
+name = "graphify"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3.0"

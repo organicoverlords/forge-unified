@@ -70,6 +70,32 @@ pub struct TokenUsage {
     pub total_tokens: u32,
 }
 
+/// Convert a ToolKind to its snake_case name.
+pub fn tool_kind_name(kind: &ToolKind) -> &'static str {
+    match kind {
+        ToolKind::FileRead => "file_read",
+        ToolKind::FileWrite => "file_write",
+        ToolKind::FileEdit => "file_edit",
+        ToolKind::FileDelete => "file_delete",
+        ToolKind::FileList => "file_list",
+        ToolKind::FileGlob => "file_glob",
+        ToolKind::FileSearch => "file_search",
+        ToolKind::WebFetch => "web_fetch",
+        ToolKind::WebSearch => "web_search",
+        ToolKind::ShellCommand => "shell_command",
+        ToolKind::TerminalRun => "terminal_run",
+        ToolKind::Task => "task",
+        ToolKind::BatchParallel => "batch_parallel",
+        ToolKind::RepoInfo => "repo_info",
+        ToolKind::ProposePatch => "propose_patch",
+        ToolKind::SwitchMode => "switch_mode",
+        ToolKind::BrowserProof => "browser_proof",
+        ToolKind::VisionReview => "vision_review",
+        ToolKind::GraphBuild => "graph_build",
+        ToolKind::GraphQuery => "graph_query",
+    }
+}
+
 /// Convert a raw tool call name to a ToolKind.
 pub fn tool_kind_from_name(name: &str) -> Option<ToolKind> {
     match name {
@@ -90,6 +116,8 @@ pub fn tool_kind_from_name(name: &str) -> Option<ToolKind> {
         "switch_mode" => Some(ToolKind::SwitchMode),
         "browser_proof" => Some(ToolKind::BrowserProof),
         "vision_review" => Some(ToolKind::VisionReview),
+        "graph_build" => Some(ToolKind::GraphBuild),
+        "graph_query" => Some(ToolKind::GraphQuery),
         "batch_parallel" | "parallel_tool_calls" => Some(ToolKind::BatchParallel),
         _ => None,
     }
@@ -163,6 +191,6 @@ pub fn default_nim_config() -> ProviderConfig {
         enabled: std::env::var("NVIDIA_NIM_API_KEY").is_ok(),
         priority: 0,
         max_retries: 3,
-        timeout_ms: 120000,
+        timeout_ms: 60000,
     }
 }

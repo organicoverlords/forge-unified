@@ -1,6 +1,6 @@
 //! Conversation manager — CRUD for conversations with messages.
 
-use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolResult};
+use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -70,11 +70,15 @@ impl ConversationManager {
     }
 
     pub fn add_assistant_message(&mut self, id: &ConversationId, content: String) {
+        self.add_assistant_message_with_tools(id, content, None);
+    }
+
+    pub fn add_assistant_message_with_tools(&mut self, id: &ConversationId, content: String, tool_calls: Option<Vec<ToolRequest>>) {
         if let Some(conv) = self.conversations.get_mut(id) {
             conv.messages.push(Message {
                 role: MessageRole::Assistant,
                 content,
-                tool_calls: None,
+                tool_calls,
                 tool_results: None,
                 metadata: Default::default(),
             });

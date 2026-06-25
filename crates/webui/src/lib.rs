@@ -25,6 +25,8 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/api/browser-proof", post(routes::browser_proof))
         .route("/api/vision-review", post(routes::vision_review))
         .route("/api/benchmark", get(routes::benchmark))
+        .route("/api/graph", get(routes::graph_visualization))
+        .route("/api/graph/data", get(routes::graph_data))
         .route("/ws", get(ws::ws_handler))
         .with_state(state)
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))

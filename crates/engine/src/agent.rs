@@ -8,6 +8,8 @@ use crate::types::*;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use serde_json::Value;
+use uuid::Uuid;
 
 pub struct Agent {
     orchestrator: Arc<Orchestrator>,
@@ -19,9 +21,9 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: Config) -> Self {
-        let snapshots = Arc::new(SnapshotManager::new(&config.data_dir));
-        let orchestrator = Arc::new(Orchestrator::new(config.clone()));
         let conversations = Arc::new(RwLock::new(ConversationManager::new()));
+        let snapshots = Arc::new(SnapshotManager::new(&config.data_dir));
+        let orchestrator = Arc::new(Orchestrator::new(config.clone(), conversations.clone()));
 
         Self {
             orchestrator,
@@ -120,6 +122,22 @@ impl Agent {
             anyhow::bail!("Vision review failed: {}", result.error.unwrap_or_default());
         }
         serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse vision review result: {}", e))
+    }
+
+    pub async fn graph_build(&self, pattern: Option<String>) -> Result<Value> {
+        let req = ToolRequest {
+            id: ToolCallId(Uuid::new_v4()),
+            kind: ToolKind::GraphBuild,
+            args: serde_json::json!({
+                "pattern": pattern.unwrap_or_else(|| "**/crates/**/*.rs".to_string()),
+            }),
+            parallel_group: None,
+        };
+        let result = self.orchestrator.execute_tool(req).await?;
+        if !result.success {
+            anyhow::bail!("Graph build failed: {}", result.error.unwrap_or_default());
+        }
+        serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse graph result: {}", e))
     }
 }
 

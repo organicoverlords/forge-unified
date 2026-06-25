@@ -24,9 +24,8 @@ impl ToolExecutor {
         let screenshot_path = out_dir.join("screenshot.png");
 
         let screenshot_output = Command::new(&chrome)
-            .arg("--headless")
+            .arg("--headless=new")
             .arg("--disable-gpu")
-            .arg("--no-sandbox")
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
             .arg("--virtual-time-budget=15000")
@@ -201,9 +200,8 @@ fn base64_encode(bytes: &[u8]) -> String {
 
 fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
     let dom_output = Command::new(chrome)
-        .arg("--headless")
+        .arg("--headless=new")
         .arg("--disable-gpu")
-        .arg("--no-sandbox")
         .arg("--dump-dom")
         .arg("--virtual-time-budget=10000")
         .arg(url)
