@@ -1,0 +1,24 @@
+[package]
+name = "forge-app"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
+[dependencies]
+forge-engine = { path = "../engine" }
+forge-webui = { path = "../webui" }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+clap_verbosity_flag = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
