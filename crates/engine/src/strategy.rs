@@ -58,8 +58,8 @@ impl StrategyEngine {
 
     pub fn batch_plan(
         &self,
-        provider: &ProviderId,
-        model: &ModelId,
+        _provider: &ProviderId,
+        _model: &ModelId,
         tools: &[ToolKind],
         max_batch_size: u32,
     ) -> Vec<Vec<ToolKind>> {

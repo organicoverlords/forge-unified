@@ -16,7 +16,7 @@ impl ToolExecutor {
         let args: Args = serde_json::from_value(request.args)?;
         
         let mut sub_requests = Vec::new();
-        for (i, call) in args.calls.into_iter().enumerate() {
+        for (_i, call) in args.calls.into_iter().enumerate() {
             let kind = match call.tool.as_str() {
                 "file_read" => ToolKind::FileRead,
                 "file_write" => ToolKind::FileWrite,

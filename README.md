@@ -1,22 +1,34 @@
-# Standalone Rust AI Superapp
+# Forge Unified — Rust AI Superapp
 
-A new Rust-owned AI app.
+A standalone Rust AI application with free LLM routing, tool execution, and a chat-first WebUI.
 
-This is not a wrapper around LibreChat, OpenCode, T3Code, Pi, Claurst, Odysseus, Hermes, LMStudio, Ollama, FreeLLM, Claude Code, or Codex.
+**No Docker/Mongo/Redis/Node/Python runtime required.** Single binary, zero API keys needed for MVP (MockProvider included).
 
-Those projects are source references only.
+## Architecture
 
-## MVP rules
+```
+crates/
+  engine/    — Core engine: orchestration, tool execution, provider routing, conversation management
+  webui/     — Axum HTTP/WS server with REST API and WebSocket chat
+  app/       — CLI binary entrypoint
+```
 
-The app must boot with:
+## Quick Start
 
-- zero API keys
-- MockProvider
-- local store
-- basic chat
-- no Docker requirement
-- no Mongo/Redis requirement
-- no Node/Python runtime requirement
-- no external app runtime dependency
+```bash
+cargo run --release -- --help
+cargo run --release           # starts on http://0.0.0.0:3000
+```
 
-See `docs/PROJECT_STATE.md`.
+## Features
+
+- Multi-provider LLM routing (OpenAI-compatible, NVIDIA NIM, Groq, OpenRouter)
+- Streaming chat with SSE
+- Tool execution (file ops, web fetch, shell, terminal, batch parallel)
+- Conversation management (CRUD, snapshots, history)
+- Benchmark adapter API
+- WebSocket real-time chat
+- Provider priority/fallback configuration
+- File size gate CI (max 500 lines per file)
+
+For product scope, feature status, proof requirements, orchestration rules, and benchmark contracts, read `FEATURE-AUDIT.md`.

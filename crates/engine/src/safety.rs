@@ -80,6 +80,8 @@ impl ToolKind {
             ToolKind::RepoInfo,
             ToolKind::ProposePatch,
             ToolKind::SwitchMode,
+            ToolKind::BrowserProof,
+            ToolKind::VisionReview,
         ]
     }
 }

@@ -1,7 +1,7 @@
 //! Task, repo info, propose patch, and switch mode tools.
 
 use crate::tool::ToolExecutor;
-use crate::types::{ToolRequest, ToolResult, ToolCallId, ToolKind};
+use crate::types::{ToolRequest, ToolResult, ToolKind};
 use anyhow::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -9,6 +9,7 @@ use uuid::Uuid;
 impl ToolExecutor {
     pub async fn execute_task(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
         struct Args { description: String, background: Option<bool>, tools: Option<Vec<String>> }
         let args: Args = serde_json::from_value(request.args)?;
         
@@ -77,6 +78,7 @@ impl ToolExecutor {
 
     pub async fn execute_propose_patch(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
         struct Args { summary: String, diff: String, run_id: Option<String> }
         let args: Args = serde_json::from_value(request.args)?;
         

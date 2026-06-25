@@ -1,13 +1,11 @@
 //! Provider abstraction for LLM API routing.
 //! Supports NVIDIA NIM, OpenAI-compatible, and local providers.
 
-use crate::types::{Message, ProviderConfig, ProviderId, ModelId, ModelConfig, ToolConfig, ToolKind};
-use anyhow::{Context, Result};
+use crate::types::{Message, ProviderConfig, ProviderId, ModelId, ModelConfig, ToolConfig, ToolKind, ToolRequest, ToolCallId};
+use uuid::Uuid;
+use anyhow::Result;
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::Duration;
 
 pub mod nvidia_nim;
 pub mod openai;
@@ -70,6 +68,45 @@ pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+}
+
+/// Convert a raw tool call name to a ToolKind.
+pub fn tool_kind_from_name(name: &str) -> Option<ToolKind> {
+    match name {
+        "file_read" => Some(ToolKind::FileRead),
+        "file_write" => Some(ToolKind::FileWrite),
+        "file_edit" => Some(ToolKind::FileEdit),
+        "file_delete" => Some(ToolKind::FileDelete),
+        "file_list" => Some(ToolKind::FileList),
+        "file_glob" => Some(ToolKind::FileGlob),
+        "file_search" => Some(ToolKind::FileSearch),
+        "web_fetch" => Some(ToolKind::WebFetch),
+        "web_search" => Some(ToolKind::WebSearch),
+        "shell_command" => Some(ToolKind::ShellCommand),
+        "terminal_run" => Some(ToolKind::TerminalRun),
+        "task" => Some(ToolKind::Task),
+        "repo_info" => Some(ToolKind::RepoInfo),
+        "propose_patch" => Some(ToolKind::ProposePatch),
+        "switch_mode" => Some(ToolKind::SwitchMode),
+        "browser_proof" => Some(ToolKind::BrowserProof),
+        "vision_review" => Some(ToolKind::VisionReview),
+        "batch_parallel" | "parallel_tool_calls" => Some(ToolKind::BatchParallel),
+        _ => None,
+    }
+}
+
+/// Convert provider tool call deltas into ToolRequest vec.
+pub fn tool_calls_from_deltas(deltas: Vec<ToolCallDelta>) -> Vec<ToolRequest> {
+    deltas.into_iter().filter_map(|d| {
+        let kind = tool_kind_from_name(&d.name)?;
+        let args: serde_json::Value = serde_json::from_str(&d.arguments).unwrap_or(serde_json::Value::Null);
+        Some(ToolRequest {
+            id: ToolCallId(Uuid::parse_str(&d.id).unwrap_or_else(|_| Uuid::new_v4())),
+            kind,
+            args,
+            parallel_group: None,
+        })
+    }).collect()
 }
 
 pub fn create_provider(config: ProviderConfig) -> Box<dyn Provider> {

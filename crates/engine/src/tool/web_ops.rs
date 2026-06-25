@@ -1,7 +1,7 @@
 //! Web operation tools.
 
 use crate::tool::ToolExecutor;
-use crate::types::{ToolRequest, ToolResult, ToolCallId, ToolKind};
+use crate::types::{ToolRequest, ToolResult, ToolKind};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use reqwest::Client;

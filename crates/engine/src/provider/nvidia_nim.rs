@@ -1,11 +1,13 @@
 //! NVIDIA NIM provider implementation.
 
-use crate::provider::{ChatRequest, ChatResponse, ChatStream, Provider, StreamEvent, TokenUsage};
-use crate::types::{ProviderConfig, ProviderId, Message, MessageRole, ModelId, ToolResult};
+#![allow(dead_code)]
+
+use crate::provider::{ChatRequest, ChatResponse, ChatStream, Provider, StreamEvent, TokenUsage, ToolCallDelta};
+use crate::types::{ProviderConfig, ProviderId, Message, MessageRole};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
@@ -42,13 +44,18 @@ impl Provider for NvidiaNimProvider {
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
         let api_key = self.api_key()?;
         
-        let body = json!({
+        let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
             "temperature": request.temperature.unwrap_or(0.7),
             "max_tokens": request.max_tokens.unwrap_or(8192),
             "stream": false,
         });
+        
+        if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
+            body["tools"] = serde_json::to_value(tools)?;
+            body["tool_choice"] = json!(request.tool_choice.as_deref().unwrap_or("auto"));
+        }
         
         let response = self.client
             .post(format!("{}/chat/completions", self.config.api_base))
@@ -68,11 +75,23 @@ impl Provider for NvidiaNimProvider {
         let choice = nims_response.choices.into_iter().next()
             .context("No response from model")?;
         
+        let tool_requests = choice.message.tool_calls.map(|tc| {
+            let deltas: Vec<ToolCallDelta> = tc.into_iter().filter_map(|v| {
+                let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+                let name = v.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let arguments = v.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}").to_string();
+                if name.is_empty() { None } else {
+                    Some(ToolCallDelta { id, name, arguments })
+                }
+            }).collect();
+            crate::provider::tool_calls_from_deltas(deltas)
+        });
+        
         Ok(ChatResponse {
             message: Message {
                 role: MessageRole::Assistant,
                 content: choice.message.content.unwrap_or_default(),
-                tool_calls: None,
+                tool_calls: tool_requests,
                 tool_results: None,
                 metadata: Default::default(),
             },

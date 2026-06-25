@@ -4,7 +4,7 @@ pub mod routes;
 pub mod state;
 pub mod ws;
 
-use axum::{Router, middleware, routing::{get, post, delete}};
+use axum::{Router, routing::{get, post, delete}};
 use state::AppState;
 use std::net::SocketAddr;
 use tower_http::cors::{CorsLayer, Any};
@@ -22,6 +22,8 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/api/conversations/:id/pause", post(routes::pause))
         .route("/api/conversations/:id/resume", post(routes::resume))
         .route("/api/conversations/:id/snapshot", post(routes::save_snapshot))
+        .route("/api/browser-proof", post(routes::browser_proof))
+        .route("/api/vision-review", post(routes::vision_review))
         .route("/api/benchmark", get(routes::benchmark))
         .route("/ws", get(ws::ws_handler))
         .with_state(state)

@@ -22,7 +22,9 @@ pub struct Orchestrator {
     conversation_mgr: Arc<RwLock<ConversationManager>>,
     strategy: Arc<StrategyEngine>,
     safety: Arc<SafetyChecker>,
+    #[allow(dead_code)]
     snapshot: Arc<SnapshotManager>,
+    #[allow(dead_code)]
     config: Config,
 }
 
@@ -76,14 +78,15 @@ impl Orchestrator {
             let conv_mgr = self.conversation_mgr.read().await;
             let messages = conv_mgr.get_messages(&conversation_id);
 
+            let tools = crate::tool::tool_definitions();
             let request = ChatRequest {
                 model: model.clone(),
                 messages: messages.to_vec(),
                 temperature: Some(0.7),
                 max_tokens: Some(4096),
                 stream: false,
-                tools: None,
-                tool_choice: None,
+                tools: Some(tools),
+                tool_choice: Some("auto".to_string()),
             };
 
             let response = match self.router.chat(request).await {
@@ -129,7 +132,7 @@ impl Orchestrator {
                             if !r.success { total_tool_failures += 1; }
                             results.push(r);
                         }
-                        Err(e) => {
+                        Err(_e) => {
                             total_tool_failures += 1;
                         }
                     }
@@ -177,5 +180,9 @@ impl Orchestrator {
     pub async fn resume(&self, conversation_id: &ConversationId) -> Result<()> {
         self.state.write().await.resume_run(conversation_id);
         Ok(())
+    }
+
+    pub async fn execute_tool(&self, request: crate::types::ToolRequest) -> Result<crate::types::ToolResult> {
+        self.tool_executor.execute(request).await
     }
 }

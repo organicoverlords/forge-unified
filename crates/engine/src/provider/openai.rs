@@ -1,11 +1,13 @@
 //! Generic OpenAI-compatible provider.
 
+#![allow(dead_code)]
+
 use crate::provider::{ChatRequest, ChatResponse, ChatStream, Provider, StreamEvent, TokenUsage, ToolCallDelta};
-use crate::types::{ProviderConfig, ProviderId, Message, MessageRole, ModelId, ToolConfig};
+use crate::types::{ProviderConfig, ProviderId, Message, MessageRole};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
@@ -70,19 +72,20 @@ impl Provider for OpenAiProvider {
             .context("No response from model")?;
         
         let content = choice.message.content.unwrap_or_default();
-        let tool_calls = choice.message.tool_calls.map(|tc| {
-            tc.into_iter().map(|t| ToolCallDelta {
+        let tool_requests = choice.message.tool_calls.map(|tc| {
+            let deltas: Vec<ToolCallDelta> = tc.into_iter().map(|t| ToolCallDelta {
                 id: t.id,
                 name: t.function.name,
                 arguments: t.function.arguments,
-            }).collect::<Vec<_>>()
+            }).collect();
+            crate::provider::tool_calls_from_deltas(deltas)
         });
         
         Ok(ChatResponse {
             message: Message {
                 role: MessageRole::Assistant,
                 content,
-                tool_calls: None,
+                tool_calls: tool_requests,
                 tool_results: None,
                 metadata: Default::default(),
             },

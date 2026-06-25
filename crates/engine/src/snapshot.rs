@@ -1,6 +1,5 @@
 //! Snapshot manager — conversation checkpoint and restore.
 
-use crate::conversation::ConversationManager;
 use crate::types::{Conversation, ConversationId};
 use anyhow::{Context, Result};
 use std::path::PathBuf;

@@ -4,7 +4,6 @@ use axum::{extract::{Path, State}, Json};
 use crate::state::AppState;
 use forge_engine::types::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub async fn health(State(_s): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -74,6 +73,7 @@ pub async fn delete_conversation(
 #[derive(Deserialize)]
 pub struct ChatRequest {
     message: String,
+    #[allow(dead_code)]
     max_rounds: Option<u32>,
 }
 
@@ -124,7 +124,51 @@ pub async fn save_snapshot(
     Ok(Json(serde_json::json!({"snapshot_saved": true})))
 }
 
-pub async fn benchmark(State(s): State<AppState>) -> Json<serde_json::Value> {
+#[derive(Deserialize)]
+pub struct BrowserProofApiRequest {
+    pub url: String,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub capture_dom: Option<bool>,
+}
+
+pub async fn browser_proof(
+    State(s): State<AppState>,
+    Json(req): Json<BrowserProofApiRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let result = s.agent.browser_proof(
+        &req.url,
+        req.width.unwrap_or(1280),
+        req.height.unwrap_or(720),
+        req.capture_dom.unwrap_or(true),
+    ).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::to_value(result).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+pub struct VisionReviewApiRequest {
+    pub image_base64: String,
+    pub prompt: Option<String>,
+    pub provider_id: Option<String>,
+    pub model_id: Option<String>,
+}
+
+pub async fn vision_review(
+    State(s): State<AppState>,
+    Json(req): Json<VisionReviewApiRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let provider_id = req.provider_id.map(ProviderId);
+    let model_id = req.model_id.map(ModelId);
+    let result = s.agent.vision_review(
+        &req.image_base64,
+        req.prompt.as_deref(),
+        provider_id,
+        model_id,
+    ).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::to_value(result).unwrap_or_default()))
+}
+
+pub async fn benchmark(State(_s): State<AppState>) -> Json<serde_json::Value> {
     let config = forge_engine::config::Config::default();
     let adapter = forge_engine::benchmark::BenchmarkAdapter::from_config(&config);
     let report: Vec<_> = adapter.report().into_iter()

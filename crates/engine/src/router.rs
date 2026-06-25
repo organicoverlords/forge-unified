@@ -3,9 +3,8 @@
 use crate::config::Config;
 use crate::provider::{ChatRequest, ChatResponse, ChatStream, Provider};
 use crate::types::{ProviderId, ModelId, ProviderConfig};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub struct Router {
     providers: HashMap<ProviderId, Box<dyn Provider>>,

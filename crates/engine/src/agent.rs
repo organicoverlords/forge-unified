@@ -13,6 +13,7 @@ pub struct Agent {
     orchestrator: Arc<Orchestrator>,
     conversations: Arc<RwLock<ConversationManager>>,
     snapshots: Arc<SnapshotManager>,
+    #[allow(dead_code)]
     config: Config,
 }
 
@@ -65,7 +66,7 @@ impl Agent {
 
     pub async fn load_snapshot(&self, id: &ConversationId) -> Result<()> {
         let conv = self.snapshots.load(id)?;
-        let title = conv.title.clone();
+        let _title = conv.title.clone();
         self.conversations.write().await.delete(id);
         self.conversations.write().await.insert(id.clone(), conv);
         Ok(())
@@ -81,6 +82,44 @@ impl Agent {
 
     pub async fn resume(&self, id: &ConversationId) -> Result<()> {
         self.orchestrator.resume(id).await
+    }
+
+    pub async fn browser_proof(&self, url: &str, width: u32, height: u32, capture_dom: bool) -> Result<BrowserProofResult> {
+        let req = ToolRequest {
+            id: ToolCallId(uuid::Uuid::new_v4()),
+            kind: ToolKind::BrowserProof,
+            args: serde_json::json!({
+                "url": url,
+                "width": width,
+                "height": height,
+                "capture_dom": capture_dom,
+            }),
+            parallel_group: None,
+        };
+        let result = self.orchestrator.execute_tool(req).await?;
+        if !result.success {
+            anyhow::bail!("Browser proof failed: {}", result.error.unwrap_or_default());
+        }
+        serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse browser proof result: {}", e))
+    }
+
+    pub async fn vision_review(&self, image_base64: &str, prompt: Option<&str>, provider_id: Option<ProviderId>, model_id: Option<ModelId>) -> Result<VisionReviewResult> {
+        let req = ToolRequest {
+            id: ToolCallId(uuid::Uuid::new_v4()),
+            kind: ToolKind::VisionReview,
+            args: serde_json::json!({
+                "image_base64": image_base64,
+                "prompt": prompt,
+                "provider_id": provider_id,
+                "model_id": model_id,
+            }),
+            parallel_group: None,
+        };
+        let result = self.orchestrator.execute_tool(req).await?;
+        if !result.success {
+            anyhow::bail!("Vision review failed: {}", result.error.unwrap_or_default());
+        }
+        serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse vision review result: {}", e))
     }
 }
 

@@ -37,6 +37,8 @@ pub enum ToolKind {
     RepoInfo,
     ProposePatch,
     SwitchMode,
+    BrowserProof,
+    VisionReview,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +152,43 @@ pub enum RunStatus {
     Cancelled,
     Paused,
     RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserProofRequest {
+    pub url: String,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub capture_dom: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserProofResult {
+    pub screenshot_base64: String,
+    pub console_logs: Vec<String>,
+    pub dom_snapshot: Option<String>,
+    pub url: String,
+    pub page_title: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VisionReviewRequest {
+    pub image_base64: String,
+    pub prompt: Option<String>,
+    pub provider_id: Option<ProviderId>,
+    pub model_id: Option<ModelId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VisionReviewResult {
+    pub analysis: String,
+    pub verdict: Option<String>,
+    pub provider: ProviderId,
+    pub model: ModelId,
+    pub success: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,6 @@
 //! Configuration management for the Forge engine.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use crate::types::{ProviderConfig, ModelConfig, ProviderId, ModelId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

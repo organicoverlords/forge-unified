@@ -1,7 +1,7 @@
 //! Engine state — shared mutable state for the running engine.
 
 use crate::config::Config;
-use crate::types::{ConversationId, ProviderId, ModelId, RunId, RunStatus, AgentMode};
+use crate::types::{ConversationId, ProviderId, ModelId, RunId, AgentMode};
 use std::collections::HashMap;
 
 pub struct EngineState {
