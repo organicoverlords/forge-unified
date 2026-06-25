@@ -4,7 +4,6 @@ use axum::{extract::{Path, State}, Json};
 use crate::state::AppState;
 use forge_engine::types::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub async fn health(State(_s): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({

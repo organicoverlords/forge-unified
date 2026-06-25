@@ -1,16 +1,13 @@
 use crate::graph::KnowledgeGraph;
 use anyhow::Result;
-use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 pub struct PathFinder {
-    shortest_paths: HashMap<String, HashMap<String, usize>>,
 }
 
 impl PathFinder {
     pub fn new() -> Self {
-        Self {
-            shortest_paths: HashMap::new(),
-        }
+        Self {}
     }
 
     pub fn find_all_paths(
