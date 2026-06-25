@@ -1,10 +1,10 @@
-//! Graph knowledge tool — builds and queries code knowledge graphs.
+//! Graph knowledge tool — builds and queries code knowledge graphs using unifiedgraph.
 
 use crate::tool::ToolExecutor;
 use crate::types::{ToolKind, ToolRequest, ToolResult};
 use anyhow::Result;
 use std::collections::HashMap;
-use serde_json::json;
+use unifiedgraph::{GraphExtractor, KnowledgeGraph, GraphQuery};
 
 impl ToolExecutor {
     pub async fn execute_graph_build(&self, request: ToolRequest) -> Result<ToolResult> {
@@ -14,50 +14,48 @@ impl ToolExecutor {
 
         let workspace_root = &self.workspace_root;
 
-        let mut nodes = Vec::new();
-        let mut edges = Vec::new();
-        let mut file_count = 0;
+        let mut extractor = GraphExtractor::new();
 
-        let walker = glob::glob(&format!("{}/{}", workspace_root, pattern))?;
-        for entry in walker.flatten() {
-            if entry.is_file() {
-                let path = entry.strip_prefix(workspace_root).unwrap_or(&entry);
-                let path_str = path.to_string_lossy().to_string();
-                
-                if path_str.contains("\\target\\") || path_str.contains("/target/") {
-                    continue;
-                }
-                
-                let content = std::fs::read_to_string(&entry).unwrap_or_default();
-                let imports = Self::extract_imports(&content);
-                
-                nodes.push(json!({
-                    "id": format!("file:{}", file_count),
-                    "label": path_str,
-                    "type": "file",
-                    "imports": imports,
-                    "language": Self::detect_language(&path_str),
-                }));
-                
-                for imp in &imports {
-                    edges.push(json!({
-                        "source": format!("file:{}", file_count),
-                        "target": format!("import:{}", imp),
-                        "type": "imports",
-                    }));
-                }
-                
-                file_count += 1;
-            }
+        let full_pattern = if pattern.starts_with('/') || pattern.contains(':') {
+            pattern.to_string()
+        } else {
+            format!("{}/{}", workspace_root, pattern)
+        };
+
+        let graph = extractor.extract_from_patterns(&[full_pattern]).await?;
+
+        let mut nodes: Vec<serde_json::Value> = Vec::new();
+        let mut edges: Vec<serde_json::Value> = Vec::new();
+
+        for node in &graph.nodes {
+            nodes.push(serde_json::json!({
+                "id": node.id,
+                "label": node.name,
+                "type": node.node_type.as_str(),
+                "file": node.file_path,
+                "line": node.line,
+                "content": node.content,
+            }));
         }
 
-        let graph = json!({
+        for edge in &graph.edges {
+            let source = if edge.from_node_id.is_empty() { "import".to_string() } else { edge.from_node_id.clone() };
+            let target = if edge.to_node_id.is_empty() { "unknown".to_string() } else { edge.to_node_id.clone() };
+
+            edges.push(serde_json::json!({
+                "source": source,
+                "target": target,
+                "type": edge.edge_type.as_str(),
+            }));
+        }
+
+        let graph_json = serde_json::json!({
             "nodes": nodes,
             "edges": edges,
             "stats": {
-                "files": file_count,
-                "nodes": nodes.len(),
-                "edges": edges.len(),
+                "files": graph.nodes.iter().map(|n| &n.file_path).collect::<std::collections::HashSet<_>>().len(),
+                "nodes": graph.nodes.len(),
+                "edges": graph.edges.len(),
             }
         });
 
@@ -65,7 +63,7 @@ impl ToolExecutor {
             id: request.id,
             kind: ToolKind::GraphBuild,
             success: true,
-            output: serde_json::to_string(&graph)?,
+            output: serde_json::to_string(&graph_json)?,
             error: None,
             duration_ms: 0,
             metadata: HashMap::new(),
@@ -73,7 +71,7 @@ impl ToolExecutor {
     }
 
     pub async fn execute_graph_query(&self, request: ToolRequest) -> Result<ToolResult> {
-        let graph_json = request.args.get("graph_json")
+        let graph_json_str = request.args.get("graph_json")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing graph_json parameter"))?;
 
@@ -81,38 +79,28 @@ impl ToolExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing query parameter"))?;
 
-        let graph: serde_json::Value = serde_json::from_str(graph_json)?;
-        let query_lower = query.to_lowercase();
+        let graph: KnowledgeGraph = serde_json::from_str(graph_json_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse graph JSON: {}", e))?;
 
-        let mut results = Vec::new();
-        
-        if let Some(nodes) = graph["nodes"].as_array() {
-            for node in nodes {
-                let label = node["label"].as_str().unwrap_or("");
-                let node_type = node["type"].as_str().unwrap_or("");
-                let imports = node["imports"].as_array().map(|a| {
-                    a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")
-                }).unwrap_or_default();
+        let gq = GraphQuery::new(graph);
 
-                if label.to_lowercase().contains(&query_lower)
-                    || imports.to_lowercase().contains(&query_lower)
-                    || node_type.to_lowercase().contains(&query_lower)
-                {
-                    results.push(json!({
-                        "id": node["id"],
-                        "label": label,
-                        "type": node_type,
-                        "imports": imports,
-                    }));
-                }
-            }
-        }
+        let results: Vec<_> = gq.find_by_name(query).iter()
+            .map(|n| {
+                serde_json::json!({
+                    "id": n.id,
+                    "name": n.name,
+                    "type": n.node_type.as_str(),
+                    "file": n.file_path,
+                    "line": n.line,
+                })
+            })
+            .collect();
 
         Ok(ToolResult {
             id: request.id,
             kind: ToolKind::GraphQuery,
             success: true,
-            output: serde_json::to_string(&json!({
+            output: serde_json::to_string(&serde_json::json!({
                 "query": query,
                 "matches": results.len(),
                 "results": results,
@@ -121,27 +109,5 @@ impl ToolExecutor {
             duration_ms: 0,
             metadata: HashMap::new(),
         })
-    }
-
-    fn extract_imports(content: &str) -> Vec<String> {
-        let mut imports = Vec::new();
-        for line in content.lines() {
-            let line = line.trim();
-            if line.starts_with("use ") || line.starts_with("mod ") || line.starts_with("extern crate ") {
-                imports.push(line.to_string());
-            }
-        }
-        imports
-    }
-
-    fn detect_language(path: &str) -> String {
-        if path.ends_with(".rs") { "rust".to_string() }
-        else if path.ends_with(".js") || path.ends_with(".ts") { "javascript".to_string() }
-        else if path.ends_with(".py") { "python".to_string() }
-        else if path.ends_with(".go") { "go".to_string() }
-        else if path.ends_with(".java") { "java".to_string() }
-        else if path.ends_with(".cpp") || path.ends_with(".cc") || path.ends_with(".cxx") { "cpp".to_string() }
-        else if path.ends_with(".c") || path.ends_with(".h") { "c".to_string() }
-        else { "unknown".to_string() }
     }
 }

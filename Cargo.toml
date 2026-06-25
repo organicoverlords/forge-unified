@@ -3,7 +3,7 @@ members = [
     "crates/engine",
     "crates/webui",
     "crates/app",
-    "crates/superapp-graph",
+    "crates/unifiedgraph",
 ]
 resolver = "2"
 

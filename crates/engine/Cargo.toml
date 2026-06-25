@@ -36,7 +36,7 @@ regex = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 image = "0.25"
-superapp-graph = { path = "../superapp-graph" }
+unifiedgraph = { path = "../unifiedgraph" }
 
 [dev-dependencies]
 tokio-test = "0.4"

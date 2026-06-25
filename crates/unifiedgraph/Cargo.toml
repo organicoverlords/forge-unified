@@ -1,13 +1,13 @@
 [package]
-name = "superapp-graph"
-version = "2.0.0"
+name = "unifiedgraph"
+version = "0.1.0"
 edition = "2021"
-license = "MIT"
-repository = "https://github.com/organicoverlords/rust-ai-superapp"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/organicoverlords/forge-unified"
 description = "Knowledge graph extraction and visualization for codebases"
 
 [lib]
-name = "superapp_graph"
+name = "unifiedgraph"
 path = "src/lib.rs"
 
 [dependencies]
