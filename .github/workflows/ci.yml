@@ -103,15 +103,15 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run MVP chat UI smoke
-        run: bash scripts/smoke/mvp-chat-ui-smoke.sh
+      - name: Run live OpenCode WebUI feature sprint
+        run: bash scripts/smoke/live-webui-feature-sprint.sh
 
       - name: Upload WebUI proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webui-smoke-proof
-          path: forge-proof/webui-smoke/
+          path: forge-proof/live-webui-feature-sprint/
 
       - name: Test help output
         run: ./target/debug/forge --help
