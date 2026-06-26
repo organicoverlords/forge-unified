@@ -7,21 +7,24 @@ PR: #3 into `master`
 
 ## Latest code baseline before this docs sync
 
-Latest code-fix HEAD: `74eba32f57e9bfb682effaa202bdeac07f970c35`
+Latest code HEAD: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
 
-Pre-fix failure found at `6d2faa89a9b0e2637eb9f8a58c51459d5da55e77`:
+Latest fully green baseline before the current `apply_patch` slice:
 
-- CI: failed only because `File Size Gate` failed.
-- Build Proof: failed only because `File line gate` failed before cargo check/test/smoke.
-- Live WebUI Feature Sprint: success.
+- `e31d678277c0527d36f14f8eac8fc65f07c3b265`
+- CI: success
+- Build Proof: success
+- Live WebUI Feature Sprint: success
 
-Post-fix signal at `74eba32f`:
+Current code-slice proof for `541e67f` when this docs sync started:
 
 - CI File Size Gate: passed.
-- CI Test: passed.
-- Build Proof File line gate: passed.
-- Build Proof Cargo check: passed.
-- Full CI / Build Proof / Live WebUI completion must still be checked on latest HEAD before calling the branch green.
+- CI formatting: passed.
+- CI tests/doc-tests: passed.
+- Build Proof line gate: passed.
+- CI clippy/check/build, smoke, deny/audit, Build Proof cargo/test/smoke, and Live WebUI Feature Sprint were still running.
+
+Do not call the latest branch fully green until the latest docs-updated HEAD is green.
 
 ## Source-first OpenCode rule
 
@@ -40,12 +43,14 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 - Browser proof captures `browser-proof.json` and `webui.png`.
 - The live screenshot proof requires a completed human-readable WebUI prompt response.
 - `apply_patch` has an OpenCode-compatible `patchText` surface and parser-level hunk metadata for review.
+- `apply_patch` now validates patch/move paths before metadata is accepted.
+- `apply_patch` now records edit-permission metadata and OpenCode-style `A/D/M` summary lines.
 - CI and Build Proof enforce a hard 500-line source file limit through `scripts/ci/check-file-lines.sh`.
 - The graphify CLI oversized source was split into `crates/unifiedgraph/src/cli.rs` and a compact `crates/unifiedgraph/src/main.rs`; the gate is kept real, not weakened.
 
 ## Partial / do not overclaim
 
-- `apply_patch` is not full parity yet. Current Forge implementation parses OpenCode patch markers/hunks for review, but it does not yet implement the full permission metadata / file update / watcher event / diagnostics flow.
+- `apply_patch` is not full parity yet. Current Forge implementation parses OpenCode patch markers/hunks for review, validates paths, records permission metadata, and returns summary lines, but it does not yet implement the full file update / watcher event / diagnostics flow.
 - Orchestrator prompting is not yet fully copied from OpenCode. The proof prompt references OpenCode default response behavior, but the engine system prompt still needs a source-gated rewrite.
 - Provider routing and fallback are basic; receipts and policy are immature.
 - Conversation persistence is mostly in-memory plus snapshots.
@@ -54,7 +59,7 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 ## Highest-priority next work
 
 1. Check latest Actions for the docs-updated HEAD and fix any real failures.
-2. Finish `apply_patch` parity from `packages/opencode/src/tool/apply_patch.ts` and related patch parser files.
+2. Finish `apply_patch` file mutation parity from `packages/opencode/src/tool/apply_patch.ts` and `packages/opencode/src/patch/index.ts`.
 3. Keep all checked source files under 500 lines by splitting before monoliths form.
 4. Rewrite Forge's system prompt from studied OpenCode prompt behavior, not invented wording.
 5. Copy OpenCode tool part states from `packages/opencode/src/session/processor.ts` into WebUI cards.
