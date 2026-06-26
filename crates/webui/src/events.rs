@@ -84,7 +84,7 @@ pub async fn chat_stream(
                                 }
 
                                 if run_local_preflight && should_run_local_preflight(&message) {
-                                    append_repo_preflight(&state, &mut events).await;
+                                    append_repo_preflight(&state, &mut events, &message).await;
                                 }
 
                                 events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
@@ -99,7 +99,7 @@ pub async fn chat_stream(
                             })));
 
                             if should_run_local_preflight(&message) {
-                                append_repo_preflight(&state, &mut events).await;
+                                append_repo_preflight(&state, &mut events, &message).await;
                             }
                         }
                     }
@@ -159,8 +159,8 @@ fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, 
     })));
 }
 
-async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>) {
-    let requests = vec![
+async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, message: &str) {
+    let mut requests = vec![
         ("repo_info", ToolRequest {
             id: ToolCallId(uuid::Uuid::new_v4()),
             kind: ToolKind::RepoInfo,
@@ -174,6 +174,17 @@ async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Ev
             parallel_group: None,
         }),
     ];
+
+    if should_run_apply_patch_card_proof(message) {
+        requests.push(("apply_patch", ToolRequest {
+            id: ToolCallId(uuid::Uuid::new_v4()),
+            kind: ToolKind::ApplyPatch,
+            args: serde_json::json!({
+                "patchText": "*** Begin Patch\n*** Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt\n+apply_patch file-change card proof\n*** End Patch"
+            }),
+            parallel_group: None,
+        }));
+    }
 
     for (name, req) in requests {
         append_tool_events(state, events, name, req).await;
@@ -268,6 +279,12 @@ fn should_run_local_preflight(message: &str) -> bool {
         || lower.contains("app")
         || lower.contains("webui")
         || lower.contains("tool")
+        || lower.contains("apply_patch")
+}
+
+fn should_run_apply_patch_card_proof(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("apply_patch") && (lower.contains("file card") || lower.contains("file-change") || lower.contains("card proof"))
 }
 
 fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
