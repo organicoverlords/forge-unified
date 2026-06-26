@@ -84,10 +84,11 @@ pub async fn chat_stream(
                                 }
 
                                 if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
-                                    append_repo_preflight(&state, &mut events, &message).await;
+                                    append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                                 }
 
-                                events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+                                let latest = state.agent.get_conversation(&conversation_id).await.unwrap_or(conv);
+                                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
                             }
 
                             events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
@@ -99,7 +100,7 @@ pub async fn chat_stream(
                             })));
 
                             if should_run_local_preflight(&message) {
-                                append_repo_preflight(&state, &mut events, &message).await;
+                                append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                             }
                         }
                     }
@@ -159,7 +160,12 @@ fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, 
     })));
 }
 
-async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, message: &str) {
+async fn append_repo_preflight(
+    state: &AppState,
+    events: &mut VecDeque<Result<Event, Infallible>>,
+    conversation_id: &ConversationId,
+    message: &str,
+) {
     let mut requests = vec![
         ("repo_info", ToolRequest {
             id: ToolCallId(uuid::Uuid::new_v4()),
@@ -187,13 +193,14 @@ async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Ev
     }
 
     for (name, req) in requests {
-        append_tool_events(state, events, name, req).await;
+        append_tool_events(state, events, conversation_id, name, req).await;
     }
 }
 
 async fn append_tool_events(
     state: &AppState,
     events: &mut VecDeque<Result<Event, Infallible>>,
+    conversation_id: &ConversationId,
     name: &str,
     req: ToolRequest,
 ) {
@@ -222,6 +229,7 @@ async fn append_tool_events(
         Ok(result) => {
             events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
             append_file_change_events(events, &result);
+            let _ = state.agent.record_tool_results(conversation_id, vec![result]).await;
         }
         Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
             "id": id,
