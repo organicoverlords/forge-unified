@@ -60,7 +60,7 @@ pub async fn chat_stream(
 
                                     if let Some(calls) = &assistant.tool_calls {
                                         for call in calls {
-                                            events.push_back(event("tool-call", serde_json::to_value(call).unwrap_or_default()));
+                                            append_tool_call_lifecycle(&mut events, call);
                                         }
                                     }
                                 }
@@ -125,6 +125,31 @@ fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> {
     Ok(Event::default().event(name).data(data.to_string()))
 }
 
+fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, call: &ToolRequest) {
+    let id = call.id.0.to_string();
+    let name = tool_name(&call.kind);
+    let input = call.args.clone();
+    events.push_back(event("tool-input-start", serde_json::json!({
+        "id": id,
+        "name": name
+    })));
+    events.push_back(event("tool-input-delta", serde_json::json!({
+        "id": id,
+        "name": name,
+        "text": input.to_string()
+    })));
+    events.push_back(event("tool-input-end", serde_json::json!({
+        "id": id,
+        "name": name
+    })));
+    events.push_back(event("tool-call", serde_json::json!({
+        "id": id,
+        "name": name,
+        "kind": name,
+        "input": input
+    })));
+}
+
 async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>) {
     let requests = vec![
         ("repo_info", ToolRequest {
@@ -180,6 +205,31 @@ async fn append_tool_events(
             "name": name,
             "message": tool_err.to_string()
         }))),
+    }
+}
+
+fn tool_name(kind: &ToolKind) -> &'static str {
+    match kind {
+        ToolKind::FileRead => "file_read",
+        ToolKind::FileWrite => "file_write",
+        ToolKind::FileEdit => "file_edit",
+        ToolKind::FileDelete => "file_delete",
+        ToolKind::FileList => "file_list",
+        ToolKind::FileGlob => "file_glob",
+        ToolKind::FileSearch => "file_search",
+        ToolKind::WebFetch => "web_fetch",
+        ToolKind::WebSearch => "web_search",
+        ToolKind::ShellCommand => "shell_command",
+        ToolKind::TerminalRun => "terminal_run",
+        ToolKind::Task => "task",
+        ToolKind::BatchParallel => "batch_parallel",
+        ToolKind::RepoInfo => "repo_info",
+        ToolKind::ProposePatch => "propose_patch",
+        ToolKind::SwitchMode => "switch_mode",
+        ToolKind::BrowserProof => "browser_proof",
+        ToolKind::VisionReview => "vision_review",
+        ToolKind::GraphBuild => "graph_build",
+        ToolKind::GraphQuery => "graph_query",
     }
 }
 
