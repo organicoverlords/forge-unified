@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 //! Forge Engine - Core orchestration, tool execution, provider routing, and benchmark adapter.
 
 pub mod agent;
