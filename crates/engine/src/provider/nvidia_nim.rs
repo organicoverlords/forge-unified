@@ -24,10 +24,12 @@ impl NvidiaNimProvider {
             .expect("Failed to create HTTP client");
         Self { config, client }
     }
-    
+
     fn api_key(&self) -> Result<String> {
         std::env::var(&self.config.api_key_env)
-            .with_context(|| format!("Missing {} env var", self.config.api_key_env))
+            .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
+            .or_else(|_| std::env::var("NIM_KEY"))
+            .with_context(|| format!("Missing {} / NVIDIA_NIM_API_KEY / NIM_KEY env var", self.config.api_key_env))
     }
 }
 
@@ -43,7 +45,7 @@ impl Provider for NvidiaNimProvider {
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
         let api_key = self.api_key()?;
-        
+
         let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
@@ -51,7 +53,7 @@ impl Provider for NvidiaNimProvider {
             "max_tokens": request.max_tokens.unwrap_or(8192),
             "stream": false,
         });
-        
+
         if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
             let oai_tools: Vec<serde_json::Value> = tools.iter().map(|t| {
                 json!({
@@ -66,7 +68,7 @@ impl Provider for NvidiaNimProvider {
             body["tools"] = serde_json::to_value(oai_tools)?;
             body["tool_choice"] = json!(request.tool_choice.as_deref().unwrap_or("auto"));
         }
-        
+
         let response = self.client
             .post(format!("{}/chat/completions", self.config.api_base))
             .header("Authorization", format!("Bearer {}", api_key))
@@ -74,20 +76,20 @@ impl Provider for NvidiaNimProvider {
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("NIM request failed: {}", e))?;
-        
+
         let status = response.status();
         let text = response.text().await
             .map_err(|e| anyhow::anyhow!("NIM response body read failed: {}", e))?;
-        
+
         if !status.is_success() {
             anyhow::bail!("NIM API error {}: {}", status, text);
         }
-        
+
         let nims_response: NimResponse = serde_json::from_str(&text)
             .map_err(|e| anyhow::anyhow!("NIM response parse failed: {} | body: {}", e, text.chars().take(500).collect::<String>()))?;
         let choice = nims_response.choices.into_iter().next()
             .context("No response from model")?;
-        
+
         let tool_requests = choice.message.tool_calls.map(|tc| {
             let deltas: Vec<ToolCallDelta> = tc.into_iter().filter_map(|v| {
                 let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
@@ -99,7 +101,7 @@ impl Provider for NvidiaNimProvider {
             }).collect();
             crate::provider::tool_calls_from_deltas(deltas)
         });
-        
+
         Ok(ChatResponse {
             message: Message {
                 role: MessageRole::Assistant,
@@ -120,7 +122,7 @@ impl Provider for NvidiaNimProvider {
 
     async fn chat_stream(&self, request: ChatRequest) -> Result<ChatStream> {
         let api_key = self.api_key()?;
-        
+
         let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
@@ -128,7 +130,7 @@ impl Provider for NvidiaNimProvider {
             "max_tokens": request.max_tokens.unwrap_or(8192),
             "stream": true,
         });
-        
+
         if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
             let oai_tools: Vec<serde_json::Value> = tools.iter().map(|t| {
                 json!({
@@ -143,22 +145,22 @@ impl Provider for NvidiaNimProvider {
             body["tools"] = serde_json::to_value(oai_tools)?;
             body["tool_choice"] = json!(request.tool_choice.as_deref().unwrap_or("auto"));
         }
-        
+
         let response = self.client
             .post(format!("{}/chat/completions", self.config.api_base))
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
             .send()
             .await?;
-        
+
         let (tx, rx) = tokio::sync::mpsc::channel(256);
         let response = response.bytes_stream();
-        
+
         tokio::spawn(async move {
             use futures_util::StreamExt;
             let mut stream = response;
             let mut buffer = String::new();
-            
+
             while let Some(chunk) = stream.next().await {
                 match chunk {
                     Ok(bytes) => {
@@ -183,7 +185,7 @@ impl Provider for NvidiaNimProvider {
                 }
             }
         });
-        
+
         Ok(ChatStream {
             provider: self.config.id.clone(),
             model: request.model,
