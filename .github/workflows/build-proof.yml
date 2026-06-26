@@ -8,6 +8,9 @@ on:
 jobs:
   build-proof:
     runs-on: ubuntu-latest
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
