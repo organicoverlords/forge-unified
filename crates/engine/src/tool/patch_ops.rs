@@ -84,7 +84,7 @@ impl ToolExecutor {
                     "required": "edit",
                     "patterns": patch_relative_paths(&hunks),
                     "metadata_ready": true,
-                    "diff": diff,
+                    "diff": diff.clone(),
                     "note": "Forge records edit-permission metadata; interactive approval is not wired yet."
                 })),
                 ("parsed_hunks".to_string(), serde_json::json!(hunks)),
