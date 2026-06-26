@@ -1,11 +1,13 @@
 name: Live WebUI Feature Sprint
 
 on:
+  pull_request:
+    branches: [master, main, dev]
   workflow_dispatch:
     inputs:
       prompt:
         description: Natural language feature prompt to run through Forge WebUI
-        required: true
+        required: false
         type: string
 
 jobs:
@@ -14,7 +16,7 @@ jobs:
     env:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_FEATURE_PROMPT: ${{ inputs.prompt }}
+      FORGE_FEATURE_PROMPT: ${{ github.event.inputs.prompt }}
     steps:
       - uses: actions/checkout@v4
 
