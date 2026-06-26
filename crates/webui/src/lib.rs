@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(warnings, clippy::all)]
 
 //! Forge WebUI — axum HTTP server with REST API for the chat-first UI.
 
