@@ -10,26 +10,28 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 | OpenCode source | Behavior to copy | Forge status |
 |---|---|---|
-| `packages/opencode/src/session/prompt/default.txt` | Concise, direct CLI-style answers; GitHub-flavored markdown; no unnecessary preamble/postamble; inspect code before editing; verify when completing work | Partially copied into screenshot proof prompt; orchestrator system prompt still needs a source-gated rewrite |
+| `packages/opencode/src/session/prompt/default.txt` | Concise, direct coding-agent answers; inspect code before editing; verify when completing work | Partially copied in natural WebUI proof style; orchestrator system prompt still needs a source-gated rewrite |
 | `packages/opencode/src/session/prompt.ts` | Prompt/session flow, title generation, subtask and shell message/part handling | Studied only; not fully copied |
 | `packages/opencode/src/session/system.ts` | Provider-specific prompt selection and environment context prompt | Studied only; not copied |
-| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, permission metadata, file updates, watcher events, LSP diagnostics, `A/D/M` success summary | Forge now parses OpenCode patch markers/hunks, rejects empty patch bodies, validates paths, records edit-permission/diff metadata, applies add/update/delete/move file mutations, and returns `A/D/M` success summary lines; watcher events, LSP diagnostics, real permission prompt, BOM, and formatter hooks remain incomplete |
+| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, permission metadata, file updates, watcher events, LSP diagnostics, `A/D/M` success summary | Forge parses OpenCode patch markers/hunks, rejects empty patch bodies, validates paths, records edit-permission/diff metadata, applies add/update/delete/move mutations, returns `A/D/M` summary lines, and renders file-change cards; watcher events, LSP diagnostics, real permission prompt, BOM, and formatter hooks remain incomplete |
 | `packages/opencode/src/patch/index.ts` | Begin/end markers, add/delete/update/move hunk parsing, update chunks, EOF markers, multi-pass line matching, derive new contents from chunks | Parser and derive/apply replacement slice copied into Rust helpers; exact/rstrip/trim/Unicode matching implemented; BOM behavior is still not fully equivalent |
 | `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, formatting/diagnostics hooks | Partially aligned through Forge `file_edit`; needs deeper comparison |
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
 | `packages/core/src/session/runner/publish-llm-event.ts` | Tool lifecycle validation and ordering | Partially copied in WebUI SSE proof |
-| `packages/opencode/src/session/processor.ts` | Tool part states and assistant/tool result processing | Partially copied; WebUI tool cards still immature |
+| `packages/opencode/src/session/processor.ts` | Tool part lifecycle; completed tools expose `title`, `metadata`, `output`, optional attachments, and timing | Partially copied: Forge emits/persists tool results, uses `metadata.title`, preserves raw details in metadata, and presents compact output first; durable first-class `ToolPart` state is still incomplete |
+| `packages/schema/src/v1/session.ts` | `ToolPart` / `ToolState` schema: pending, running, completed, error | Studied; Forge does not yet fully persist this as first-class session parts |
+| `packages/opencode/specs/effect/tools.md` | Tool surface and migration list for tool-like behavior | Used as a guardrail: repo inspection uses existing Forge `repo_info` and `file_list` tools rather than inventing a fake OpenCode tool |
 
 ## Current highest-priority parity gaps
 
 1. Real permission/edit approval flow for `apply_patch`.
-2. Watcher/file edited events for file mutations.
+2. Watcher/file edited event bus for file mutations.
 3. LSP touch/diagnostics after patch mutations.
 4. BOM preservation and formatter hooks.
 5. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
-6. Tool part state model matching OpenCode pending/running/completed/error behavior.
+6. Durable tool part state model matching OpenCode pending/running/completed/error behavior.
 7. Context compaction and prompt/session continuation behavior.
-8. Durable session/message/part persistence.
+8. Durable session/message/part persistence beyond current snapshots.
 
 ## `apply_patch` target behavior
 
@@ -44,10 +46,26 @@ Before claiming full `apply_patch` parity, Forge must prove these behaviors:
 - Collect per-file diff metadata. — implemented with a simple per-file diff summary.
 - Ask/record edit permission metadata before applying changes. — metadata recorded; real interactive approval is not wired yet.
 - Write changes safely. — implemented with parent-directory creation for writes.
-- Publish file change events. — not yet.
+- Publish file change events. — implemented as tool metadata/SSE/WebUI file cards; not yet a real watcher event bus.
 - Trigger diagnostics/touch equivalent where available. — not yet.
-- Preserve BOM and run formatter hooks where appropriate. — not yet.
+- Preserve BOM and run formatter hooks where appropriate. — partially implemented at file write level; not fully equivalent to OpenCode's format/BOM sync flow.
 - Return a human-readable success summary listing changed files. — implemented with `Success. Updated the following files:` and `A/D/M` lines.
+
+## WebUI / tool result parity status
+
+Implemented and proofed:
+
+- Natural prompt creates a file through real `apply_patch` and shows an `ADDED` file card.
+- Natural repo inspection runs real `repo_info` and `file_list` tool calls.
+- Tool cards show compact visible output first.
+- Raw JSON details are preserved under metadata (`raw_output`) instead of being the primary visible UI.
+- Live WebUI proof at `e160fa4` requires compact `Repository status` and `Top-level repository entries` output in the stream, persisted conversation JSON, and browser DOM.
+
+Not done:
+
+- Browser UI still does not render a persisted OpenCode `ToolPart` model with durable pending/running/completed/error states.
+- Attachments are not modeled like OpenCode tool parts.
+- Tool timing is not preserved in the same shape.
 
 ## File size rule
 
