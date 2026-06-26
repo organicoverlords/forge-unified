@@ -35,19 +35,23 @@ curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"natural prompt smoke"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"live natural prompt smoke"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 
 test -n "$CONV_ID"
-curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "natural prompt smoke"
+curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "live natural prompt smoke"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
   -H 'content-type: application/json' \
   -H 'accept: text/event-stream' \
-  -d '{"message":"Using only the normal chat interface, inspect the current app state and propose the smallest next feature needed to make fallback routing visible in the WebUI.","max_rounds":1}' \
-  > "$STREAM_OUT" || true
+  -d '{"message":"Use the normal chat interface and the live model provider. Inspect this repository by calling the repo_info tool and the file_list tool with path dot. Then briefly report what you saw and the smallest next step toward making this app build itself from the WebUI.","max_rounds":1}' \
+  > "$STREAM_OUT"
 
 grep -q "event: run-start" "$STREAM_OUT"
 grep -q "event:" "$STREAM_OUT"
+if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
+  echo "::error::Live smoke produced provider-error or missing-key output."
+  exit 3
+fi
 grep -q "event: tool-input-start" "$STREAM_OUT"
 grep -q "event: tool-input-delta" "$STREAM_OUT"
 grep -q "event: tool-input-end" "$STREAM_OUT"
@@ -63,12 +67,11 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
 curl -fsS -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
   -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" \
-  > "$PROOF_JSON" || true
+  > "$PROOF_JSON"
 
-if jq -e '.success == true' "$PROOF_JSON" >/dev/null 2>&1; then
-  jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG" || true
-fi
+jq -e '.success == true' "$PROOF_JSON" >/dev/null
+jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG"
 
-cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/" || true
+cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/"
 
-echo "MVP chat UI + OpenCode-style SSE tool smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
+echo "LIVE WebUI self-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
