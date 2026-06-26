@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(warnings, clippy::all)]
 
 //! Forge — unified AI agent CLI.
 
