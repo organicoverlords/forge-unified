@@ -1,4 +1,4 @@
-//! FreeLLMAPI-style provider router with deterministic model fallback and cooldowns.
+//! FreeLLMAPI-style provider router with deterministic model fallback and per-model cooldowns.
 
 use crate::config::Config;
 use crate::provider::{ChatRequest, ChatResponse, ChatStream, Provider};
@@ -23,7 +23,9 @@ struct CooldownEntry {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FailureClass {
+    BusyCapacity,
     RateLimited,
+    QuotaCapped,
     Timeout,
     Server,
     Empty,
@@ -35,6 +37,7 @@ enum FailureClass {
 struct AttemptReceipt {
     provider: String,
     model: String,
+    cooldown_scope: String,
     status: String,
     classification: Option<String>,
     error: Option<String>,
@@ -101,6 +104,7 @@ impl Router {
                 attempts.push(AttemptReceipt {
                     provider: provider_id.0.clone(),
                     model: model_id.0.clone(),
+                    cooldown_scope: "model".to_string(),
                     status: "skipped_cooldown".to_string(),
                     classification: Some(class_name(entry.classification).to_string()),
                     error: Some(entry.message),
@@ -124,6 +128,7 @@ impl Router {
                         attempts.push(AttemptReceipt {
                             provider: provider_id.0,
                             model: model_id.0,
+                            cooldown_scope: "model".to_string(),
                             status: "failed".to_string(),
                             classification: Some(class_name(classification).to_string()),
                             error: Some("empty response".to_string()),
@@ -135,6 +140,7 @@ impl Router {
                     attempts.push(AttemptReceipt {
                         provider: provider_id.0.clone(),
                         model: model_id.0.clone(),
+                        cooldown_scope: "none".to_string(),
                         status: "selected".to_string(),
                         classification: None,
                         error: None,
@@ -142,6 +148,8 @@ impl Router {
                     });
                     response.message.metadata.insert("routing_receipt".to_string(), serde_json::json!({
                         "strategy": "freellmapi_priority_cooldown",
+                        "cooldown_scope": "provider_model",
+                        "exhausted_means": "model_busy_capacity_not_provider_quota",
                         "selected_provider": response.provider.0,
                         "selected_model": response.model.0,
                         "attempts": attempts,
@@ -155,6 +163,7 @@ impl Router {
                     attempts.push(AttemptReceipt {
                         provider: provider_id.0,
                         model: model_id.0,
+                        cooldown_scope: "model".to_string(),
                         status: "failed".to_string(),
                         classification: Some(class_name(classification).to_string()),
                         error: Some(message),
@@ -256,7 +265,24 @@ fn route_key(provider_id: &ProviderId, model_id: &ModelId) -> String {
 
 fn classify_failure(message: &str) -> FailureClass {
     let lower = message.to_ascii_lowercase();
-    if lower.contains("429") || lower.contains("rate limit") || lower.contains("too many") {
+
+    if lower.contains("exhausted")
+        || lower.contains("model is busy")
+        || lower.contains("engine is busy")
+        || lower.contains("capacity")
+        || lower.contains("temporarily unavailable")
+        || lower.contains("overloaded")
+    {
+        FailureClass::BusyCapacity
+    } else if lower.contains("quota exceeded")
+        || lower.contains("hard limit")
+        || lower.contains("billing")
+        || lower.contains("insufficient credits")
+        || lower.contains("monthly limit")
+        || lower.contains("daily limit")
+    {
+        FailureClass::QuotaCapped
+    } else if lower.contains("429") || lower.contains("rate limit") || lower.contains("too many") {
         FailureClass::RateLimited
     } else if lower.contains("timeout") || lower.contains("timed out") || lower.contains("deadline") {
         FailureClass::Timeout
@@ -271,18 +297,22 @@ fn classify_failure(message: &str) -> FailureClass {
 
 fn cooldown_for(classification: FailureClass) -> Duration {
     match classification {
-        FailureClass::RateLimited => Duration::from_secs(120),
-        FailureClass::Timeout => Duration::from_secs(45),
-        FailureClass::Server => Duration::from_secs(60),
-        FailureClass::Empty => Duration::from_secs(30),
+        FailureClass::BusyCapacity => Duration::from_secs(12),
+        FailureClass::RateLimited => Duration::from_secs(45),
+        FailureClass::QuotaCapped => Duration::from_secs(600),
+        FailureClass::Timeout => Duration::from_secs(30),
+        FailureClass::Server => Duration::from_secs(45),
+        FailureClass::Empty => Duration::from_secs(20),
         FailureClass::MissingKey => Duration::from_secs(300),
-        FailureClass::Other => Duration::from_secs(30),
+        FailureClass::Other => Duration::from_secs(20),
     }
 }
 
 fn class_name(classification: FailureClass) -> &'static str {
     match classification {
+        FailureClass::BusyCapacity => "model_busy_capacity",
         FailureClass::RateLimited => "rate_limited",
+        FailureClass::QuotaCapped => "quota_capped",
         FailureClass::Timeout => "timeout",
         FailureClass::Server => "server_error",
         FailureClass::Empty => "empty_response",
