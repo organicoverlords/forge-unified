@@ -1,28 +1,28 @@
-//! Forge WebUI — axum HTTP/WS server with REST API for the chat-first UI.
+//! Forge WebUI — axum HTTP server with REST API for the chat-first UI.
 
 pub mod chat_ui;
 pub mod routes;
 pub mod state;
 pub mod ws;
 
-use axum::{routing::{get, post}, Router};
+use axum::{response::Html, routing::{get, post}, Router};
 use state::AppState;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+async fn index() -> Html<&'static str> {
+    Html(chat_ui::CHAT_HTML)
+}
+
 pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     let app = Router::new()
-        .route("/", get(routes::index))
+        .route("/", get(index))
         .route("/api/health", get(routes::health))
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
         .route("/api/conversations/:id/chat", post(routes::chat))
-        .route("/api/conversations/:id/cancel", post(routes::cancel))
-        .route("/api/conversations/:id/pause", post(routes::pause))
-        .route("/api/conversations/:id/resume", post(routes::resume))
-        .route("/api/conversations/:id/snapshot", post(routes::save_snapshot))
         .route("/api/browser-proof", post(routes::browser_proof))
         .route("/api/vision-review", post(routes::vision_review))
         .route("/api/benchmark", get(routes::benchmark))
