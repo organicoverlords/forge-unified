@@ -35,10 +35,12 @@ done
 
 curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
+curl -fsS "$BASE/" | grep -q "file-change"
+curl -fsS "$BASE/" | grep -q "file-card"
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"opencode style prompt completed"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"opencode apply_patch file card proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
@@ -46,6 +48,8 @@ Answer like opencode after a simple completed check: concise, direct, human-read
 
 In no more than four lines, say the prompt completed, mention that the WebUI is responding, and include:
 OPENCODE_SOURCE packages/opencode/src/session/prompt/default.txt
+
+Also run the deterministic apply_patch file card proof path so the UI shows a file-change card.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
@@ -57,6 +61,10 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
 
 grep -q "event: run-start" "$STREAM_OUT"
 grep -q "event: run-finish" "$STREAM_OUT"
+grep -q "event: tool-result" "$STREAM_OUT"
+grep -q "event: file-change" "$STREAM_OUT"
+grep -q "file.added" "$STREAM_OUT"
+grep -q "apply_patch-card-proof.txt" "$STREAM_OUT"
 grep -qi "completed" "$STREAM_OUT"
 grep -q "WebUI" "$STREAM_OUT"
 grep -q "OPENCODE_SOURCE" "$STREAM_OUT"
@@ -70,6 +78,8 @@ curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 grep -qi "completed" "$CONVERSATION_JSON"
 grep -q "WebUI" "$CONVERSATION_JSON"
 grep -q "OPENCODE_SOURCE" "$CONVERSATION_JSON"
+grep -q "file_events" "$CONVERSATION_JSON"
+grep -q "apply_patch-card-proof.txt" "$CONVERSATION_JSON"
 
 curl -fsS -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
@@ -79,8 +89,10 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-grep -q "opencode style prompt completed" "$BROWSER_PROOF_JSON"
+grep -q "opencode apply_patch file card proof" "$BROWSER_PROOF_JSON"
 grep -qi "completed" "$BROWSER_PROOF_JSON"
 grep -q "OPENCODE_SOURCE" "$BROWSER_PROOF_JSON"
+grep -q "ADDED" "$BROWSER_PROOF_JSON"
+grep -q "apply_patch-card-proof.txt" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI opencode-style completed prompt screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI opencode-style apply_patch file-card screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
