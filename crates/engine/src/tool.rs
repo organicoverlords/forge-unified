@@ -9,6 +9,7 @@ pub mod batch;
 pub mod browser;
 pub mod file_ops;
 pub mod graph;
+pub mod patch_apply;
 pub mod patch_ops;
 pub mod shell_ops;
 pub mod task_ops;
@@ -236,7 +237,7 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
         },
         ToolConfig {
             name: "apply_patch".to_string(),
-            description: "OpenCode-compatible patch surface. Accepts patchText, validates paths, and records patch/edit permission metadata for review before mutation is enabled.".to_string(),
+            description: "OpenCode-compatible patch tool. Accepts patchText, validates paths, records edit-permission/diff metadata, and applies add/update/delete/move file mutations inside the workspace.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
