@@ -44,6 +44,7 @@ impl ToolExecutor {
             ToolKind::BatchParallel => self.execute_batch_parallel(request).await,
             ToolKind::RepoInfo => self.execute_repo_info(request).await,
             ToolKind::ProposePatch => self.execute_propose_patch(request).await,
+            ToolKind::ApplyPatch => self.execute_apply_patch(request).await,
             ToolKind::SwitchMode => self.execute_switch_mode(request).await,
             ToolKind::BrowserProof => self.execute_browser_proof(request).await,
             ToolKind::VisionReview => self.execute_vision_review(request).await,
@@ -230,6 +231,17 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
                     "diff": { "type": "string", "description": "Diff content" }
                 },
                 "required": ["summary", "diff"]
+            }),
+        },
+        ToolConfig {
+            name: "apply_patch".to_string(),
+            description: "OpenCode-compatible patch surface. Accepts patchText and records patch metadata for review before mutation is enabled.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "patchText": { "type": "string", "description": "Unified diff patch text copied from OpenCode apply_patch semantics" }
+                },
+                "required": ["patchText"]
             }),
         },
         ToolConfig {
