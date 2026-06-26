@@ -8,21 +8,61 @@ Updated: 2026-06-26
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Server port: `3000`
-- Latest code-fix commit before this docs refresh: `74eba32f57e9bfb682effaa202bdeac07f970c35`
+- Latest code commit before this docs refresh: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
 
 ## Latest validation state
 
-The previous failed Actions were investigated from GitHub Actions logs.
+Latest fully green baseline before the current `apply_patch` slice:
 
-| Workflow | Previous state at `6d2faa8` | Root cause | Post-fix signal at `74eba32f` |
-|---|---:|---|---|
-| CI | Failed | `File Size Gate` failed on an oversized Rust file | File Size Gate passed; Test passed; remaining jobs were still running when this docs sync started |
-| Build Proof | Failed | `File line gate` failed before cargo check/test/smoke | File line gate passed; Cargo check passed; Cargo test/WebUI smoke still needed final completion check |
-| Live WebUI Feature Sprint | Passed | No failure at previous head | Re-running for latest head |
+- `e31d678277c0527d36f14f8eac8fc65f07c3b265`
+- CI: success
+- Build Proof: success
+- Live WebUI Feature Sprint: success
+
+Current code-slice proof for `541e67f` when this docs sync started:
+
+| Workflow/job | State |
+|---|---|
+| CI File Size Gate | Passed |
+| CI formatting | Passed |
+| CI tests/doc-tests | Passed |
+| CI clippy/check/build | Running |
+| CI Smoke Test | Running |
+| CI Security Audit / Cargo Deny | Running |
+| Build Proof line gate | Passed |
+| Build Proof cargo check | Running |
+| Live WebUI Feature Sprint | Running |
 
 Do not call the latest branch fully green until CI, Build Proof, and Live WebUI Feature Sprint are all complete and successful on the latest HEAD.
 
 ## Latest code change
+
+### OpenCode `apply_patch` review-metadata slice
+
+Studied upstream sources:
+
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
+
+Forge changes:
+
+- Added `crates/engine/src/tool/patch_ops.rs`.
+- Split patch behavior out of `crates/engine/src/tool/task_ops.rs`.
+- Updated `crates/engine/src/tool.rs` to wire `patch_ops` and expose `workspace_root` as `pub(crate)` for sibling-module path validation.
+- Updated the `apply_patch` tool description to mention path validation and edit-permission metadata.
+
+Behavior now present:
+
+- Accepts `patchText`.
+- Rejects empty patch text.
+- Rejects empty Begin/End patch text with OpenCode-compatible wording.
+- Parses add/update/delete/move hunks.
+- Validates all patch and move paths before recording metadata.
+- Records per-file metadata, edit-permission metadata, parsed hunks, validated paths, and OpenCode source references.
+- Returns human-readable OpenCode-style `A/D/M` summary lines.
+- Does not yet mutate files.
+
+### Earlier source-size recovery
 
 - Split oversized graphify CLI source:
   - Added `crates/unifiedgraph/src/cli.rs` for Clap command and argument definitions.
@@ -44,7 +84,7 @@ Do not call the latest branch fully green until CI, Build Proof, and Live WebUI 
 - Tool calling: file read/write/edit/delete/list/glob/search, web fetch/search, shell, terminal, task, batch parallel, repo info, propose patch, apply_patch, switch mode, browser proof, vision review, graph build/query.
 - Parallel tool execution via `futures::stream::buffer_unordered`.
 - Tool approval gates through current safety checker.
-- `apply_patch` currently parses OpenCode-style patch text for review, but does not yet implement full mutation parity.
+- `apply_patch` currently parses OpenCode-style patch text for review, validates patch paths, records edit-permission metadata, and returns `A/D/M` summary lines, but does not yet implement full mutation parity.
 
 ### Model & Provider
 
@@ -70,7 +110,7 @@ Do not call the latest branch fully green until CI, Build Proof, and Live WebUI 
 
 | Area | Feature | Priority |
 |------|---------|----------|
-| Engine | Full OpenCode `apply_patch` behavior | P0 |
+| Engine | Full OpenCode `apply_patch` mutation behavior | P0 |
 | Engine | Source-gated OpenCode system prompt rewrite | P0 |
 | WebUI | OpenCode-like tool-part state cards | P1 |
 | Engine | Durable session/message/part persistence | P1 |
@@ -82,5 +122,6 @@ Do not call the latest branch fully green until CI, Build Proof, and Live WebUI 
 
 - Do not weaken the 500-line gate to make CI pass.
 - Do not claim full OpenCode parity without an upstream OpenCode source path in `OPENCODE-PARITY.md`.
+- Do not claim `apply_patch` mutates files until that is implemented and proved.
 - Do not commit provider secrets or local proof blobs.
 - Do not build multi-user/auth before the core single-user OpenCode-like workflow is solid.
