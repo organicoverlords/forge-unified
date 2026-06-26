@@ -19,14 +19,15 @@ Updated: 2026-06-26
 - Default branch: `master`
 - Latest code commit before this docs sync: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
 
-## Latest proven green baseline
+## Latest proven green baselines
 
 - `e31d678277c0527d36f14f8eac8fc65f07c3b265` was fully green for CI, Build Proof, and Live WebUI Feature Sprint.
-- That green baseline included the graphify source split that fixed the previous 500-line gate failure.
+- `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` was fully green for CI, Build Proof, and Live WebUI Feature Sprint.
+- The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
 
 ## Latest OpenCode-source slice
 
-A new `apply_patch` parity slice was added after the green baseline.
+A new `apply_patch` parity slice was added and proved green at `541e67f`.
 
 Upstream sources studied:
 
@@ -46,17 +47,6 @@ Forge changes:
   - returns OpenCode-style `A/D/M` summary lines;
   - still does **not** mutate files yet.
 
-Current proof state for `541e67f` when this docs sync started:
-
-- CI File Size Gate: passed.
-- CI fmt: passed.
-- CI tests/doc-tests: passed.
-- CI clippy/check/build, Security Audit, Cargo Deny, Smoke Test: still running.
-- Build Proof line gate: passed; Cargo check still running.
-- Live WebUI Feature Sprint: still running.
-
-Do not call `541e67f` fully green until all Actions complete successfully.
-
 ## Current direction
 
 The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. Do not implement custom approximations when OpenCode has a source file that defines the behavior.
@@ -73,7 +63,7 @@ The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. 
 
 ## Current next target
 
-After the latest Actions are green, continue `apply_patch` parity from review metadata to safe file mutation.
+Check latest docs-updated Actions first. If green, continue `apply_patch` parity from review metadata to safe file mutation.
 
 Study first:
 
