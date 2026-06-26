@@ -30,11 +30,12 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 - WebUI SSE emits OpenCode-inspired lifecycle events for tool input, tool call, tool result/error, text, and run finish.
 - Browser proof captures `browser-proof.json` and `webui.png`.
 - The live screenshot proof now requires a completed human-readable WebUI prompt response.
-- `apply_patch` has a first-stage OpenCode-compatible surface using `patchText`.
+- `apply_patch` has an OpenCode-compatible `patchText` surface and parser-level hunk metadata for review.
+- CI and Build Proof enforce a hard 500-line source file limit through `scripts/ci/check-file-lines.sh`.
 
 ## Partial / do not overclaim
 
-- `apply_patch` is not full parity yet. Current Forge implementation accepts patch text and records metadata; it does not yet implement the full OpenCode hunk parse / permission metadata / file update / watcher event / diagnostics flow.
+- `apply_patch` is not full parity yet. Current Forge implementation parses OpenCode patch markers/hunks for review, but it does not yet implement the full permission metadata / file update / watcher event / diagnostics flow.
 - Orchestrator prompting is not yet fully copied from OpenCode. The proof prompt references OpenCode default response behavior, but the engine system prompt still needs a source-gated rewrite.
 - Provider routing and fallback are basic; receipts and policy are immature.
 - Conversation persistence is mostly in-memory.
@@ -43,10 +44,11 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 ## Highest-priority next work
 
 1. Finish `apply_patch` parity from `packages/opencode/src/tool/apply_patch.ts` and related patch parser files.
-2. Rewrite Forge's system prompt from studied OpenCode prompt behavior, not invented wording.
-3. Copy OpenCode tool part states from `packages/opencode/src/session/processor.ts` into WebUI cards.
-4. Add durable session/message/part persistence.
-5. Add context compaction parity.
+2. Keep all checked source files under 500 lines by splitting before monoliths form.
+3. Rewrite Forge's system prompt from studied OpenCode prompt behavior, not invented wording.
+4. Copy OpenCode tool part states from `packages/opencode/src/session/processor.ts` into WebUI cards.
+5. Add durable session/message/part persistence.
+6. Add context compaction parity.
 
 ## Claim rule
 
@@ -55,3 +57,4 @@ Before calling a slice done:
 - Update `CONTINUE_HERE.md`, `PROJECT_STATE.md`, `FEATURE-AUDIT.md`, and `OPENCODE-PARITY.md` if status changed.
 - Validate with CI, Build Proof, and Live WebUI Feature Sprint.
 - Keep proof artifacts in Actions; keep only compact summaries in git.
+- Do not merge files over the 500-line hard gate.
