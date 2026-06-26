@@ -17,50 +17,51 @@ Updated: 2026-06-26
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Default branch: `master`
-- Latest code commit before this docs sync: `0da7281dc0f85bb16906103343d2e9d24827dafa`
+- Latest proven code baseline before this docs sync: `e160fa4bf9326c26d5731e9fb474574a4d068b2f`
 
 ## Latest proven green baselines
 
-- `e31d678277c0527d36f14f8eac8fc65f07c3b265` was fully green for CI, Build Proof, and Live WebUI Feature Sprint.
-- `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` was fully green for CI, Build Proof, and Live WebUI Feature Sprint.
-- `ccac07d3a16b7547787b0aadf8ea59658636d9f4` was fully green for CI, Build Proof, and Live WebUI Feature Sprint after the cargo-audit CI repair.
-- `0da7281dc0f85bb16906103343d2e9d24827dafa` was fully green for CI, Build Proof, and Live WebUI Feature Sprint for the `apply_patch` mutation slice.
-- The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
+- `0da7281dc0f85bb16906103343d2e9d24827dafa` was fully green for the first OpenCode `apply_patch` mutation slice.
+- `65c1cb5f5c534149d4e08000e8553a498767ed00` was fully green for the compact WebUI tool-card slice.
+- `7f46ea1c0e7498a353fa18a3781b062580105236` was fully green for the natural proof-note + repo-inspection two-prompt proof.
+- `e160fa4bf9326c26d5731e9fb474574a4d068b2f` was fully green for compact repo-inspection presentation: CI, Build Proof, and Live WebUI Feature Sprint all passed.
+- The docs-updated HEAD after this sync must get its own Actions check before a fresh green claim.
 
-## Latest OpenCode-source slice
+## Latest OpenCode-source slices
 
-A new `apply_patch` mutation parity slice was added and proved green at `0da7281`.
+### `apply_patch` mutation and file cards
 
 Upstream sources studied:
 
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/processor.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
 
-Forge changes:
+Forge behavior now present:
 
-- Added `crates/engine/src/tool/patch_apply.rs` for filesystem mutation helpers.
-- Kept `crates/engine/src/tool/patch_ops.rs` as parser/entrypoint glue to stay under the hard 500-line gate.
-- Updated `crates/engine/src/tool.rs` so `apply_patch` advertises mutation support.
-- `apply_patch` now:
-  - accepts `patchText`;
-  - rejects empty/malformed Begin/End patch text;
-  - parses add/update/delete/move hunks;
-  - rejects absolute, parent-dir, Windows-style, colon, and NUL paths before mutation;
-  - derives new update contents from chunks using OpenCode-style exact/rstrip/trim/Unicode fallback matching;
-  - applies add/update/delete/move mutations inside the workspace;
-  - records per-file diff metadata and edit-permission metadata;
-  - returns OpenCode-style `Success. Updated the following files:` with `A/D/M` summary lines.
+- `apply_patch` accepts `patchText`, parses Begin/End patches, validates paths, mutates add/update/delete/move hunks, and returns human-readable `A/D/M` summaries.
+- Tool results preserve metadata and raw details while the WebUI shows file-change cards and compact human-readable output first.
+- Natural prompt proof works without marker prompts: `Please create a short proof note for this WebUI sprint.` creates a real file via `apply_patch`, persists the tool result, shows an `ADDED` file card, and gives a human summary.
 
-Still incomplete versus upstream OpenCode:
+### Natural repo inspection
 
-- Interactive approval is recorded as metadata but not actually gated by a permission prompt.
-- Watcher/file edited events are not yet published.
+- Normal prompt: `Please inspect this repository and summarize what you find.`
+- Forge runs real `repo_info` and `file_list` tools.
+- Visible output is compact:
+  - `Repository status:`
+  - `Top-level repository entries`
+- Raw JSON is preserved under metadata (`raw_output`) instead of being the main visible card.
+- Live WebUI proof at `e160fa4` requires this compact output in the SSE stream, persisted conversation JSON, and browser DOM/screenshot proof.
+
+## Still incomplete versus upstream OpenCode
+
+- Interactive edit approval is recorded as metadata but not actually gated by a permission prompt.
+- Watcher/file edited events are not yet published as a real event bus.
 - LSP touch/diagnostics collection is not yet implemented.
 - BOM preservation and formatter hooks are not yet equivalent.
-
-## Current direction
-
-The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. Do not implement custom approximations when OpenCode has a source file that defines the behavior.
+- WebUI still does not fully persist OpenCode `ToolPart` pending/running/completed/error state as first-class durable parts.
+- Orchestrator/system prompt is not yet fully copied from OpenCode prompt behavior.
 
 ## Required workflow for new feature work
 
@@ -74,17 +75,14 @@ The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. 
 
 ## Current next target
 
-Check latest docs-updated Actions first. If green, continue `apply_patch` parity from mutation to real permission gating, watcher events, formatting/BOM preservation, and diagnostics. Do not add another code slice until the current docs checkpoint is verified or a real failure is fixed.
+After the docs sync is green, continue with the next small OpenCode-backed slice:
 
-Study first:
+1. Real permission/edit approval flow for `apply_patch`, from `packages/opencode/src/tool/apply_patch.ts` and session approval handling.
+2. Durable OpenCode-style tool part states from `packages/schema/src/v1/session.ts` and `packages/opencode/src/session/processor.ts`.
+3. Watcher/file edited events and LSP diagnostics after patch mutations.
 
-- `packages/opencode/src/tool/apply_patch.ts`
-- `packages/opencode/src/patch/*`
-- `packages/opencode/src/tool/edit.ts`
-- `packages/opencode/src/session/processor.ts`
-
-Then copy behavior in small validated slices.
+Do not add a broad invented workflow. Keep the natural browser proof style: normal user prompts, real tool execution, human summary, screenshot artifact.
 
 ## UX proof rule
 
-Screenshot proof must show a completed, human-readable answer in the WebUI. Marker-only answers are invalid UX proof.
+Screenshot proof must show a completed, human-readable answer in the WebUI. Marker-only answers, JSON-only cards, or empty app-shell screenshots are invalid UX proof.
