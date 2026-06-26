@@ -1,5 +1,6 @@
-//! OpenCode-compatible apply_patch parser and review metadata.
+//! OpenCode-compatible apply_patch parser and mutation entrypoint.
 
+use crate::tool::patch_apply::{apply_file_changes, file_change_metadata, file_change_summary_line, prepare_file_changes, total_diff};
 use crate::tool::ToolExecutor;
 use crate::types::{ToolCallId, ToolKind, ToolRequest, ToolResult};
 use anyhow::{anyhow, Result};
@@ -9,18 +10,18 @@ use std::path::{Component, Path};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
-enum PatchHunk {
+pub(crate) enum PatchHunk {
     Add { path: String, contents: String },
     Delete { path: String },
     Update { path: String, move_path: Option<String>, chunks: Vec<UpdateChunk> },
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct UpdateChunk {
-    old_lines: Vec<String>,
-    new_lines: Vec<String>,
-    change_context: Option<String>,
-    is_end_of_file: bool,
+pub(crate) struct UpdateChunk {
+    pub(crate) old_lines: Vec<String>,
+    pub(crate) new_lines: Vec<String>,
+    pub(crate) change_context: Option<String>,
+    pub(crate) is_end_of_file: bool,
 }
 
 impl ToolExecutor {
@@ -52,12 +53,18 @@ impl ToolExecutor {
             Ok(paths) => paths,
             Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
         };
-        let files: Vec<_> = hunks.iter().map(patch_file_metadata).collect();
-        let summary_lines = patch_summary_lines(&hunks);
-        let output = format!(
-            "Patch parsed for review. File mutations are not enabled yet.\n{}",
-            summary_lines.join("\n")
-        );
+        let changes = match prepare_file_changes(&hunks, &self.workspace_root).await {
+            Ok(changes) => changes,
+            Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
+        };
+        if let Err(err) = apply_file_changes(&changes).await {
+            return Ok(apply_patch_failure(request.id, patch_len, err.to_string()));
+        }
+
+        let files: Vec<_> = changes.iter().map(file_change_metadata).collect();
+        let summary_lines = changes.iter().map(file_change_summary_line).collect::<Vec<_>>();
+        let diff = total_diff(&changes);
+        let output = format!("Success. Updated the following files:\n{}", summary_lines.join("\n"));
 
         Ok(ToolResult {
             id: request.id,
@@ -76,10 +83,14 @@ impl ToolExecutor {
                 ("permission".to_string(), serde_json::json!({
                     "required": "edit",
                     "patterns": patch_relative_paths(&hunks),
-                    "metadata_ready": true
+                    "metadata_ready": true,
+                    "diff": diff,
+                    "note": "Forge records edit-permission metadata; interactive approval is not wired yet."
                 })),
                 ("parsed_hunks".to_string(), serde_json::json!(hunks)),
-                ("applied".to_string(), serde_json::json!(false)),
+                ("diff".to_string(), serde_json::json!(diff)),
+                ("diagnostics".to_string(), serde_json::json!({"status": "not_collected"})),
+                ("applied".to_string(), serde_json::json!(true)),
             ]),
         })
     }
@@ -215,7 +226,7 @@ fn validate_patch_paths(hunks: &[PatchHunk], workspace_root: &str) -> Result<Vec
     Ok(validated)
 }
 
-fn validate_relative_patch_path(raw_path: &str) -> Result<()> {
+pub(crate) fn validate_relative_patch_path(raw_path: &str) -> Result<()> {
     let path = raw_path.trim();
     if path.is_empty() { anyhow::bail!("apply_patch verification failed: empty path"); }
     if path.contains('\0') || path.contains('\\') || path.contains(':') {
@@ -240,26 +251,6 @@ fn patch_paths(hunk: &PatchHunk) -> Vec<(&'static str, &str)> {
             paths
         }
     }
-}
-
-fn patch_file_metadata(hunk: &PatchHunk) -> serde_json::Value {
-    match hunk {
-        PatchHunk::Add { path, contents } => serde_json::json!({ "path": path, "type": "add", "line_count": if contents.is_empty() { 0 } else { contents.lines().count() } }),
-        PatchHunk::Delete { path } => serde_json::json!({ "path": path, "type": "delete", "requires_existing_file": true }),
-        PatchHunk::Update { path, move_path, chunks } => serde_json::json!({
-            "path": path, "type": if move_path.is_some() { "move" } else { "update" }, "move_path": move_path,
-            "chunk_count": chunks.len(), "old_line_count": chunks.iter().map(|chunk| chunk.old_lines.len()).sum::<usize>(),
-            "new_line_count": chunks.iter().map(|chunk| chunk.new_lines.len()).sum::<usize>(),
-        }),
-    }
-}
-
-fn patch_summary_lines(hunks: &[PatchHunk]) -> Vec<String> {
-    hunks.iter().map(|hunk| match hunk {
-        PatchHunk::Add { path, .. } => format!("A {path}"),
-        PatchHunk::Delete { path } => format!("D {path}"),
-        PatchHunk::Update { path, move_path, .. } => format!("M {}", move_path.as_deref().unwrap_or(path)),
-    }).collect()
 }
 
 fn patch_relative_paths(hunks: &[PatchHunk]) -> Vec<String> {
@@ -299,5 +290,13 @@ mod tests {
         let patch = "*** Begin Patch\n*** Delete File: ../secret.txt\n*** End Patch";
         let hunks = parse_opencode_patch(patch).unwrap();
         assert!(validate_patch_paths(&hunks, ".").unwrap_err().to_string().contains("path escapes workspace"));
+    }
+
+    fn patch_summary_lines(hunks: &[PatchHunk]) -> Vec<String> {
+        hunks.iter().map(|hunk| match hunk {
+            PatchHunk::Add { path, .. } => format!("A {path}"),
+            PatchHunk::Delete { path } => format!("D {path}"),
+            PatchHunk::Update { path, move_path, .. } => format!("M {}", move_path.as_deref().unwrap_or(path)),
+        }).collect()
     }
 }
