@@ -8,63 +8,94 @@ Updated: 2026-06-26
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Server port: `3000`
-- Latest code commit before this docs refresh: `0da7281dc0f85bb16906103343d2e9d24827dafa`
+- Latest proven code baseline before this docs refresh: `e160fa4bf9326c26d5731e9fb474574a4d068b2f`
 
 ## Latest validation state
 
 Latest fully green baselines:
 
-| HEAD | CI | Build Proof | Live WebUI Feature Sprint |
-|---|---|---|---|
-| `e31d678277c0527d36f14f8eac8fc65f07c3b265` | success | success | success |
-| `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` | success | success | success |
-| `ccac07d3a16b7547787b0aadf8ea59658636d9f4` | success | success | success |
-| `0da7281dc0f85bb16906103343d2e9d24827dafa` | success | success | success |
+| HEAD | CI | Build Proof | Live WebUI Feature Sprint | Notes |
+|---|---|---|---|---|
+| `0da7281dc0f85bb16906103343d2e9d24827dafa` | success | success | success | OpenCode `apply_patch` mutation slice |
+| `65c1cb5f5c534149d4e08000e8553a498767ed00` | success | success | success | Cleaner WebUI tool cards: output/file cards first, metadata collapsed |
+| `7f46ea1c0e7498a353fa18a3781b062580105236` | success | success | success | Natural proof note + repo inspection two-prompt proof |
+| `e160fa4bf9326c26d5731e9fb474574a4d068b2f` | success | success | success | Compact `repo_info`/`file_list` presentation with raw JSON preserved in metadata |
 
 The latest docs-updated HEAD after this refresh still needs its own Actions check before merge/green claims.
 
-## Latest code change
+## Latest product behavior
 
-### OpenCode `apply_patch` mutation slice
+### Natural file creation proof
+
+A normal user prompt creates a real file through the existing `apply_patch` path:
+
+```text
+Please create a short proof note for this WebUI sprint.
+```
+
+Proven behavior:
+
+- Records the user message.
+- Executes `apply_patch` locally without depending on a provider.
+- Creates `forge-proof/live-webui-feature-sprint/natural-proof-note.txt`.
+- Persists the tool result and file-change metadata.
+- Shows a visible `ADDED` file card in the WebUI.
+- Returns a human-readable assistant summary.
+
+### Natural repository inspection proof
+
+A second normal user prompt inspects the repository:
+
+```text
+Please inspect this repository and summarize what you find.
+```
+
+Proven behavior at `e160fa4`:
+
+- Runs real `repo_info` and `file_list` tools.
+- Presents compact visible output:
+  - `Repository status:`
+  - `Top-level repository entries`
+- Preserves raw JSON under `metadata.raw_output` for details.
+- Persists the tool results and assistant summary.
+- Browser proof requires the compact output in the live DOM/screenshot.
+
+## OpenCode-source work copied so far
 
 Studied upstream sources:
 
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/processor.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
 
 Forge changes:
 
 - Added `crates/engine/src/tool/patch_apply.rs` for mutation helpers.
 - Kept `crates/engine/src/tool/patch_ops.rs` as parser/entrypoint glue.
 - Updated `crates/engine/src/tool.rs` to register `patch_apply` and advertise mutation support.
-- Preserved the hard 500-line source gate by keeping `patch_ops.rs` and `patch_apply.rs` as separate modules.
+- Added WebUI file-change cards and compact tool-result presentation.
+- Added natural local action paths for file creation and repository inspection, using real Forge tools and normal user prompts.
 
 Behavior now present:
 
 - Accepts `patchText`.
-- Rejects empty patch text.
-- Rejects empty Begin/End patch text with OpenCode-compatible wording.
+- Rejects empty patch text and empty Begin/End patch text.
 - Parses add/update/delete/move hunks.
 - Validates all patch and move paths before mutation.
-- Reads old file contents for update/delete.
-- Derives new update contents from chunks with exact/rstrip/trim/Unicode matching.
 - Applies add/update/delete/move file mutations inside the workspace.
 - Records per-file metadata, diff metadata, edit-permission metadata, parsed hunks, validated paths, and OpenCode source references.
-- Returns human-readable OpenCode-style `Success. Updated the following files:` with `A/D/M` summary lines.
+- Returns human-readable `Success. Updated the following files:` with `A/D/M` summary lines.
+- Emits/persists file-change metadata and renders `ADDED` file cards.
+- Presents repo inspection as human-readable output while keeping raw details under metadata.
 
-Remaining `apply_patch` parity gaps:
+Remaining parity gaps:
 
 - Interactive edit permission approval is recorded but not actually enforced through a prompt.
-- Watcher/file edited events are not yet published.
+- Watcher/file edited events are not yet published as a real event bus.
 - LSP touch/diagnostics are not yet collected.
 - BOM preservation and formatter hooks are not yet equivalent to upstream OpenCode.
-
-### Earlier source-size recovery
-
-- Split oversized graphify CLI source:
-  - Added `crates/unifiedgraph/src/cli.rs` for Clap command and argument definitions.
-  - Reduced `crates/unifiedgraph/src/main.rs` to the dispatch entrypoint.
-- This preserves the hard 500-line source gate instead of weakening it.
+- WebUI tool cards are improved, but durable OpenCode `ToolPart` pending/running/completed/error state is not fully first-class yet.
 
 ## Features implemented
 
@@ -93,9 +124,9 @@ Remaining `apply_patch` parity gaps:
 ### WebUI and Proof
 
 - Bundled root chat UI.
-- Live SSE events for run phases, text deltas, tool calls, tool results/errors, and run finish.
+- Live SSE events for run phases, text deltas, tool calls, tool results/errors, file-change events, and run finish.
 - Browser proof route and NIM vision review route.
-- Live WebUI Feature Sprint captures screenshot proof and requires a completed human-readable answer.
+- Live WebUI Feature Sprint now proves normal-prompt file creation and repository inspection with real screenshot artifacts.
 
 ### CI/CD
 
@@ -108,18 +139,16 @@ Remaining `apply_patch` parity gaps:
 | Area | Feature | Priority |
 |------|---------|----------|
 | Engine | Real edit permission prompt/gating for `apply_patch` | P0 |
-| Engine | Source-gated OpenCode system prompt rewrite | P0 |
-| WebUI | OpenCode-like tool-part state cards | P1 |
+| Engine/WebUI | Durable OpenCode tool-part state model | P0 |
 | Engine | Watcher/file edited events and LSP diagnostics for patch changes | P1 |
-| Engine | Durable session/message/part persistence | P1 |
+| Engine | BOM preservation and formatter hooks | P1 |
 | Router | Visible routing/fallback receipts and cooldown policy | P1 |
 | Engine | Context compaction parity | P2 |
 | Benchmark | Artifact-backed adapter contract | P2 |
 
 ## What not to do
 
-- Do not weaken the 500-line gate to make CI pass.
-- Do not claim full OpenCode parity without an upstream OpenCode source path in `OPENCODE-PARITY.md`.
-- Do not claim upstream-complete `apply_patch` parity until permission gating, watcher events, diagnostics, BOM, and formatting behavior are implemented.
-- Do not commit provider secrets or local proof blobs.
-- Do not build multi-user/auth before the core single-user OpenCode-like workflow is solid.
+- Do not claim full OpenCode parity for `apply_patch` yet.
+- Do not add invented workflows when OpenCode has a source-defined behavior.
+- Do not remove or weaken the 500-line hard gate.
+- Do not accept JSON-only screenshots as UX proof.
