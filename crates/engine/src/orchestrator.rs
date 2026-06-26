@@ -203,6 +203,8 @@ fn build_system_prompt(user_message: &str) -> String {
     let self_build = lower.contains("build")
         || lower.contains("fix")
         || lower.contains("inspect")
+        || lower.contains("patch")
+        || lower.contains("file_edit")
         || lower.contains("repo_info")
         || lower.contains("file_list")
         || lower.contains("cargo check")
@@ -211,7 +213,7 @@ fn build_system_prompt(user_message: &str) -> String {
     let base = "You are Forge, an OpenCode-style coding agent. Use the provided tools to inspect and change the real workspace. Do not claim to inspect files without tool calls. When tool calls are needed, call tools first, then answer after observing tool results.";
 
     if self_build {
-        format!("{} For this request, you must call repo_info, file_list with path '.', and shell_command with command 'cargo check --workspace --all-targets' plus timeout_ms 120000 before the final answer. Keep the final answer short and state whether the build command passed.", base)
+        format!("{} For this request, call repo_info, file_list with path '.', any requested file_edit patch, and shell_command with command 'cargo check --workspace --all-targets' plus timeout_ms 120000 before the final answer. Keep the final answer short and state whether the patch/build command passed.", base)
     } else {
         base.to_string()
     }
