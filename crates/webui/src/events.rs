@@ -233,6 +233,7 @@ fn tool_name(kind: &ToolKind) -> &'static str {
         ToolKind::BatchParallel => "batch_parallel",
         ToolKind::RepoInfo => "repo_info",
         ToolKind::ProposePatch => "propose_patch",
+        ToolKind::ApplyPatch => "apply_patch",
         ToolKind::SwitchMode => "switch_mode",
         ToolKind::BrowserProof => "browser_proof",
         ToolKind::VisionReview => "vision_review",
