@@ -12,28 +12,14 @@ Updated: 2026-06-26
 
 ## Latest validation state
 
-Latest fully green baseline before the current `apply_patch` slice:
+Latest fully green baselines:
 
-- `e31d678277c0527d36f14f8eac8fc65f07c3b265`
-- CI: success
-- Build Proof: success
-- Live WebUI Feature Sprint: success
+| HEAD | CI | Build Proof | Live WebUI Feature Sprint |
+|---|---|---|---|
+| `e31d678277c0527d36f14f8eac8fc65f07c3b265` | success | success | success |
+| `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` | success | success | success |
 
-Current code-slice proof for `541e67f` when this docs sync started:
-
-| Workflow/job | State |
-|---|---|
-| CI File Size Gate | Passed |
-| CI formatting | Passed |
-| CI tests/doc-tests | Passed |
-| CI clippy/check/build | Running |
-| CI Smoke Test | Running |
-| CI Security Audit / Cargo Deny | Running |
-| Build Proof line gate | Passed |
-| Build Proof cargo check | Running |
-| Live WebUI Feature Sprint | Running |
-
-Do not call the latest branch fully green until CI, Build Proof, and Live WebUI Feature Sprint are all complete and successful on the latest HEAD.
+The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
 
 ## Latest code change
 
