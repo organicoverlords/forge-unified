@@ -66,16 +66,26 @@ impl ToolExecutor {
         let summary_lines = changes.iter().map(file_change_summary_line).collect::<Vec<_>>();
         let diff = total_diff(&changes);
         let output = format!("Success. Updated the following files:\n{}", summary_lines.join("\n"));
+        let title = "apply_patch";
+        let state_metadata = serde_json::json!({
+            "files": files.clone(),
+            "file_events": file_events.clone(),
+            "summary_lines": summary_lines.clone(),
+            "applied": true,
+        });
 
         Ok(ToolResult {
             id: request.id,
             kind: ToolKind::ApplyPatch,
             success: true,
-            output,
+            output: output.clone(),
             error: None,
             duration_ms: 0,
             metadata: HashMap::from([
+                ("title".to_string(), serde_json::json!(title)),
                 ("opencode_source".to_string(), opencode_source()),
+                ("opencode_tool_state_source".to_string(), opencode_tool_state_source()),
+                ("opencode_tool_state".to_string(), completed_tool_state(title, &output, state_metadata)),
                 ("patch_length".to_string(), serde_json::json!(patch_len)),
                 ("hunk_count".to_string(), serde_json::json!(hunks.len())),
                 ("files".to_string(), serde_json::json!(files)),
@@ -99,15 +109,20 @@ impl ToolExecutor {
 }
 
 fn apply_patch_failure(id: ToolCallId, patch_length: usize, error: impl Into<String>) -> ToolResult {
+    let error = error.into();
+    let output = "Patch validation failed".to_string();
     ToolResult {
         id,
         kind: ToolKind::ApplyPatch,
         success: false,
-        output: "Patch validation failed".to_string(),
-        error: Some(error.into()),
+        output: output.clone(),
+        error: Some(error.clone()),
         duration_ms: 0,
         metadata: HashMap::from([
+            ("title".to_string(), serde_json::json!("apply_patch")),
             ("opencode_source".to_string(), opencode_source()),
+            ("opencode_tool_state_source".to_string(), opencode_tool_state_source()),
+            ("opencode_tool_state".to_string(), error_tool_state("apply_patch", &error)),
             ("patch_length".to_string(), serde_json::json!(patch_length)),
             ("applied".to_string(), serde_json::json!(false)),
         ]),
@@ -119,6 +134,35 @@ fn opencode_source() -> serde_json::Value {
         "packages/opencode/src/tool/apply_patch.ts",
         "packages/opencode/src/patch/index.ts"
     ])
+}
+
+fn opencode_tool_state_source() -> serde_json::Value {
+    serde_json::json!([
+        "packages/schema/src/v1/session.ts:ToolStateCompleted/ToolStateError",
+        "packages/opencode/src/session/processor.ts:toolResultOutput/completeToolCall/failToolCall"
+    ])
+}
+
+fn completed_tool_state(title: &str, output: &str, metadata: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "status": "completed",
+        "input": {},
+        "output": output,
+        "title": title,
+        "metadata": metadata,
+        "time": {"start": 0, "end": 0}
+    })
+}
+
+fn error_tool_state(title: &str, error: &str) -> serde_json::Value {
+    serde_json::json!({
+        "status": "error",
+        "input": {},
+        "error": error,
+        "title": title,
+        "metadata": {"applied": false},
+        "time": {"start": 0, "end": 0}
+    })
 }
 
 fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
