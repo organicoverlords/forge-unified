@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(warnings, clippy::all)]
 
 //! Forge Engine - Core orchestration, tool execution, provider routing, and benchmark adapter.
 
