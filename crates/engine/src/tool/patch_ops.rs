@@ -57,14 +57,17 @@ impl ToolExecutor {
             Ok(changes) => changes,
             Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
         };
-        if let Err(err) = apply_file_changes(&changes).await {
-            return Ok(apply_patch_failure(request.id, patch_len, err.to_string()));
-        }
 
         let files: Vec<_> = changes.iter().map(file_change_metadata).collect();
         let file_events = file_change_events(&files);
         let summary_lines = changes.iter().map(file_change_summary_line).collect::<Vec<_>>();
         let diff = total_diff(&changes);
+        let permission_request = edit_permission_request(&hunks, &files, diff.clone());
+
+        if let Err(err) = apply_file_changes(&changes).await {
+            return Ok(apply_patch_failure(request.id, patch_len, err.to_string()));
+        }
+
         let output = format!("Success. Updated the following files:\n{}", summary_lines.join("\n"));
 
         Ok(ToolResult {
@@ -77,6 +80,7 @@ impl ToolExecutor {
             metadata: HashMap::from([
                 ("title".to_string(), serde_json::json!("apply_patch")),
                 ("opencode_source".to_string(), opencode_source()),
+                ("opencode_permission_source".to_string(), opencode_permission_source()),
                 ("opencode_tool_state_source".to_string(), opencode_tool_state_source()),
                 ("patch_length".to_string(), serde_json::json!(patch_len)),
                 ("hunk_count".to_string(), serde_json::json!(hunks.len())),
@@ -84,13 +88,8 @@ impl ToolExecutor {
                 ("file_events".to_string(), serde_json::json!(file_events)),
                 ("summary_lines".to_string(), serde_json::json!(summary_lines)),
                 ("validated_paths".to_string(), serde_json::json!(validated_paths)),
-                ("permission".to_string(), serde_json::json!({
-                    "required": "edit",
-                    "patterns": patch_relative_paths(&hunks),
-                    "metadata_ready": true,
-                    "diff": diff.clone(),
-                    "note": "Forge records edit-permission metadata; interactive approval is not wired yet."
-                })),
+                ("permission".to_string(), permission_request.clone()),
+                ("permission_request".to_string(), permission_request),
                 ("parsed_hunks".to_string(), serde_json::json!(hunks)),
                 ("diff".to_string(), serde_json::json!(diff)),
                 ("diagnostics".to_string(), serde_json::json!({"status": "not_collected"})),
@@ -111,6 +110,7 @@ fn apply_patch_failure(id: ToolCallId, patch_length: usize, error: impl Into<Str
         metadata: HashMap::from([
             ("title".to_string(), serde_json::json!("apply_patch")),
             ("opencode_source".to_string(), opencode_source()),
+            ("opencode_permission_source".to_string(), opencode_permission_source()),
             ("opencode_tool_state_source".to_string(), opencode_tool_state_source()),
             ("patch_length".to_string(), serde_json::json!(patch_length)),
             ("applied".to_string(), serde_json::json!(false)),
@@ -125,11 +125,36 @@ fn opencode_source() -> serde_json::Value {
     ])
 }
 
+fn opencode_permission_source() -> serde_json::Value {
+    serde_json::json!({
+        "path": "packages/opencode/src/tool/apply_patch.ts",
+        "behavior": "ctx.ask edit permission with patterns, always, and metadata.filepath/diff/files before applying changes"
+    })
+}
+
 fn opencode_tool_state_source() -> serde_json::Value {
     serde_json::json!([
         "packages/schema/src/v1/session.ts:ToolStateCompleted/ToolStateError",
         "packages/opencode/src/session/processor.ts:toolResultOutput/completeToolCall/failToolCall"
     ])
+}
+
+fn edit_permission_request(hunks: &[PatchHunk], files: &[serde_json::Value], diff: String) -> serde_json::Value {
+    let patterns = patch_relative_paths(hunks);
+    serde_json::json!({
+        "permission": "edit",
+        "required": "edit",
+        "patterns": patterns,
+        "always": ["*"],
+        "metadata_ready": true,
+        "interactive": false,
+        "metadata": {
+            "filepath": patterns.join(", "),
+            "diff": diff,
+            "files": files,
+        },
+        "note": "OpenCode asks before applying; Forge now builds the same permission request metadata before applying, but interactive approval is not wired yet."
+    })
 }
 
 fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
@@ -330,6 +355,18 @@ mod tests {
         assert_eq!(events[0]["type"], "file.moved");
         assert_eq!(events[0]["path"], "new.rs");
         assert_eq!(events[0]["previousPath"], "old.rs");
+    }
+
+    #[test]
+    fn builds_opencode_edit_permission_request() {
+        let hunks = parse_opencode_patch("*** Begin Patch\n*** Add File: proof.txt\n+ok\n*** End Patch").unwrap();
+        let files = vec![serde_json::json!({"relativePath": "proof.txt", "type": "add"})];
+        let request = edit_permission_request(&hunks, &files, "diff".to_string());
+        assert_eq!(request["permission"], "edit");
+        assert_eq!(request["patterns"][0], "proof.txt");
+        assert_eq!(request["always"][0], "*");
+        assert_eq!(request["metadata"]["filepath"], "proof.txt");
+        assert_eq!(request["metadata"]["files"][0]["relativePath"], "proof.txt");
     }
 
     fn patch_summary_lines(hunks: &[PatchHunk]) -> Vec<String> {
