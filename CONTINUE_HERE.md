@@ -17,19 +17,45 @@ Updated: 2026-06-26
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Default branch: `master`
-- Last code-fix commit before this docs refresh: `74eba32f57e9bfb682effaa202bdeac07f970c35`
+- Latest code commit before this docs sync: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
 
-## Latest recovery work
+## Latest proven green baseline
 
-The previous failed handoff state was reconstructed from GitHub Actions and repo files.
+- `e31d678277c0527d36f14f8eac8fc65f07c3b265` was fully green for CI, Build Proof, and Live WebUI Feature Sprint.
+- That green baseline included the graphify source split that fixed the previous 500-line gate failure.
 
-- Failed head checked first: `6d2faa89a9b0e2637eb9f8a58c51459d5da55e77`
-- Failure cause: CI and Build Proof failed only at the hard 500-line source gate.
-- Offending source file: `crates/unifiedgraph/src/main.rs` at 632+ lines in the PR merge checkout.
-- Fix applied:
-  - Added `crates/unifiedgraph/src/cli.rs` for graphify CLI definitions.
-  - Reduced `crates/unifiedgraph/src/main.rs` to a small dispatch entrypoint.
-- First post-fix Actions signal: File Size Gate passed in CI; File line gate and Cargo check passed in Build Proof. Full workflow completion must still be verified on the latest HEAD before calling the branch green.
+## Latest OpenCode-source slice
+
+A new `apply_patch` parity slice was added after the green baseline.
+
+Upstream sources studied:
+
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
+
+Forge changes:
+
+- Added `crates/engine/src/tool/patch_ops.rs`.
+- Split patch behavior out of `task_ops.rs` to keep all checked source files under 500 lines.
+- `apply_patch` now:
+  - accepts `patchText`;
+  - rejects empty/malformed Begin/End patch text;
+  - parses add/update/delete/move hunks;
+  - rejects absolute, parent-dir, Windows-style, colon, and NUL paths before mutation;
+  - records per-file metadata and edit-permission metadata;
+  - returns OpenCode-style `A/D/M` summary lines;
+  - still does **not** mutate files yet.
+
+Current proof state for `541e67f` when this docs sync started:
+
+- CI File Size Gate: passed.
+- CI fmt: passed.
+- CI tests/doc-tests: passed.
+- CI clippy/check/build, Security Audit, Cargo Deny, Smoke Test: still running.
+- Build Proof line gate: passed; Cargo check still running.
+- Live WebUI Feature Sprint: still running.
+
+Do not call `541e67f` fully green until all Actions complete successfully.
 
 ## Current direction
 
@@ -47,7 +73,7 @@ The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. 
 
 ## Current next target
 
-After the latest Actions are green, continue `apply_patch` parity. The current Forge surface accepts OpenCode-style `patchText`, but full OpenCode behavior is not complete yet.
+After the latest Actions are green, continue `apply_patch` parity from review metadata to safe file mutation.
 
 Study first:
 
