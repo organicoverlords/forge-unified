@@ -1,0 +1,10 @@
+warning: unused import: `uuid::Uuid`
+ --> crates\webui\src\routes.rs:7:5
+  |
+7 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `forge-webui` (lib) generated 1 warning (run `cargo fix --lib -p forge-webui` to apply 1 suggestion)
+   Compiling forge-app v0.1.0 (C:\Users\Lauri\Desktop\forge-unified\crates\app)

@@ -224,8 +224,9 @@ const GRAPH_HTML: &str = r#"<!DOCTYPE html>
   <div id="mynetwork"></div>
   <script>
     const typeColors = {
-      'file': '#444', 'rust': '#dea584', 'javascript': '#f7df1e', 'typescript': '#3178c6',
-      'python': '#3776ab', 'go': '#00add8', 'java': '#b07219', 'cpp': '#f34b7d', 'c': '#555', 'unknown': '#666'
+      'function': '#4caf50', 'struct': '#ff9800', 'enum': '#ffeb3b', 'trait': '#9c27b0',
+      'import': '#9e9e9e', 'constant': '#00bcd4', 'module': '#009688', 'type_alias': '#e91e63',
+      'unknown': '#666'
     };
     let network = null;
     let allNodes = [];
@@ -257,11 +258,11 @@ const GRAPH_HTML: &str = r#"<!DOCTYPE html>
       ).join('');
 
       const nodes = new vis.DataSet(allNodes.map(n => ({
-        id: n.id, label: n.label, title: n.label + '\n' + (n.imports || []).join('\n'),
+        id: n.id, label: n.name, title: n.type + ' ' + n.name + '\n' + (n.file || '') + (n.line ? ':' + n.line : ''),
         group: n.type, color: typeColors[n.type] || '#666', font: { color: '#eee' }
       })));
       const edges = new vis.DataSet(allEdges.map(e => ({
-        from: e.source, to: e.target, label: e.type, arrows: 'to', color: '#555', font: { color: '#aaa', size: 10 }
+        from: e.from, to: e.to, label: e.type, arrows: 'to', color: '#555', font: { color: '#aaa', size: 10 }
       })));
 
       const container = document.getElementById('mynetwork');
