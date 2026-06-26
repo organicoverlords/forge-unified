@@ -13,7 +13,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | `packages/opencode/src/session/prompt/default.txt` | Concise, direct CLI-style answers; GitHub-flavored markdown; no unnecessary preamble/postamble; inspect code before editing; verify when completing work | Partially copied into screenshot proof prompt; orchestrator system prompt still needs a source-gated rewrite |
 | `packages/opencode/src/session/prompt.ts` | Prompt/session flow, title generation, subtask and shell message/part handling | Studied only; not fully copied |
 | `packages/opencode/src/session/system.ts` | Provider-specific prompt selection and environment context prompt | Studied only; not copied |
-| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, validation, permission metadata, file updates, watcher events, LSP diagnostics, success summary | Forge has a safe first-stage `apply_patch` surface only; full parity not done |
+| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, validation, permission metadata, file updates, watcher events, LSP diagnostics, success summary | Forge now parses OpenCode patch markers/hunks for review; full mutation parity not done |
+| `packages/opencode/src/patch/index.ts` | Begin/end markers, add/delete/update/move hunk parsing, update chunks, EOF markers, multi-pass line matching | Parser slice partially copied; derive/apply replacements still incomplete |
 | `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, formatting/diagnostics hooks | Partially aligned through Forge `file_edit`; needs deeper comparison |
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
 | `packages/core/src/session/runner/publish-llm-event.ts` | Tool lifecycle validation and ordering | Partially copied in WebUI SSE proof |
@@ -44,6 +45,10 @@ Before claiming full `apply_patch` parity, Forge must prove these behaviors:
 - Publish file change events.
 - Trigger diagnostics/touch equivalent where available.
 - Return a human-readable success summary listing changed files.
+
+## File size rule
+
+All checked source files must stay at or below 500 lines. The hard gate is `scripts/ci/check-file-lines.sh` and runs in both CI and Build Proof. Split files before merging instead of creating large monoliths.
 
 ## Documentation update rule
 
