@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(warnings, clippy::all)]
 
 pub mod graph;
 pub mod extractor;
