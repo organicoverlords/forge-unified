@@ -77,14 +77,22 @@ impl Orchestrator {
 
             let messages = {
                 let conv_mgr = self.conversation_mgr.read().await;
-                conv_mgr.get_messages(&conversation_id).to_vec()
+                let mut messages = conv_mgr.get_messages(&conversation_id).to_vec();
+                messages.insert(0, Message {
+                    role: MessageRole::System,
+                    content: build_system_prompt(&user_message),
+                    tool_calls: None,
+                    tool_results: None,
+                    metadata: Default::default(),
+                });
+                messages
             };
 
             let tools = crate::tool::tool_definitions();
             let request = ChatRequest {
                 model: model.clone(),
                 messages,
-                temperature: Some(0.7),
+                temperature: Some(0.2),
                 max_tokens: Some(4096),
                 stream: false,
                 tools: Some(tools),
@@ -181,11 +189,29 @@ impl Orchestrator {
     }
 
     pub async fn resume(&self, conversation_id: &ConversationId) -> Result<()> {
-        self.state.write().await.resume_run(conversation_id);
+        self.state.write().await.resume(conversation_id);
         Ok(())
     }
 
     pub async fn execute_tool(&self, request: crate::types::ToolRequest) -> Result<crate::types::ToolResult> {
         self.tool_executor.execute(request).await
+    }
+}
+
+fn build_system_prompt(user_message: &str) -> String {
+    let lower = user_message.to_ascii_lowercase();
+    let self_build = lower.contains("build")
+        || lower.contains("fix")
+        || lower.contains("inspect")
+        || lower.contains("repo_info")
+        || lower.contains("file_list")
+        || lower.contains("webui");
+
+    let base = "You are Forge, an OpenCode-style coding agent. Use the provided tools to inspect and change the real workspace. Do not claim to inspect files without tool calls. When tool calls are needed, call tools first, then answer after observing tool results.";
+
+    if self_build {
+        format!("{} For this request, you must call repo_info and file_list with path '.' before the final answer. Keep the final answer short and state the smallest next build step.", base)
+    } else {
+        base.to_string()
     }
 }
