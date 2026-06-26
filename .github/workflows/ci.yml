@@ -77,19 +77,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check file sizes
-        run: |
-          MAX_LINES=500
-          failed=0
-          for f in $(find crates -name "*.rs" | grep -v target); do
-            lines=$(wc -l < "$f")
-            if [ $lines -gt $MAX_LINES ]; then
-              echo "::warning file=$f::File exceeds $MAX_LINES lines ($lines)"
-              failed=1
-            fi
-          done
-          if [ $failed -eq 0 ]; then echo "All files under $MAX_LINES lines"; fi
-          exit 0
+      - name: Enforce source file line limit
+        run: bash scripts/ci/check-file-lines.sh
 
   smoke-test:
     name: Smoke Test
