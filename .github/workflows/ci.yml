@@ -93,6 +93,9 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: webui-smoke-proof
-          path: .forge-proof/webui-smoke/
+          path: forge-proof/webui-smoke/
 
       - name: Test help output
         run: ./target/debug/forge --help
