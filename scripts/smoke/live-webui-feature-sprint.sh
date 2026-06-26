@@ -18,7 +18,7 @@ OPENCODE_PREFIX="Copy OpenCode behavior only. Use these upstream references: ano
 
 PROMPT="${FORGE_FEATURE_PROMPT:-}"
 if [ -z "$PROMPT" ]; then
-  PROMPT="Use OpenCode edit semantics. Use file_edit on scripts/smoke/live-webui-feature-sprint.sh. Replace the exact text LIVE WebUI feature sprint passed: with LIVE WebUI feature sprint passed with OpenCode source proof:. Then run repo_info, file_list with path dot, and shell_command with command cargo check --workspace --all-targets. Briefly report the changed file, whether the build passed, and OPENCODE_SOURCE packages/opencode/src/tool/edit.ts."
+  PROMPT="Use OpenCode edit semantics. Call file_edit directly on PROJECT_STATE.md with old_string exactly 'Updated: 2026-06-25' and new_string exactly 'Updated: 2026-06-26 — OpenCode source proof'. Do not search for the string first. Then run repo_info, file_list with path dot, and shell_command with command cargo check --workspace --all-targets. Briefly report the changed file, whether the build passed, and OPENCODE_SOURCE packages/opencode/src/tool/edit.ts."
 fi
 printf '%s\n\n%s\n' "$OPENCODE_PREFIX" "$PROMPT" > "$PROMPT_FILE"
 
