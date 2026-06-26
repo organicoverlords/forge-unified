@@ -9,22 +9,14 @@ PR: #3 into `master`
 
 Latest code HEAD: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
 
-Latest fully green baseline before the current `apply_patch` slice:
+Latest fully green baselines:
 
-- `e31d678277c0527d36f14f8eac8fc65f07c3b265`
-- CI: success
-- Build Proof: success
-- Live WebUI Feature Sprint: success
+| HEAD | CI | Build Proof | Live WebUI Feature Sprint |
+|---|---|---|---|
+| `e31d678277c0527d36f14f8eac8fc65f07c3b265` | success | success | success |
+| `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` | success | success | success |
 
-Current code-slice proof for `541e67f` when this docs sync started:
-
-- CI File Size Gate: passed.
-- CI formatting: passed.
-- CI tests/doc-tests: passed.
-- Build Proof line gate: passed.
-- CI clippy/check/build, smoke, deny/audit, Build Proof cargo/test/smoke, and Live WebUI Feature Sprint were still running.
-
-Do not call the latest branch fully green until the latest docs-updated HEAD is green.
+The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
 
 ## Source-first OpenCode rule
 
