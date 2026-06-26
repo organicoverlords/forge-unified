@@ -59,6 +59,11 @@ impl Agent {
         self.save_snapshot(id).await
     }
 
+    pub async fn record_assistant_summary(&self, id: &ConversationId, summary: String) -> Result<()> {
+        self.conversations.write().await.add_assistant_message(id, summary);
+        self.save_snapshot(id).await
+    }
+
     pub async fn new_conversation(&self, title: String) -> ConversationId {
         let id = self.conversations.write().await.create(title);
         let _ = self.save_snapshot(&id).await;
