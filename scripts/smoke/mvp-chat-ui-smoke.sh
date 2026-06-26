@@ -7,7 +7,8 @@ cd "$ROOT"
 PORT="${FORGE_SMOKE_PORT:-3310}"
 BASE="http://127.0.0.1:${PORT}"
 PROOF_DIR="${FORGE_SMOKE_PROOF_DIR:-$ROOT/.forge-proof/webui-smoke}"
-mkdir -p "$PROOF_DIR"
+PUBLIC_PROOF_DIR="${FORGE_PUBLIC_SMOKE_PROOF_DIR:-$ROOT/forge-proof/webui-smoke}"
+mkdir -p "$PROOF_DIR" "$PUBLIC_PROOF_DIR"
 LOG="$PROOF_DIR/server.log"
 STREAM_OUT="$PROOF_DIR/chat-stream.sse"
 PROOF_JSON="$PROOF_DIR/browser-proof.json"
@@ -47,6 +48,11 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
 
 grep -q "event: run-start" "$STREAM_OUT"
 grep -q "event:" "$STREAM_OUT"
+grep -q "event: tool-input-start" "$STREAM_OUT"
+grep -q "event: tool-input-delta" "$STREAM_OUT"
+grep -q "event: tool-input-end" "$STREAM_OUT"
+grep -q "event: tool-call" "$STREAM_OUT"
+grep -q "event: tool-result" "$STREAM_OUT"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
@@ -61,4 +67,6 @@ if jq -e '.success == true' "$PROOF_JSON" >/dev/null 2>&1; then
   jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG" || true
 fi
 
-echo "MVP chat UI + SSE smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR"
+cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/" || true
+
+echo "MVP chat UI + OpenCode-style SSE tool smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
