@@ -54,6 +54,11 @@ impl Agent {
         self.orchestrator.execute_tool(request).await
     }
 
+    pub async fn record_tool_results(&self, id: &ConversationId, results: Vec<ToolResult>) -> Result<()> {
+        self.conversations.write().await.add_tool_results(id, results);
+        self.save_snapshot(id).await
+    }
+
     pub async fn new_conversation(&self, title: String) -> ConversationId {
         let id = self.conversations.write().await.create(title);
         let _ = self.save_snapshot(&id).await;
