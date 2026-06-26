@@ -36,6 +36,7 @@ pub enum ToolKind {
     BatchParallel,
     RepoInfo,
     ProposePatch,
+    ApplyPatch,
     SwitchMode,
     BrowserProof,
     VisionReview,
