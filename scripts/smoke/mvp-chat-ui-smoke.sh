@@ -36,15 +36,15 @@ curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"live natural prompt smoke"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"live natural patch smoke"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 
 test -n "$CONV_ID"
-curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "live natural prompt smoke"
+curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "live natural patch smoke"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
   -H 'content-type: application/json' \
   -H 'accept: text/event-stream' \
-  -d '{"message":"Use the normal chat interface and the live model provider. Inspect this repository by calling the repo_info tool and the file_list tool with path dot. Then build-check the app by calling shell_command with command cargo check --workspace --all-targets. Then briefly report whether that build check passed and the smallest next step toward making this app build itself from the WebUI.","max_rounds":1}' \
+  -d '{"message":"Use the normal chat interface and the live model provider. Patch this app by using file_edit on crates/webui/src/events.rs. Replace the exact text Server-sent event endpoints for chat runs. with Server-sent event endpoints for chat runs and live patch proof. Then inspect the repository with repo_info and file_list path dot, and build-check the patched app by calling shell_command with command cargo check --workspace --all-targets. Then briefly report whether the patch and build passed.","max_rounds":1}' \
   > "$STREAM_OUT"
 
 grep -q "event: run-start" "$STREAM_OUT"
@@ -60,8 +60,13 @@ grep -q "event: tool-call" "$STREAM_OUT"
 grep -q "event: tool-result" "$STREAM_OUT"
 grep -q '"name":"repo_info"' "$STREAM_OUT"
 grep -q '"name":"file_list"' "$STREAM_OUT"
+grep -q '"name":"file_edit"' "$STREAM_OUT"
+grep -q 'crates/webui/src/events.rs' "$STREAM_OUT"
+grep -q 'live patch proof' "$STREAM_OUT"
 grep -q '"name":"shell_command"' "$STREAM_OUT"
 grep -q 'cargo check --workspace --all-targets' "$STREAM_OUT"
+
+grep -q "live patch proof" crates/webui/src/events.rs
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
@@ -75,4 +80,4 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG"
 
-echo "LIVE WebUI self-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
+echo "LIVE WebUI patch-and-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
