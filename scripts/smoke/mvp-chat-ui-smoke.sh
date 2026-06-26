@@ -7,6 +7,7 @@ cd "$ROOT"
 PORT="${FORGE_SMOKE_PORT:-3310}"
 BASE="http://127.0.0.1:${PORT}"
 LOG="${TMPDIR:-/tmp}/forge-unified-mvp-smoke.log"
+STREAM_OUT="${TMPDIR:-/tmp}/forge-unified-mvp-stream.sse"
 
 cargo build --workspace
 
@@ -33,8 +34,18 @@ CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
 
 test -n "$CONV_ID"
 curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "mvp smoke"
+
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
+  -H 'content-type: application/json' \
+  -H 'accept: text/event-stream' \
+  -d '{"message":"Say hello from the smoke test","max_rounds":1}' \
+  > "$STREAM_OUT" || true
+
+grep -q "event: run-start" "$STREAM_OUT"
+grep -q "event:" "$STREAM_OUT"
+
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
   -d '{}' | grep -q "snapshot_saved"
 
-echo "MVP chat UI smoke passed: $BASE conversation=$CONV_ID"
+echo "MVP chat UI + SSE smoke passed: $BASE conversation=$CONV_ID"
