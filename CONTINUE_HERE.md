@@ -74,7 +74,7 @@ The product goal is OpenCode-equivalent behavior inside Forge's Rust/WebUI app. 
 
 ## Current next target
 
-Check latest docs-updated Actions first. If green, continue `apply_patch` parity from mutation to real permission gating, watcher events, formatting/BOM preservation, and diagnostics.
+Check latest docs-updated Actions first. If green, continue `apply_patch` parity from mutation to real permission gating, watcher events, formatting/BOM preservation, and diagnostics. Do not add another code slice until the current docs checkpoint is verified or a real failure is fixed.
 
 Study first:
 
