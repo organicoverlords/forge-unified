@@ -15,6 +15,7 @@ pub mod snapshot;
 pub mod state;
 pub mod strategy;
 pub mod tool;
+pub mod tool_parts;
 pub mod types;
 
 pub use agent::*;
@@ -30,4 +31,5 @@ pub use snapshot::*;
 pub use state::*;
 pub use strategy::*;
 pub use tool::*;
+pub use tool_parts::*;
 pub use types::*;
