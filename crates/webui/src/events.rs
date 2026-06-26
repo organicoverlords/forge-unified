@@ -38,9 +38,22 @@ pub async fn chat_stream(
                     ChatEventState::Run { state, conversation_id, message },
                 )),
                 ChatEventState::Run { state, conversation_id, message } => {
-                    let result = state.agent.chat(&conversation_id, message.clone()).await;
                     let mut events = VecDeque::new();
+                    if should_run_natural_note_action(&message) {
+                        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+                        append_natural_note_action(&state, &mut events, &conversation_id).await;
+                        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+                            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+                        }
+                        events.push_back(event("run-finish", serde_json::json!({
+                            "status": "completed",
+                            "task": "natural file creation",
+                            "provider": "local"
+                        })));
+                        return ChatEventState::emit_next(events);
+                    }
 
+                    let result = state.agent.chat(&conversation_id, message.clone()).await;
                     match result {
                         Ok(record) => {
                             let mut run_local_preflight = false;
@@ -85,9 +98,7 @@ pub async fn chat_stream(
                                     events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
                                 }
 
-                                if should_run_natural_note_action(&message) {
-                                    append_natural_note_action(&state, &mut events, &conversation_id).await;
-                                } else if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
+                                if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
                                     append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                                 }
 
@@ -103,9 +114,7 @@ pub async fn chat_stream(
                                 "retryable": true
                             })));
 
-                            if should_run_natural_note_action(&message) {
-                                append_natural_note_action(&state, &mut events, &conversation_id).await;
-                            } else if should_run_local_preflight(&message) {
+                            if should_run_local_preflight(&message) {
                                 append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                             }
                         }
