@@ -20,6 +20,7 @@ cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
   kill "$PID" >/dev/null 2>&1 || true
+  cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -71,7 +72,5 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 
 jq -e '.success == true' "$PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG"
-
-cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/"
 
 echo "LIVE WebUI self-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
