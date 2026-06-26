@@ -38,14 +38,19 @@ curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"screenshot prompt completed"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"human readable prompt completed"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
-For screenshot proof, reply with exactly this visible marker and nothing before it:
-SCREENSHOT_PROOF_COMPLETE
-Then add this source line:
-OPENCODE_SOURCE packages/opencode/src/session/prompt.ts
+Complete a small repo check and answer like a coding agent final response, not like a test marker. Keep it concise and human-readable.
+
+Include these headings:
+Summary
+What I checked
+Result
+Source
+
+In Source, mention packages/opencode/src/session/prompt.ts.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
@@ -57,16 +62,20 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
 
 grep -q "event: run-start" "$STREAM_OUT"
 grep -q "event: run-finish" "$STREAM_OUT"
-grep -q "SCREENSHOT_PROOF_COMPLETE" "$STREAM_OUT"
-grep -q "OPENCODE_SOURCE" "$STREAM_OUT"
+grep -q "Summary" "$STREAM_OUT"
+grep -q "What I checked" "$STREAM_OUT"
+grep -q "Result" "$STREAM_OUT"
+grep -q "Source" "$STREAM_OUT"
 if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
   echo "::error::Screenshot prompt produced provider-error or missing-key output."
   exit 3
 fi
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-grep -q "SCREENSHOT_PROOF_COMPLETE" "$CONVERSATION_JSON"
-grep -q "OPENCODE_SOURCE" "$CONVERSATION_JSON"
+grep -q "Summary" "$CONVERSATION_JSON"
+grep -q "What I checked" "$CONVERSATION_JSON"
+grep -q "Result" "$CONVERSATION_JSON"
+grep -q "Source" "$CONVERSATION_JSON"
 
 curl -fsS -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
@@ -76,7 +85,10 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-grep -q "screenshot prompt completed" "$BROWSER_PROOF_JSON"
-grep -q "SCREENSHOT_PROOF_COMPLETE" "$BROWSER_PROOF_JSON"
+grep -q "human readable prompt completed" "$BROWSER_PROOF_JSON"
+grep -q "Summary" "$BROWSER_PROOF_JSON"
+grep -q "What I checked" "$BROWSER_PROOF_JSON"
+grep -q "Result" "$BROWSER_PROOF_JSON"
+grep -q "Source" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI completed-prompt screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI human-readable completed-prompt screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
