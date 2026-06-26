@@ -16,11 +16,13 @@ PROOF_JSON="$PROOF_DIR/browser-proof.json"
 PROOF_PNG="$PROOF_DIR/webui.png"
 mkdir -p "$PROOF_DIR"
 
+OPENCODE_PREFIX="Copy OpenCode behavior only. Use these upstream references: anomalyco/opencode@0befd9b04939589ffe7d29c62e9260bc8ee4fff6 packages/llm/src/schema/events.ts for LLM event names; packages/core/src/session/runner/publish-llm-event.ts for tool lifecycle validation; packages/opencode/src/session/processor.ts for tool state handling; packages/opencode/src/tool/edit.ts for exact file edits; packages/opencode/src/tool/apply_patch.ts for patch semantics. Do not invent a custom workflow when one of these files covers the behavior. Include OPENCODE_SOURCE with the copied file path in your final answer."
+
 PROMPT="${FORGE_FEATURE_PROMPT:-}"
 if [ -z "$PROMPT" ]; then
-  PROMPT="Use the normal chat interface and the live model provider. Make the smallest safe code change that improves visible WebUI self-build proof, then run repo_info, file_list with path dot, and shell_command with command cargo check --workspace --all-targets. Briefly report the changed file and whether the build passed."
+  PROMPT="Make the smallest safe code change that improves visible WebUI self-build proof, then run repo_info, file_list with path dot, and shell_command with command cargo check --workspace --all-targets. Briefly report the changed file and whether the build passed."
 fi
-printf '%s\n' "$PROMPT" > "$PROMPT_FILE"
+printf '%s\n\n%s\n' "$OPENCODE_PREFIX" "$PROMPT" > "$PROMPT_FILE"
 
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -60,6 +62,7 @@ grep -q "event: tool-call" "$STREAM_OUT"
 grep -q "event: tool-result" "$STREAM_OUT"
 grep -q '"name":"shell_command"' "$STREAM_OUT"
 grep -q 'cargo check --workspace --all-targets' "$STREAM_OUT"
+grep -q 'OPENCODE_SOURCE' "$STREAM_OUT"
 if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
   echo "::error::Live feature sprint produced provider-error or missing-key output."
   exit 3
