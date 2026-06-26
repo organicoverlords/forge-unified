@@ -1,5 +1,6 @@
 use crate::graph::{KnowledgeGraph, GraphNode, GraphEdge, NodeType, EdgeType};
 use anyhow::Result;
+use glob::glob;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -41,18 +42,28 @@ impl GraphExtractor {
         let mut combined = KnowledgeGraph::new();
 
         for pattern in patterns {
-            let path = Path::new(pattern);
-
-            if path.exists() {
-                if path.is_dir() {
-                    let files = self.find_files_in_directory(&path, 0).await?;
-                    for file_path in files {
-                        let graph = self.extract_file(&file_path).await?;
+            if pattern.contains('*') || pattern.contains('?') {
+                let matches = glob(pattern).map_err(|e| anyhow::anyhow!("Invalid glob pattern: {}", e))?;
+                for entry in matches.flatten() {
+                    let file_path = entry.as_path();
+                        if self.should_include_file(file_path) {
+                        let graph = self.extract_file(&file_path.to_string_lossy()).await?;
                         combined.merge(graph);
                     }
-                } else {
-                    let graph = self.extract_file(pattern).await?;
-                    combined.merge(graph);
+                }
+            } else {
+                let path = Path::new(pattern);
+                if path.exists() {
+                    if path.is_dir() {
+                        let files = self.find_files_in_directory(&path, 0).await?;
+                        for file_path in files {
+                            let graph = self.extract_file(&file_path).await?;
+                            combined.merge(graph);
+                        }
+                    } else if self.should_include_file(path) {
+                        let graph = self.extract_file(pattern).await?;
+                        combined.merge(graph);
+                    }
                 }
             }
         }

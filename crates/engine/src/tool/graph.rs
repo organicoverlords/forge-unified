@@ -10,7 +10,7 @@ impl ToolExecutor {
     pub async fn execute_graph_build(&self, request: ToolRequest) -> Result<ToolResult> {
         let pattern = request.args.get("pattern")
             .and_then(|v| v.as_str())
-            .unwrap_or("**/crates/**/*.rs");
+            .unwrap_or("crates/**/*.rs");
 
         let workspace_root = &self.workspace_root;
 
