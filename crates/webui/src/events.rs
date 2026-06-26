@@ -41,6 +41,7 @@ pub async fn chat_stream(
 
                     match result {
                         Ok(record) => {
+                            let mut run_local_preflight = false;
                             if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
                                 if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
                                     events.push_back(event("text-start", serde_json::json!({ "id": "assistant-final" })));
@@ -51,6 +52,11 @@ pub async fn chat_stream(
                                         })));
                                     }
                                     events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
+
+                                    run_local_preflight = assistant.metadata
+                                        .get("type")
+                                        .and_then(|value| value.as_str())
+                                        == Some("provider-error");
 
                                     if let Some(calls) = &assistant.tool_calls {
                                         for call in calls {
@@ -68,6 +74,10 @@ pub async fn chat_stream(
                                     }
                                 }
 
+                                if run_local_preflight && should_run_local_preflight(&message) {
+                                    append_repo_preflight(&state, &mut events).await;
+                                }
+
                                 events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
                             }
 
@@ -80,41 +90,7 @@ pub async fn chat_stream(
                             })));
 
                             if should_run_local_preflight(&message) {
-                                let req = ToolRequest {
-                                    id: ToolCallId(uuid::Uuid::new_v4()),
-                                    kind: ToolKind::RepoInfo,
-                                    args: serde_json::json!({}),
-                                    parallel_group: None,
-                                };
-                                let id = req.id.0.to_string();
-                                let input = req.args.clone();
-                                events.push_back(event("tool-input-start", serde_json::json!({
-                                    "id": id,
-                                    "name": "repo_info"
-                                })));
-                                events.push_back(event("tool-input-delta", serde_json::json!({
-                                    "id": id,
-                                    "name": "repo_info",
-                                    "text": input.to_string()
-                                })));
-                                events.push_back(event("tool-input-end", serde_json::json!({
-                                    "id": id,
-                                    "name": "repo_info"
-                                })));
-                                events.push_back(event("tool-call", serde_json::json!({
-                                    "id": id,
-                                    "name": "repo_info",
-                                    "kind": "repo_info",
-                                    "input": input
-                                })));
-                                match state.agent.execute_tool(req).await {
-                                    Ok(result) => events.push_back(event("tool-result", serde_json::to_value(result).unwrap_or_default())),
-                                    Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
-                                        "id": id,
-                                        "name": "repo_info",
-                                        "message": tool_err.to_string()
-                                    }))),
-                                }
+                                append_repo_preflight(&state, &mut events).await;
                             }
                         }
                     }
@@ -147,6 +123,44 @@ impl ChatEventState {
 
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> {
     Ok(Event::default().event(name).data(data.to_string()))
+}
+
+async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>) {
+    let req = ToolRequest {
+        id: ToolCallId(uuid::Uuid::new_v4()),
+        kind: ToolKind::RepoInfo,
+        args: serde_json::json!({}),
+        parallel_group: None,
+    };
+    let id = req.id.0.to_string();
+    let input = req.args.clone();
+    events.push_back(event("tool-input-start", serde_json::json!({
+        "id": id,
+        "name": "repo_info"
+    })));
+    events.push_back(event("tool-input-delta", serde_json::json!({
+        "id": id,
+        "name": "repo_info",
+        "text": input.to_string()
+    })));
+    events.push_back(event("tool-input-end", serde_json::json!({
+        "id": id,
+        "name": "repo_info"
+    })));
+    events.push_back(event("tool-call", serde_json::json!({
+        "id": id,
+        "name": "repo_info",
+        "kind": "repo_info",
+        "input": input
+    })));
+    match state.agent.execute_tool(req).await {
+        Ok(result) => events.push_back(event("tool-result", serde_json::to_value(result).unwrap_or_default())),
+        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
+            "id": id,
+            "name": "repo_info",
+            "message": tool_err.to_string()
+        }))),
+    }
 }
 
 fn should_run_local_preflight(message: &str) -> bool {
