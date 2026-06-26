@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 //! Forge WebUI — axum HTTP server with REST API for the chat-first UI.
 
 pub mod chat_ui;
