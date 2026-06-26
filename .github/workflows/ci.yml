@@ -99,6 +99,13 @@ jobs:
       - name: Run MVP chat UI smoke
         run: bash scripts/smoke/mvp-chat-ui-smoke.sh
 
+      - name: Upload WebUI proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webui-smoke-proof
+          path: .forge-proof/webui-smoke/
+
       - name: Test help output
         run: ./target/debug/forge --help
 
