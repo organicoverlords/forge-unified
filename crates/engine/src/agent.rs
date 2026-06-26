@@ -1,14 +1,15 @@
 //! Agent — high-level interface wrapping orchestrator, router, and conversation.
 
 use crate::config::Config;
-use crate::orchestrator::Orchestrator;
 use crate::conversation::ConversationManager;
+use crate::orchestrator::Orchestrator;
 use crate::snapshot::SnapshotManager;
 use crate::types::*;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::Value;
 use uuid::Uuid;
 
 pub struct Agent {
@@ -21,8 +22,18 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: Config) -> Self {
-        let conversations = Arc::new(RwLock::new(ConversationManager::new()));
         let snapshots = Arc::new(SnapshotManager::new(&config.data_dir));
+        let mut manager = ConversationManager::new();
+
+        if let Ok(ids) = snapshots.list() {
+            for id in ids {
+                if let Ok(conv) = snapshots.load(&id) {
+                    manager.insert(id, conv);
+                }
+            }
+        }
+
+        let conversations = Arc::new(RwLock::new(manager));
         let orchestrator = Arc::new(Orchestrator::new(config.clone(), conversations.clone()));
 
         Self {
@@ -34,11 +45,15 @@ impl Agent {
     }
 
     pub async fn chat(&self, id: &ConversationId, message: String) -> Result<RunRecord> {
-        self.orchestrator.run(id.clone(), message, 10).await
+        let record = self.orchestrator.run(id.clone(), message, 10).await?;
+        self.save_snapshot(id).await?;
+        Ok(record)
     }
 
     pub async fn new_conversation(&self, title: String) -> ConversationId {
-        self.conversations.write().await.create(title)
+        let id = self.conversations.write().await.create(title);
+        let _ = self.save_snapshot(&id).await;
+        id
     }
 
     pub async fn list_conversations(&self) -> Vec<ConversationSummary> {
@@ -56,7 +71,11 @@ impl Agent {
     }
 
     pub async fn delete_conversation(&self, id: &ConversationId) -> Option<Conversation> {
-        self.conversations.write().await.delete(id)
+        let removed = self.conversations.write().await.delete(id);
+        if removed.is_some() {
+            let _ = self.snapshots.delete(id);
+        }
+        removed
     }
 
     pub async fn save_snapshot(&self, id: &ConversationId) -> Result<()> {
@@ -149,5 +168,3 @@ pub struct ConversationSummary {
     pub mode: AgentMode,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
-
-use serde::{Serialize, Deserialize};
