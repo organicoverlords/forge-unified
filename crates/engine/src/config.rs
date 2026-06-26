@@ -31,8 +31,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             providers: default_provider_configs(),
-            default_provider: None,
-            default_model: None,
+            default_provider: Some(ProviderId("nvidia_nim".to_string())),
+            default_model: Some(ModelId("deepseek-ai/deepseek-v4-flash".to_string())),
             approval_mode: ApprovalMode::Ask,
             max_parallel_tools: 10,
             tool_timeout_ms: 60000,
@@ -100,22 +100,33 @@ impl Config {
     }
 }
 
+fn has_env_any(names: &[&str]) -> bool {
+    names.iter().any(|name| std::env::var(name).map(|v| !v.trim().is_empty()).unwrap_or(false))
+}
+
 fn default_provider_configs() -> Vec<ProviderConfig> {
     vec![
         ProviderConfig {
             id: ProviderId("nvidia_nim".to_string()),
             name: "NVIDIA NIM".to_string(),
             api_base: "https://integrate.api.nvidia.com/v1".to_string(),
-            api_key_env: "NVIDIA_NIM_API_KEY".to_string(),
-            enabled: std::env::var("NVIDIA_NIM_API_KEY").is_ok(),
+            api_key_env: "NIM_KEY".to_string(),
+            enabled: has_env_any(&["NIM_KEY", "NVIDIA_NIM_API_KEY"]),
             priority: 0,
-            max_retries: 3,
-            timeout_ms: 60000,
+            max_retries: 20,
+            timeout_ms: 90000,
             models: vec![
-                model("mistralai/mistral-small-4-119b-2603", "Mistral Small 4", 128000, true),
                 model("deepseek-ai/deepseek-v4-flash", "DeepSeek V4 Flash", 128000, true),
+                model("mistralai/mistral-small-4-119b-2603", "Mistral Small 4", 128000, true),
                 model("openai/gpt-oss-120b", "GPT-OSS 120B", 128000, true),
+                model("meta/llama-3.1-405b-instruct", "Llama 3.1 405B", 128000, true),
                 model("meta/llama-3.1-70b-instruct", "Llama 3.1 70B", 128000, true),
+                model("nvidia/llama-3.3-nemotron-super-49b-v1.5", "Nemotron Super 49B", 128000, true),
+                model("qwen/qwen3-235b-a22b", "Qwen3 235B A22B", 128000, true),
+                model("moonshotai/kimi-k2-instruct", "Kimi K2", 128000, true),
+                model("z-ai/glm-4.5", "GLM 4.5", 128000, true),
+                model("minimax/minimax-m1-80k", "MiniMax M1 80K", 80000, true),
+                model("mistralai/mistral-large", "Mistral Large", 128000, true),
             ],
         },
         ProviderConfig {
@@ -123,7 +134,7 @@ fn default_provider_configs() -> Vec<ProviderConfig> {
             name: "Groq".to_string(),
             api_base: "https://api.groq.com/openai/v1".to_string(),
             api_key_env: "GROQ_API_KEY".to_string(),
-            enabled: std::env::var("GROQ_API_KEY").is_ok(),
+            enabled: has_env_any(&["GROQ_API_KEY"]),
             priority: 10,
             max_retries: 2,
             timeout_ms: 45000,
@@ -136,7 +147,7 @@ fn default_provider_configs() -> Vec<ProviderConfig> {
             name: "OpenRouter".to_string(),
             api_base: "https://openrouter.ai/api/v1".to_string(),
             api_key_env: "OPENROUTER_API_KEY".to_string(),
-            enabled: std::env::var("OPENROUTER_API_KEY").is_ok(),
+            enabled: has_env_any(&["OPENROUTER_API_KEY"]),
             priority: 20,
             max_retries: 2,
             timeout_ms: 60000,
