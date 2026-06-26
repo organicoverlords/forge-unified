@@ -13,7 +13,7 @@ Updated through GitHub API work on 2026-06-26.
 | Rust workspace | Real | `crates/engine`, `crates/webui`, `crates/app`, `crates/unifiedgraph` |
 | CLI/server binary | Real | `forge` starts an Axum server |
 | Bundled root UI | Partial/real | `/` serves a single-page chat UI that can create conversations, send messages, show messages/tool results, save snapshots, and open graph view |
-| REST API | Real | Health, conversations, chat, cancel/pause/resume, snapshot, browser proof, vision review, benchmark, graph routes |
+| REST API | Real | Health, conversations, chat, task controls, snapshot, browser proof, vision review, benchmark, graph routes |
 | Provider abstraction | Real | `Provider` trait with chat, stream, and health methods |
 | Providers | Partial | NIM is explicit; Groq/OpenRouter use generic OpenAI-compatible provider config when matching env vars exist |
 | Provider fallback | Basic | Priority-order fallback exists, but routing receipts and health/quota policy are immature |
@@ -21,8 +21,8 @@ Updated through GitHub API work on 2026-06-26.
 | Browser proof | Real | Uses local Chrome/Chromium headless screenshot and optional DOM dump |
 | NIM vision review | Real but provider-specific | Requires a configured NIM key; defaults to Llama 3.2 11B vision |
 | Conversation storage | Partial | Active conversations are in-memory; snapshots persist JSON files |
-| WebSocket chat | Scaffold | `/ws` currently echoes text; it is not real streaming chat yet |
-| Cancel/pause/resume | API-shaped | Endpoints exist, but operational interruption inside model/tool loops needs proof/fixes |
+| Socket chat | Scaffold | Socket route currently echoes text; it is not real streaming chat yet |
+| Task controls | API-shaped | Endpoints exist, but operational interruption inside model/tool loops needs proof/fixes |
 | Benchmark adapter | Shallow | Capability summary only; not yet the full artifact-backed adapter used by Superapp |
 | CI | Improved | Workflow now targets `master`, `main`, and `dev`; smoke test calls the MVP UI/API script |
 
@@ -31,7 +31,7 @@ Updated through GitHub API work on 2026-06-26.
 ```text
 crates/
   engine/        core agent, orchestration, provider routing, tools, benchmark report, snapshots
-  webui/         Axum HTTP server, REST routes, bundled MVP chat page, WebSocket scaffold, graph visualization route
+  webui/         Axum HTTP server, REST routes, bundled MVP chat page, socket scaffold, graph visualization route
   app/           CLI binary entrypoint
   unifiedgraph/  graph extraction/query support
 scripts/
@@ -86,9 +86,9 @@ Priority order is currently NIM, then Groq, then OpenRouter.
 
 ## Main gaps before it can compete with the existing apps
 
-1. Replace blocking chat POST UX with true streaming SSE/WebSocket events.
+1. Replace blocking chat POST UX with true streaming events.
 2. Add durable conversation persistence, not only in-memory conversations plus manual snapshots.
-3. Make cancel/pause/resume affect active model/tool loops.
+3. Make task controls affect active model/tool loops.
 4. Add visible model routing receipts, fallback events, and saved provider/model order UI.
 5. Port mature commit-readiness and pre-push gates from LocalGPT/Superapp.
 6. Replace the shallow benchmark report with artifact-backed Benchmark Adapter API v1.
