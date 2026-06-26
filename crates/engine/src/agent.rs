@@ -50,6 +50,10 @@ impl Agent {
         Ok(record)
     }
 
+    pub async fn execute_tool(&self, request: ToolRequest) -> Result<ToolResult> {
+        self.orchestrator.execute_tool(request).await
+    }
+
     pub async fn new_conversation(&self, title: String) -> ConversationId {
         let id = self.conversations.write().await.create(title);
         let _ = self.save_snapshot(&id).await;
