@@ -189,7 +189,7 @@ impl Orchestrator {
     }
 
     pub async fn resume(&self, conversation_id: &ConversationId) -> Result<()> {
-        self.state.write().await.resume(conversation_id);
+        self.state.write().await.resume_run(conversation_id);
         Ok(())
     }
 
