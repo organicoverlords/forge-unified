@@ -126,38 +126,58 @@ fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> {
 }
 
 async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>) {
-    let req = ToolRequest {
-        id: ToolCallId(uuid::Uuid::new_v4()),
-        kind: ToolKind::RepoInfo,
-        args: serde_json::json!({}),
-        parallel_group: None,
-    };
+    let requests = vec![
+        ("repo_info", ToolRequest {
+            id: ToolCallId(uuid::Uuid::new_v4()),
+            kind: ToolKind::RepoInfo,
+            args: serde_json::json!({}),
+            parallel_group: None,
+        }),
+        ("file_list", ToolRequest {
+            id: ToolCallId(uuid::Uuid::new_v4()),
+            kind: ToolKind::FileList,
+            args: serde_json::json!({ "path": "." }),
+            parallel_group: None,
+        }),
+    ];
+
+    for (name, req) in requests {
+        append_tool_events(state, events, name, req).await;
+    }
+}
+
+async fn append_tool_events(
+    state: &AppState,
+    events: &mut VecDeque<Result<Event, Infallible>>,
+    name: &str,
+    req: ToolRequest,
+) {
     let id = req.id.0.to_string();
     let input = req.args.clone();
     events.push_back(event("tool-input-start", serde_json::json!({
         "id": id,
-        "name": "repo_info"
+        "name": name
     })));
     events.push_back(event("tool-input-delta", serde_json::json!({
         "id": id,
-        "name": "repo_info",
+        "name": name,
         "text": input.to_string()
     })));
     events.push_back(event("tool-input-end", serde_json::json!({
         "id": id,
-        "name": "repo_info"
+        "name": name
     })));
     events.push_back(event("tool-call", serde_json::json!({
         "id": id,
-        "name": "repo_info",
-        "kind": "repo_info",
+        "name": name,
+        "kind": name,
         "input": input
     })));
     match state.agent.execute_tool(req).await {
         Ok(result) => events.push_back(event("tool-result", serde_json::to_value(result).unwrap_or_default())),
         Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
             "id": id,
-            "name": "repo_info",
+            "name": name,
             "message": tool_err.to_string()
         }))),
     }
