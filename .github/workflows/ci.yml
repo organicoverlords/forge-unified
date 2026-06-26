@@ -96,14 +96,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build binary
-        run: cargo build --release -p forge-app
+      - name: Run MVP chat UI smoke
+        run: bash scripts/smoke/mvp-chat-ui-smoke.sh
 
       - name: Test help output
-        run: ./target/release/forge --help
-
-      - name: Test config generation
-        run: ./target/release/forge --help 2>&1 | head -20
+        run: ./target/debug/forge --help
 
   audit:
     name: Security Audit
