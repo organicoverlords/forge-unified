@@ -20,7 +20,7 @@ jobs:
       - name: Cargo test
         run: cargo test --workspace --all-targets
       - name: WebUI smoke
-        run: bash scripts/smoke/mvp-chat-ui-smoke.sh
+        run: bash scripts/smoke/live-webui-feature-sprint.sh
       - name: Upload proof
         if: always()
         uses: actions/upload-artifact@v4
