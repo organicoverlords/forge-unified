@@ -50,6 +50,12 @@ Before claiming full `apply_patch` parity, Forge must prove these behaviors:
 
 All checked source files must stay at or below 500 lines. The hard gate is `scripts/ci/check-file-lines.sh` and runs in both CI and Build Proof. Split files before merging instead of creating large monoliths.
 
+Latest source-size recovery:
+
+- Previous failure: `crates/unifiedgraph/src/main.rs` exceeded the 500-line gate in the PR merge checkout.
+- Fix: graphify CLI command/argument definitions were moved to `crates/unifiedgraph/src/cli.rs`; `crates/unifiedgraph/src/main.rs` is now a small dispatch entrypoint.
+- This is a guardrail repair, not an OpenCode feature parity claim.
+
 ## Documentation update rule
 
 Whenever behavior/status changes, update these files in the same work slice:
