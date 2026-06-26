@@ -5,7 +5,7 @@ pub mod routes;
 pub mod state;
 pub mod ws;
 
-use axum::{response::Html, routing::{get, post}, Router};
+use axum::{response::Html, routing::{delete, get, post}, Router};
 use state::AppState;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
@@ -22,6 +22,7 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
+        .route("/api/conversations/:id", delete(routes::delete_conversation))
         .route("/api/conversations/:id/chat", post(routes::chat))
         .route("/api/conversations/:id/cancel", post(routes::cancel))
         .route("/api/conversations/:id/pause", post(routes::pause))
