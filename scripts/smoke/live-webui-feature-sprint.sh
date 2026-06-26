@@ -38,19 +38,14 @@ curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"human readable prompt completed"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"opencode style prompt completed"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
-Complete a small repo check and answer like a coding agent final response, not like a test marker. Keep it concise and human-readable.
+Answer like opencode after a simple completed check: concise, direct, human-readable, GitHub-flavored markdown, no test marker, no fake tool claims.
 
-Include these headings:
-Summary
-What I checked
-Result
-Source
-
-In Source, mention packages/opencode/src/session/prompt.ts.
+In no more than four lines, say the prompt completed, mention that the WebUI is responding, and include:
+OPENCODE_SOURCE packages/opencode/src/session/prompt/default.txt
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
@@ -62,20 +57,19 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
 
 grep -q "event: run-start" "$STREAM_OUT"
 grep -q "event: run-finish" "$STREAM_OUT"
-grep -q "Summary" "$STREAM_OUT"
-grep -q "What I checked" "$STREAM_OUT"
-grep -q "Result" "$STREAM_OUT"
-grep -q "Source" "$STREAM_OUT"
+grep -qi "completed" "$STREAM_OUT"
+grep -q "WebUI" "$STREAM_OUT"
+grep -q "OPENCODE_SOURCE" "$STREAM_OUT"
+grep -q "packages/opencode/src/session/prompt/default.txt" "$STREAM_OUT"
 if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
   echo "::error::Screenshot prompt produced provider-error or missing-key output."
   exit 3
 fi
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-grep -q "Summary" "$CONVERSATION_JSON"
-grep -q "What I checked" "$CONVERSATION_JSON"
-grep -q "Result" "$CONVERSATION_JSON"
-grep -q "Source" "$CONVERSATION_JSON"
+grep -qi "completed" "$CONVERSATION_JSON"
+grep -q "WebUI" "$CONVERSATION_JSON"
+grep -q "OPENCODE_SOURCE" "$CONVERSATION_JSON"
 
 curl -fsS -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
@@ -85,10 +79,8 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-grep -q "human readable prompt completed" "$BROWSER_PROOF_JSON"
-grep -q "Summary" "$BROWSER_PROOF_JSON"
-grep -q "What I checked" "$BROWSER_PROOF_JSON"
-grep -q "Result" "$BROWSER_PROOF_JSON"
-grep -q "Source" "$BROWSER_PROOF_JSON"
+grep -q "opencode style prompt completed" "$BROWSER_PROOF_JSON"
+grep -qi "completed" "$BROWSER_PROOF_JSON"
+grep -q "OPENCODE_SOURCE" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI human-readable completed-prompt screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI opencode-style completed prompt screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
