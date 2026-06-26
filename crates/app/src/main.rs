@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 //! Forge — unified AI agent CLI.
 
 use clap::Parser;
