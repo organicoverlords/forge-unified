@@ -53,6 +53,8 @@ grep -q "event: tool-input-delta" "$STREAM_OUT"
 grep -q "event: tool-input-end" "$STREAM_OUT"
 grep -q "event: tool-call" "$STREAM_OUT"
 grep -q "event: tool-result" "$STREAM_OUT"
+grep -q '"name":"repo_info"' "$STREAM_OUT"
+grep -q '"name":"file_list"' "$STREAM_OUT"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
