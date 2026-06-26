@@ -1,80 +1,86 @@
 # Forge Unified — Current State
 
-Updated: 2026-06-25
+Updated: 2026-06-26
 
-## Current verified baseline
+## Current branch
 
-- Repo: `C:\Users\Lauri\Desktop\forge-unified`
-- Branch: `master`
-- HEAD: `36c7590`
+- Repo: `organicoverlords/forge-unified`
+- Branch: `mvp/nim-freellmapi-router-20260626`
+- PR: #3 into `master`
 - Server port: `3000`
+- Latest code-fix commit before this docs refresh: `74eba32f57e9bfb682effaa202bdeac07f970c35`
 
-## What's new (2026-06-25)
+## Latest validation state
 
-- **Browser Proof tool**: Headless Chrome screenshot capture, DOM snapshot, page title extraction. API: `POST /api/browser-proof`. Detects Chrome/Chromium path automatically.
-- **Vision Review tool**: Screenshot analysis via NVIDIA NIM vision models (Llama 3.2 11B Vision). API: `POST /api/vision-review`. Extracts pass/fail verdict from analysis text.
-- Both tools available as ToolKind variants (`BrowserProof`, `VisionReview`) wired into the tool executor, safety checker, and agent API.
-- **Tool definitions sent to LLM**: Orchestrator now passes full tool schemas (18 tools) to providers with `tool_choice: "auto"`. Models can now call any tool through chat, including browser_proof and vision_review.
-- **NIM provider tool support**: NVIDIA NIM provider now sends tool definitions in requests and parses tool_calls from responses (was sending `tools: None`).
-- **OpenAI provider tool_calls fix**: OpenAI provider now properly returns parsed tool calls in ChatResponse instead of discarding them.
-- **Provider tool call normalization**: New `tool_kind_from_name()` and `tool_calls_from_deltas()` helpers in provider.rs.
+The previous failed Actions were investigated from GitHub Actions logs.
+
+| Workflow | Previous state at `6d2faa8` | Root cause | Post-fix signal at `74eba32f` |
+|---|---:|---|---|
+| CI | Failed | `File Size Gate` failed on an oversized Rust file | File Size Gate passed; Test passed; remaining jobs were still running when this docs sync started |
+| Build Proof | Failed | `File line gate` failed before cargo check/test/smoke | File line gate passed; Cargo check passed; Cargo test/WebUI smoke still needed final completion check |
+| Live WebUI Feature Sprint | Passed | No failure at previous head | Re-running for latest head |
+
+Do not call the latest branch fully green until CI, Build Proof, and Live WebUI Feature Sprint are all complete and successful on the latest HEAD.
+
+## Latest code change
+
+- Split oversized graphify CLI source:
+  - Added `crates/unifiedgraph/src/cli.rs` for Clap command and argument definitions.
+  - Reduced `crates/unifiedgraph/src/main.rs` to the dispatch entrypoint.
+- This preserves the hard 500-line source gate instead of weakening it.
 
 ## Features implemented
 
 ### Chat & Conversation
-- Multi-turn conversation threads with persistence
-- Streaming token-by-token (reqwest + tokio SSE)
-- Conversation create / list / get / delete
-- Chat completion via REST API
-- Cancel / pause / resume generation
-- Message history with metadata
+
+- Multi-turn conversation threads with snapshot persistence.
+- Conversation create / list / get / delete.
+- Chat completion via REST API and WebUI streaming route.
+- Cancel / pause / resume API shape exists.
+- Message history with metadata.
 
 ### Agent & Tool Execution
-- Tool calling: file read/write/edit/delete/list/glob/search, web fetch/search, shell, terminal, task, batch parallel, repo info, propose patch, switch mode
-- Parallel tool execution via `futures::stream::buffer_unordered`
-- Batch parallel tool execution
-- Tool timeout handling (60s default)
-- Tool approval gates (Ask/Full/ReadOnly/Blocked modes)
-- Tool call ledgers with RunRecord persistence
+
+- Tool calling: file read/write/edit/delete/list/glob/search, web fetch/search, shell, terminal, task, batch parallel, repo info, propose patch, apply_patch, switch mode, browser proof, vision review, graph build/query.
+- Parallel tool execution via `futures::stream::buffer_unordered`.
+- Tool approval gates through current safety checker.
+- `apply_patch` currently parses OpenCode-style patch text for review, but does not yet implement full mutation parity.
 
 ### Model & Provider
-- Multi-provider support: NVIDIA NIM, Groq, OpenRouter, OpenAI-compatible
-- Provider priority ordering with configurable fallback
-- Provider key management via env vars
-- Retry logic with configurable max_retries
-- MockProvider for zero-config development
 
-### Architecture
-```
-crates/
-  engine/    — Core domain types, tools, providers, router, orchestrator
-  webui/     — Axum server with REST API + WebSocket
-  app/       — CLI binary with clap arg parsing
-```
+- Multi-provider support: NVIDIA NIM first, then Groq and OpenRouter when env vars are available.
+- FreeLLMAPI-style deterministic provider/model fallback work is in progress.
+- NIM provider sends tool definitions and parses tool calls.
+- Provider key management via env vars.
+
+### WebUI and Proof
+
+- Bundled root chat UI.
+- Live SSE events for run phases, text deltas, tool calls, tool results/errors, and run finish.
+- Browser proof route and NIM vision review route.
+- Live WebUI Feature Sprint captures screenshot proof and requires a completed human-readable answer.
 
 ### CI/CD
-- GitHub Actions: check (fmt, clippy, build, release), test, file size gate (500 lines), smoke test, security audit, cargo-deny
-- File size gate enforced per-Rust-file
 
-## Test status
+- GitHub Actions: CI, Build Proof, and Live WebUI Feature Sprint.
+- Hard 500-line gate: `scripts/ci/check-file-lines.sh`.
+- Keep proof artifacts in Actions; keep only compact handoff/status docs in git.
 
-- `cargo check --workspace` — compiles with ~47 warnings
-- Tests: not yet run
-
-## Current gaps (highest priority)
+## Current gaps, highest priority
 
 | Area | Feature | Priority |
 |------|---------|----------|
-| Engine | Streaming SSE from providers | P1 |
-| Engine | Provider failover with automatic routing | P1 |
-| Engine | Context compaction | P2 |
-| WebUI | Frontend HTML/JS assets | P1 |
-| WebUI | WebSocket chat client | P1 |
-| WebUI | Markdown rendering | P2 |
-| Docs | Documentation alignment with actual code | P1 |
+| Engine | Full OpenCode `apply_patch` behavior | P0 |
+| Engine | Source-gated OpenCode system prompt rewrite | P0 |
+| WebUI | OpenCode-like tool-part state cards | P1 |
+| Engine | Durable session/message/part persistence | P1 |
+| Router | Visible routing/fallback receipts and cooldown policy | P1 |
+| Engine | Context compaction parity | P2 |
+| Benchmark | Artifact-backed adapter contract | P2 |
 
 ## What not to do
 
-- Do not commit `.superapp/**` or provider secrets
-- Do not overbuild orchestration before the basic loop works
-- Do not build multi-user/auth before core single-user flow is solid
+- Do not weaken the 500-line gate to make CI pass.
+- Do not claim full OpenCode parity without an upstream OpenCode source path in `OPENCODE-PARITY.md`.
+- Do not commit provider secrets or local proof blobs.
+- Do not build multi-user/auth before the core single-user OpenCode-like workflow is solid.
