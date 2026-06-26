@@ -101,14 +101,7 @@ pub async fn chat_stream(
                                 }
 
                                 if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
-                                    events.push_back(event("text-start", serde_json::json!({ "id": "assistant-final" })));
-                                    for chunk in chunk_text(&assistant.content, 28) {
-                                        events.push_back(event("text-delta", serde_json::json!({
-                                            "id": "assistant-final",
-                                            "text": chunk
-                                        })));
-                                    }
-                                    events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
+                                    stream_summary(&mut events, "assistant-final", &assistant.content);
                                 }
 
                                 if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
@@ -196,7 +189,7 @@ async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<R
     for (name, req) in requests {
         append_tool_events(state, events, conversation_id, name, req).await;
     }
-    let summary = "Inspected the repository with `repo_info` and `file_list`.\n\nThe workspace is reachable, top-level files were listed, and the tool cards above contain the raw inspection details.".to_string();
+    let summary = "Inspected the repository with `repo_info` and `file_list`.\n\nThe workspace is reachable, top-level files were listed, and the tool cards above contain compact inspection details.".to_string();
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "repo-inspection-summary", &summary);
 }
@@ -250,13 +243,57 @@ async fn append_tool_events(
     events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
     events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
     match state.agent.execute_tool(req).await {
-        Ok(result) => {
+        Ok(mut result) => {
+            present_tool_result(name, &mut result);
             events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result]).await;
         }
         Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}))),
     }
+}
+
+fn present_tool_result(name: &str, result: &mut ToolResult) {
+    result.metadata.entry("title".to_string()).or_insert_with(|| serde_json::json!(name));
+    if name == "file_list" {
+        if let Some(summary) = compact_file_list_output(&result.output) {
+            result.metadata.insert("raw_output".to_string(), serde_json::json!(result.output.clone()));
+            result.metadata.insert("presentation".to_string(), serde_json::json!("compact_file_list"));
+            result.output = summary;
+        }
+    } else if name == "repo_info" {
+        if let Some(summary) = compact_repo_info_output(&result.output) {
+            result.metadata.insert("raw_output".to_string(), serde_json::json!(result.output.clone()));
+            result.metadata.insert("presentation".to_string(), serde_json::json!("compact_repo_info"));
+            result.output = summary;
+        }
+    }
+}
+
+fn compact_file_list_output(output: &str) -> Option<String> {
+    let entries = serde_json::from_str::<Vec<serde_json::Value>>(output).ok()?;
+    let mut names = Vec::new();
+    for entry in entries.iter().take(12) {
+        let name = entry.get("path").and_then(serde_json::Value::as_str)
+            .or_else(|| entry.get("name").and_then(serde_json::Value::as_str))?;
+        let suffix = if entry.get("is_dir").and_then(serde_json::Value::as_bool).unwrap_or(false) { "/" } else { "" };
+        names.push(format!("- {name}{suffix}"));
+    }
+    let hidden = entries.len().saturating_sub(names.len());
+    let mut lines = vec![format!("Top-level repository entries (showing {} of {}):", names.len(), entries.len())];
+    lines.extend(names);
+    if hidden > 0 { lines.push(format!("- … {hidden} more entries in metadata")); }
+    Some(lines.join("\n"))
+}
+
+fn compact_repo_info_output(output: &str) -> Option<String> {
+    let info = serde_json::from_str::<serde_json::Value>(output).ok()?;
+    let remote = info.get("remote_origin").and_then(serde_json::Value::as_str).unwrap_or("unknown remote");
+    let branch = info.get("branch").and_then(serde_json::Value::as_str).unwrap_or("unknown branch");
+    let head = info.get("short_head").and_then(serde_json::Value::as_str).unwrap_or("unknown head");
+    let dirty = info.get("dirty").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let status = if dirty { "dirty" } else { "clean" };
+    Some(format!("Repository status:\n- Remote: {remote}\n- Branch: {branch}\n- Head: {head}\n- Working tree: {status}"))
 }
 
 fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, result: &ToolResult) {
