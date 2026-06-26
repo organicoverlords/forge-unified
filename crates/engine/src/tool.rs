@@ -9,6 +9,7 @@ pub mod batch;
 pub mod browser;
 pub mod file_ops;
 pub mod graph;
+pub mod patch_ops;
 pub mod shell_ops;
 pub mod task_ops;
 pub mod web_ops;
@@ -16,7 +17,7 @@ pub mod web_ops;
 
 #[derive(Debug, Clone)]
 pub struct ToolExecutor {
-    workspace_root: String,
+    pub(crate) workspace_root: String,
     timeout_ms: u64,
     max_parallel: usize,
 }
@@ -235,11 +236,11 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
         },
         ToolConfig {
             name: "apply_patch".to_string(),
-            description: "OpenCode-compatible patch surface. Accepts patchText and records patch metadata for review before mutation is enabled.".to_string(),
+            description: "OpenCode-compatible patch surface. Accepts patchText, validates paths, and records patch/edit permission metadata for review before mutation is enabled.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "patchText": { "type": "string", "description": "Unified diff patch text copied from OpenCode apply_patch semantics" }
+                    "patchText": { "type": "string", "description": "Full OpenCode apply_patch patch text with Begin/End markers" }
                 },
                 "required": ["patchText"]
             }),
