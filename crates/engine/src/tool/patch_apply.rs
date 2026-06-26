@@ -1,7 +1,7 @@
 //! OpenCode-compatible apply_patch filesystem mutation helpers.
 
 use crate::tool::patch_ops::{validate_relative_patch_path, PatchHunk, UpdateChunk};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -91,11 +91,11 @@ pub(crate) async fn apply_file_changes(changes: &[FileChange]) -> Result<()> {
 
 pub(crate) fn file_change_metadata(change: &FileChange) -> serde_json::Value {
     serde_json::json!({
-        "path": change.path,
+        "path": &change.path,
         "relativePath": change.move_path.as_deref().unwrap_or(&change.path),
         "type": change.change_type,
-        "movePath": change.move_path,
-        "patch": change.diff,
+        "movePath": change.move_path.as_deref(),
+        "patch": &change.diff,
         "additions": change.additions,
         "deletions": change.deletions,
         "oldBytes": change.old_content.len(),
