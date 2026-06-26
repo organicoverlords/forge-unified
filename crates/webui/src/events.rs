@@ -6,7 +6,7 @@ use axum::{
     response::sse::{Event, KeepAlive, Sse},
     Json,
 };
-use forge_engine::types::{ConversationId, MessageRole};
+use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest};
 use futures_util::{stream, Stream};
 use serde::Deserialize;
 use std::{collections::VecDeque, convert::Infallible};
@@ -36,7 +36,7 @@ pub async fn chat_stream(
                     ChatEventState::Run { state, conversation_id, message },
                 )),
                 ChatEventState::Run { state, conversation_id, message } => {
-                    let result = state.agent.chat(&conversation_id, message).await;
+                    let result = state.agent.chat(&conversation_id, message.clone()).await;
                     let mut events = VecDeque::new();
 
                     match result {
@@ -78,6 +78,44 @@ pub async fn chat_stream(
                                 "message": err.to_string(),
                                 "retryable": true
                             })));
+
+                            if should_run_local_preflight(&message) {
+                                let req = ToolRequest {
+                                    id: ToolCallId(uuid::Uuid::new_v4()),
+                                    kind: ToolKind::RepoInfo,
+                                    args: serde_json::json!({}),
+                                    parallel_group: None,
+                                };
+                                let id = req.id.0.to_string();
+                                let input = req.args.clone();
+                                events.push_back(event("tool-input-start", serde_json::json!({
+                                    "id": id,
+                                    "name": "repo_info"
+                                })));
+                                events.push_back(event("tool-input-delta", serde_json::json!({
+                                    "id": id,
+                                    "name": "repo_info",
+                                    "text": input.to_string()
+                                })));
+                                events.push_back(event("tool-input-end", serde_json::json!({
+                                    "id": id,
+                                    "name": "repo_info"
+                                })));
+                                events.push_back(event("tool-call", serde_json::json!({
+                                    "id": id,
+                                    "name": "repo_info",
+                                    "kind": "repo_info",
+                                    "input": input
+                                })));
+                                match state.agent.execute_tool(req).await {
+                                    Ok(result) => events.push_back(event("tool-result", serde_json::to_value(result).unwrap_or_default())),
+                                    Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
+                                        "id": id,
+                                        "name": "repo_info",
+                                        "message": tool_err.to_string()
+                                    }))),
+                                }
+                            }
                         }
                     }
 
@@ -109,6 +147,16 @@ impl ChatEventState {
 
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> {
     Ok(Event::default().event(name).data(data.to_string()))
+}
+
+fn should_run_local_preflight(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("build")
+        || lower.contains("fix")
+        || lower.contains("feature")
+        || lower.contains("app")
+        || lower.contains("webui")
+        || lower.contains("tool")
 }
 
 fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
