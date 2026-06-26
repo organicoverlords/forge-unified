@@ -44,7 +44,7 @@ curl -fsS "$BASE/api/conversations/$CONV_ID" | grep -q "live natural prompt smok
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
   -H 'content-type: application/json' \
   -H 'accept: text/event-stream' \
-  -d '{"message":"Use the normal chat interface and the live model provider. Inspect this repository by calling the repo_info tool and the file_list tool with path dot. Then briefly report what you saw and the smallest next step toward making this app build itself from the WebUI.","max_rounds":1}' \
+  -d '{"message":"Use the normal chat interface and the live model provider. Inspect this repository by calling the repo_info tool and the file_list tool with path dot. Then build-check the app by calling shell_command with command cargo check --workspace --all-targets. Then briefly report whether that build check passed and the smallest next step toward making this app build itself from the WebUI.","max_rounds":1}' \
   > "$STREAM_OUT"
 
 grep -q "event: run-start" "$STREAM_OUT"
@@ -60,6 +60,8 @@ grep -q "event: tool-call" "$STREAM_OUT"
 grep -q "event: tool-result" "$STREAM_OUT"
 grep -q '"name":"repo_info"' "$STREAM_OUT"
 grep -q '"name":"file_list"' "$STREAM_OUT"
+grep -q '"name":"shell_command"' "$STREAM_OUT"
+grep -q 'cargo check --workspace --all-targets' "$STREAM_OUT"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
