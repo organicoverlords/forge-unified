@@ -1,4 +1,4 @@
-//! Task, repo info, propose patch, and switch mode tools.
+//! Task, repo info, propose patch, apply patch, and switch mode tools.
 
 use crate::tool::ToolExecutor;
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -106,6 +106,30 @@ impl ToolExecutor {
             metadata: HashMap::from([
                 ("summary".to_string(), serde_json::json!(args.summary)),
                 ("diff_length".to_string(), serde_json::json!(args.diff.len())),
+            ]),
+        })
+    }
+
+    pub async fn execute_apply_patch(&self, request: ToolRequest) -> Result<ToolResult> {
+        #[derive(serde::Deserialize)]
+        #[allow(non_snake_case)]
+        struct Args { patchText: String }
+        let args: Args = serde_json::from_value(request.args)?;
+        if args.patchText.trim().is_empty() {
+            anyhow::bail!("patchText cannot be empty");
+        }
+
+        Ok(ToolResult {
+            id: request.id,
+            kind: ToolKind::ApplyPatch,
+            success: true,
+            output: "Patch text accepted for review".to_string(),
+            error: None,
+            duration_ms: 0,
+            metadata: HashMap::from([
+                ("opencode_source".to_string(), serde_json::json!("packages/opencode/src/tool/apply_patch.ts")),
+                ("patch_length".to_string(), serde_json::json!(args.patchText.len())),
+                ("applied".to_string(), serde_json::json!(false)),
             ]),
         })
     }
