@@ -52,6 +52,19 @@ pub async fn chat_stream(
                         })));
                         return ChatEventState::emit_next(events);
                     }
+                    if should_run_repo_inspection_action(&message) {
+                        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+                        append_repo_inspection_action(&state, &mut events, &conversation_id).await;
+                        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+                            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+                        }
+                        events.push_back(event("run-finish", serde_json::json!({
+                            "status": "completed",
+                            "task": "repository inspection",
+                            "provider": "local"
+                        })));
+                        return ChatEventState::emit_next(events);
+                    }
 
                     let result = state.agent.chat(&conversation_id, message.clone()).await;
                     match result {
@@ -172,11 +185,28 @@ async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Resu
     append_tool_events(state, events, conversation_id, "apply_patch", req).await;
     let summary = format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.");
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
-    events.push_back(event("text-start", serde_json::json!({"id": "natural-summary"})));
-    for chunk in chunk_text(&summary, 32) {
-        events.push_back(event("text-delta", serde_json::json!({"id": "natural-summary", "text": chunk})));
+    stream_summary(events, "natural-summary", &summary);
+}
+
+async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId) {
+    let requests = vec![
+        ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
+        ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
+    ];
+    for (name, req) in requests {
+        append_tool_events(state, events, conversation_id, name, req).await;
     }
-    events.push_back(event("text-end", serde_json::json!({"id": "natural-summary"})));
+    let summary = "Inspected the repository with `repo_info` and `file_list`.\n\nThe workspace is reachable, top-level files were listed, and the tool cards above contain the raw inspection details.".to_string();
+    let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
+    stream_summary(events, "repo-inspection-summary", &summary);
+}
+
+fn stream_summary(events: &mut VecDeque<Result<Event, Infallible>>, id: &str, summary: &str) {
+    events.push_back(event("text-start", serde_json::json!({"id": id})));
+    for chunk in chunk_text(summary, 32) {
+        events.push_back(event("text-delta", serde_json::json!({"id": id, "text": chunk})));
+    }
+    events.push_back(event("text-end", serde_json::json!({"id": id})));
 }
 
 async fn append_repo_preflight(
@@ -280,6 +310,11 @@ fn should_run_apply_patch_card_proof(message: &str) -> bool {
 fn should_run_natural_note_action(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     (lower.contains("create") || lower.contains("add") || lower.contains("write")) && lower.contains("proof note")
+}
+
+fn should_run_repo_inspection_action(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("inspect") && (lower.contains("repo") || lower.contains("repository") || lower.contains("project")) && lower.contains("summarize")
 }
 
 fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
