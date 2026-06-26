@@ -43,6 +43,34 @@ pub async fn chat_stream(
                         Ok(record) => {
                             let mut run_local_preflight = false;
                             if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+                                for msg in &conv.messages {
+                                    match msg.role {
+                                        MessageRole::Assistant => {
+                                            if msg.metadata
+                                                .get("type")
+                                                .and_then(|value| value.as_str())
+                                                == Some("provider-error")
+                                            {
+                                                run_local_preflight = true;
+                                            }
+                                            if let Some(calls) = &msg.tool_calls {
+                                                for call in calls {
+                                                    append_tool_call_lifecycle(&mut events, call);
+                                                }
+                                            }
+                                        }
+                                        MessageRole::Tool => {
+                                            if let Some(results) = &msg.tool_results {
+                                                for result in results {
+                                                    let event_name = if result.success { "tool-result" } else { "tool-error" };
+                                                    events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+
                                 if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
                                     events.push_back(event("text-start", serde_json::json!({ "id": "assistant-final" })));
                                     for chunk in chunk_text(&assistant.content, 28) {
@@ -52,26 +80,6 @@ pub async fn chat_stream(
                                         })));
                                     }
                                     events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
-
-                                    run_local_preflight = assistant.metadata
-                                        .get("type")
-                                        .and_then(|value| value.as_str())
-                                        == Some("provider-error");
-
-                                    if let Some(calls) = &assistant.tool_calls {
-                                        for call in calls {
-                                            append_tool_call_lifecycle(&mut events, call);
-                                        }
-                                    }
-                                }
-
-                                if let Some(tool_message) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Tool)) {
-                                    if let Some(results) = &tool_message.tool_results {
-                                        for result in results {
-                                            let event_name = if result.success { "tool-result" } else { "tool-error" };
-                                            events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
-                                        }
-                                    }
                                 }
 
                                 if run_local_preflight && should_run_local_preflight(&message) {
