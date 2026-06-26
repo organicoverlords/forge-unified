@@ -8,7 +8,7 @@ Updated: 2026-06-26
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Server port: `3000`
-- Latest code commit before this docs refresh: `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c`
+- Latest code commit before this docs refresh: `0da7281dc0f85bb16906103343d2e9d24827dafa`
 
 ## Latest validation state
 
@@ -18,12 +18,14 @@ Latest fully green baselines:
 |---|---|---|---|
 | `e31d678277c0527d36f14f8eac8fc65f07c3b265` | success | success | success |
 | `541e67fe40ef51dff5dc5b2507606dd68f7a0e2c` | success | success | success |
+| `ccac07d3a16b7547787b0aadf8ea59658636d9f4` | success | success | success |
+| `0da7281dc0f85bb16906103343d2e9d24827dafa` | success | success | success |
 
-The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
+The latest docs-updated HEAD after this refresh still needs its own Actions check before merge/green claims.
 
 ## Latest code change
 
-### OpenCode `apply_patch` review-metadata slice
+### OpenCode `apply_patch` mutation slice
 
 Studied upstream sources:
 
@@ -32,10 +34,10 @@ Studied upstream sources:
 
 Forge changes:
 
-- Added `crates/engine/src/tool/patch_ops.rs`.
-- Split patch behavior out of `crates/engine/src/tool/task_ops.rs`.
-- Updated `crates/engine/src/tool.rs` to wire `patch_ops` and expose `workspace_root` as `pub(crate)` for sibling-module path validation.
-- Updated the `apply_patch` tool description to mention path validation and edit-permission metadata.
+- Added `crates/engine/src/tool/patch_apply.rs` for mutation helpers.
+- Kept `crates/engine/src/tool/patch_ops.rs` as parser/entrypoint glue.
+- Updated `crates/engine/src/tool.rs` to register `patch_apply` and advertise mutation support.
+- Preserved the hard 500-line source gate by keeping `patch_ops.rs` and `patch_apply.rs` as separate modules.
 
 Behavior now present:
 
@@ -43,10 +45,19 @@ Behavior now present:
 - Rejects empty patch text.
 - Rejects empty Begin/End patch text with OpenCode-compatible wording.
 - Parses add/update/delete/move hunks.
-- Validates all patch and move paths before recording metadata.
-- Records per-file metadata, edit-permission metadata, parsed hunks, validated paths, and OpenCode source references.
-- Returns human-readable OpenCode-style `A/D/M` summary lines.
-- Does not yet mutate files.
+- Validates all patch and move paths before mutation.
+- Reads old file contents for update/delete.
+- Derives new update contents from chunks with exact/rstrip/trim/Unicode matching.
+- Applies add/update/delete/move file mutations inside the workspace.
+- Records per-file metadata, diff metadata, edit-permission metadata, parsed hunks, validated paths, and OpenCode source references.
+- Returns human-readable OpenCode-style `Success. Updated the following files:` with `A/D/M` summary lines.
+
+Remaining `apply_patch` parity gaps:
+
+- Interactive edit permission approval is recorded but not actually enforced through a prompt.
+- Watcher/file edited events are not yet published.
+- LSP touch/diagnostics are not yet collected.
+- BOM preservation and formatter hooks are not yet equivalent to upstream OpenCode.
 
 ### Earlier source-size recovery
 
@@ -70,7 +81,7 @@ Behavior now present:
 - Tool calling: file read/write/edit/delete/list/glob/search, web fetch/search, shell, terminal, task, batch parallel, repo info, propose patch, apply_patch, switch mode, browser proof, vision review, graph build/query.
 - Parallel tool execution via `futures::stream::buffer_unordered`.
 - Tool approval gates through current safety checker.
-- `apply_patch` currently parses OpenCode-style patch text for review, validates patch paths, records edit-permission metadata, and returns `A/D/M` summary lines, but does not yet implement full mutation parity.
+- `apply_patch` now parses OpenCode-style patch text, validates patch paths, derives update contents, mutates files for add/update/delete/move, records diff/edit metadata, and returns `A/D/M` summary lines.
 
 ### Model & Provider
 
@@ -96,9 +107,10 @@ Behavior now present:
 
 | Area | Feature | Priority |
 |------|---------|----------|
-| Engine | Full OpenCode `apply_patch` mutation behavior | P0 |
+| Engine | Real edit permission prompt/gating for `apply_patch` | P0 |
 | Engine | Source-gated OpenCode system prompt rewrite | P0 |
 | WebUI | OpenCode-like tool-part state cards | P1 |
+| Engine | Watcher/file edited events and LSP diagnostics for patch changes | P1 |
 | Engine | Durable session/message/part persistence | P1 |
 | Router | Visible routing/fallback receipts and cooldown policy | P1 |
 | Engine | Context compaction parity | P2 |
@@ -108,6 +120,6 @@ Behavior now present:
 
 - Do not weaken the 500-line gate to make CI pass.
 - Do not claim full OpenCode parity without an upstream OpenCode source path in `OPENCODE-PARITY.md`.
-- Do not claim `apply_patch` mutates files until that is implemented and proved.
+- Do not claim upstream-complete `apply_patch` parity until permission gating, watcher events, diagnostics, BOM, and formatting behavior are implemented.
 - Do not commit provider secrets or local proof blobs.
 - Do not build multi-user/auth before the core single-user OpenCode-like workflow is solid.
