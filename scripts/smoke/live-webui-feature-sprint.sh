@@ -15,7 +15,9 @@ STREAM_OUT="$PROOF_DIR/screenshot-stream.sse"
 CONVERSATION_JSON="$PROOF_DIR/screenshot-conversation.json"
 BROWSER_PROOF_JSON="$PROOF_DIR/browser-proof.json"
 SCREENSHOT_PNG="$PROOF_DIR/webui.png"
+NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 mkdir -p "$PROOF_DIR"
+rm -f "$NOTE_PATH"
 
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -40,16 +42,13 @@ curl -fsS "$BASE/" | grep -q "file-card"
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  -d '{"title":"opencode apply_patch file card proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+  -d '{"title":"natural file creation proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
-Answer like opencode after a simple completed check: concise, direct, human-readable, GitHub-flavored markdown, no test marker, no fake tool claims.
+Please create a short proof note for this WebUI sprint.
 
-In no more than four lines, say the prompt completed, mention that the WebUI is responding, and include:
-OPENCODE_SOURCE packages/opencode/src/session/prompt/default.txt
-
-Also run the deterministic apply_patch file card proof path so the UI shows a file-change card.
+Keep the reply brief and tell me what changed.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
@@ -64,22 +63,22 @@ grep -q "event: run-finish" "$STREAM_OUT"
 grep -q "event: tool-result" "$STREAM_OUT"
 grep -q "event: file-change" "$STREAM_OUT"
 grep -q "file.added" "$STREAM_OUT"
-grep -q "apply_patch-card-proof.txt" "$STREAM_OUT"
-grep -qi "completed" "$STREAM_OUT"
-grep -q "WebUI" "$STREAM_OUT"
-grep -q "OPENCODE_SOURCE" "$STREAM_OUT"
-grep -q "packages/opencode/src/session/prompt/default.txt" "$STREAM_OUT"
+grep -q "natural-proof-note.txt" "$STREAM_OUT"
+grep -q "Created.*natural-proof-note.txt" "$STREAM_OUT"
+grep -q "Updated 1 file" "$STREAM_OUT"
 if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
-  echo "::error::Screenshot prompt produced provider-error or missing-key output."
+  echo "::error::Natural prompt produced provider-error or missing-key output."
   exit 3
 fi
 
+test -s "$NOTE_PATH"
+grep -q "Natural prompt completed" "$NOTE_PATH"
+
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-grep -qi "completed" "$CONVERSATION_JSON"
-grep -q "WebUI" "$CONVERSATION_JSON"
-grep -q "OPENCODE_SOURCE" "$CONVERSATION_JSON"
+grep -q "Created.*natural-proof-note.txt" "$CONVERSATION_JSON"
+grep -q "Updated 1 file" "$CONVERSATION_JSON"
 grep -q "file_events" "$CONVERSATION_JSON"
-grep -q "apply_patch-card-proof.txt" "$CONVERSATION_JSON"
+grep -q "natural-proof-note.txt" "$CONVERSATION_JSON"
 
 curl -fsS -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
@@ -89,10 +88,10 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-grep -q "opencode apply_patch file card proof" "$BROWSER_PROOF_JSON"
-grep -qi "completed" "$BROWSER_PROOF_JSON"
-grep -q "OPENCODE_SOURCE" "$BROWSER_PROOF_JSON"
+grep -q "natural file creation proof" "$BROWSER_PROOF_JSON"
+grep -q "Created.*natural-proof-note.txt" "$BROWSER_PROOF_JSON"
+grep -q "Updated 1 file" "$BROWSER_PROOF_JSON"
 grep -q "ADDED" "$BROWSER_PROOF_JSON"
-grep -q "apply_patch-card-proof.txt" "$BROWSER_PROOF_JSON"
+grep -q "natural-proof-note.txt" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI opencode-style apply_patch file-card screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural file creation screenshot proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
