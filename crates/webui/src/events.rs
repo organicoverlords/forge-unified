@@ -83,7 +83,7 @@ pub async fn chat_stream(
                                     events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
                                 }
 
-                                if run_local_preflight && should_run_local_preflight(&message) {
+                                if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
                                     append_repo_preflight(&state, &mut events, &message).await;
                                 }
 
