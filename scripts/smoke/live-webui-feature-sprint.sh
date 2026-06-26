@@ -11,6 +11,8 @@ SERVER_LOG="$PROOF_DIR/server.log"
 PATCH_OUT="$PROOF_DIR/webui-generated.patch"
 STATUS_OUT="$PROOF_DIR/git-status.txt"
 LONG_CONTEXT_FILE="$PROOF_DIR/long-prompt-context.txt"
+BROWSER_PROOF_JSON="$PROOF_DIR/browser-proof.json"
+SCREENSHOT_PNG="$PROOF_DIR/webui.png"
 mkdir -p "$PROOF_DIR"
 
 OPENCODE_PREFIX="Copy OpenCode behavior only. Use these upstream references: anomalyco/opencode@0befd9b04939589ffe7d29c62e9260bc8ee4fff6 packages/llm/src/schema/events.ts for LLM event names; packages/core/src/session/runner/publish-llm-event.ts for tool lifecycle validation; packages/opencode/src/session/processor.ts for tool state handling; packages/opencode/src/session/prompt.ts and packages/core/src/session/compaction.ts for natural prompt/session handling; packages/opencode/src/tool/plan.ts for planning and next-feature suggestions; packages/opencode/src/tool/edit.ts for exact file edits; packages/opencode/src/tool/apply_patch.ts for patch semantics. Do not invent a custom workflow when one of these files covers the behavior. Include OPENCODE_SOURCE with the copied file path in your final answer."
@@ -102,6 +104,15 @@ grep -q '"name":"repo_info"' "$EDIT_STREAM"
 grep -q '"name":"shell_command"' "$EDIT_STREAM"
 grep -q 'cargo check --workspace --all-targets' "$EDIT_STREAM"
 
+curl -fsS -X POST "$BASE/api/browser-proof" \
+  -H 'content-type: application/json' \
+  -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" \
+  > "$BROWSER_PROOF_JSON"
+
+jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
+jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
+test -s "$SCREENSHOT_PNG"
+
 git status --short > "$STATUS_OUT"
 git diff > "$PATCH_OUT"
 test -s "$PATCH_OUT"
@@ -109,4 +120,4 @@ grep -q "OpenCode source proof" "$PATCH_OUT"
 grep -q "LONG_PROMPT_CONTEXT_BEGIN" "$PROOF_DIR/repo-summary-prompt.txt"
 grep -q "packages/core/src/session/compaction.ts" "$PROOF_DIR/repo-summary-prompt.txt"
 
-echo "LIVE WebUI natural prompt suite passed: $BASE proof_dir=$PROOF_DIR patch=$PATCH_OUT"
+echo "LIVE WebUI natural prompt suite passed with screenshot proof: $BASE proof_dir=$PROOF_DIR screenshot=$SCREENSHOT_PNG patch=$PATCH_OUT"
