@@ -61,11 +61,7 @@ pub async fn chat_stream(
                                 for msg in &conv.messages {
                                     match msg.role {
                                         MessageRole::Assistant => {
-                                            if msg.metadata
-                                                .get("type")
-                                                .and_then(|value| value.as_str())
-                                                == Some("provider-error")
-                                            {
+                                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
                                                 run_local_preflight = true;
                                             }
                                             if let Some(calls) = &msg.tool_calls {
@@ -78,7 +74,7 @@ pub async fn chat_stream(
                                             if let Some(results) = &msg.tool_results {
                                                 for result in results {
                                                     let event_name = if result.success { "tool-result" } else { "tool-error" };
-                                                    events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
+                                                    events.push_back(event(event_name, tool_result_payload(result, tool_name(&result.kind))));
                                                     append_file_change_events(&mut events, result);
                                                 }
                                             }
@@ -88,14 +84,7 @@ pub async fn chat_stream(
                                 }
 
                                 if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
-                                    events.push_back(event("text-start", serde_json::json!({ "id": "assistant-final" })));
-                                    for chunk in chunk_text(&assistant.content, 28) {
-                                        events.push_back(event("text-delta", serde_json::json!({
-                                            "id": "assistant-final",
-                                            "text": chunk
-                                        })));
-                                    }
-                                    events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
+                                    stream_summary(&mut events, "assistant-final", &assistant.content);
                                 }
 
                                 if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
@@ -105,7 +94,6 @@ pub async fn chat_stream(
                                 let latest = state.agent.get_conversation(&conversation_id).await.unwrap_or(conv);
                                 events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
                             }
-
                             events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
                         }
                         Err(err) => {
@@ -113,7 +101,6 @@ pub async fn chat_stream(
                                 "message": err.to_string(),
                                 "retryable": true
                             })));
-
                             if should_run_local_preflight(&message) {
                                 append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                             }
@@ -154,10 +141,26 @@ fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, 
     let id = call.id.0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
+    events.push_back(event("tool-input-start", serde_json::json!({
+        "id": id,
+        "name": name,
+        "state": {"status": "pending", "input": {}, "raw": ""},
+        "opencode_source": opencode_tool_state_sources()
+    })));
+    events.push_back(event("tool-input-delta", serde_json::json!({
+        "id": id,
+        "name": name,
+        "text": input.to_string()
+    })));
     events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
+    events.push_back(event("tool-call", serde_json::json!({
+        "id": id,
+        "name": name,
+        "kind": name,
+        "input": input,
+        "state": {"status": "running", "input": call.args, "time": {"start": 0}},
+        "opencode_source": opencode_tool_state_sources()
+    })));
 }
 
 async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId) {
@@ -172,11 +175,15 @@ async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Resu
     append_tool_events(state, events, conversation_id, "apply_patch", req).await;
     let summary = format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.");
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
-    events.push_back(event("text-start", serde_json::json!({"id": "natural-summary"})));
-    for chunk in chunk_text(&summary, 32) {
-        events.push_back(event("text-delta", serde_json::json!({"id": "natural-summary", "text": chunk})));
+    stream_summary(events, "natural-summary", &summary);
+}
+
+fn stream_summary(events: &mut VecDeque<Result<Event, Infallible>>, id: &str, summary: &str) {
+    events.push_back(event("text-start", serde_json::json!({"id": id})));
+    for chunk in chunk_text(summary, 32) {
+        events.push_back(event("text-delta", serde_json::json!({"id": id, "text": chunk})));
     }
-    events.push_back(event("text-end", serde_json::json!({"id": "natural-summary"})));
+    events.push_back(event("text-end", serde_json::json!({"id": id})));
 }
 
 async fn append_repo_preflight(
@@ -215,18 +222,59 @@ async fn append_tool_events(
 ) {
     let id = req.id.0.to_string();
     let input = req.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-input-start", serde_json::json!({
+        "id": id,
+        "name": name,
+        "state": {"status": "pending", "input": {}, "raw": ""},
+        "opencode_source": opencode_tool_state_sources()
+    })));
     events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
     events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
+    events.push_back(event("tool-call", serde_json::json!({
+        "id": id,
+        "name": name,
+        "kind": name,
+        "input": input,
+        "state": {"status": "running", "input": req.args, "time": {"start": 0}},
+        "opencode_source": opencode_tool_state_sources()
+    })));
     match state.agent.execute_tool(req).await {
         Ok(result) => {
-            events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
+            events.push_back(event("tool-result", tool_result_payload(&result, name)));
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result]).await;
         }
-        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}))),
+        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
+            "id": id,
+            "name": name,
+            "message": tool_err.to_string(),
+            "state": {"status": "error", "input": {}, "error": tool_err.to_string(), "time": {"start": 0, "end": 0}},
+            "opencode_source": opencode_tool_state_sources()
+        }))),
     }
+}
+
+fn tool_result_payload(result: &ToolResult, name: &str) -> serde_json::Value {
+    let status = if result.success { "completed" } else { "error" };
+    serde_json::json!({
+        "id": result.id.0.to_string(),
+        "name": name,
+        "kind": tool_name(&result.kind),
+        "success": result.success,
+        "output": result.output,
+        "error": result.error,
+        "metadata": result.metadata,
+        "state": {
+            "status": status,
+            "input": {},
+            "output": result.output,
+            "title": name,
+            "metadata": result.metadata,
+            "error": result.error,
+            "time": {"start": 0, "end": 0}
+        },
+        "opencode_source": opencode_tool_state_sources()
+    })
 }
 
 fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, result: &ToolResult) {
@@ -239,6 +287,13 @@ fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, r
         }
         events.push_back(event("file-change", payload));
     }
+}
+
+fn opencode_tool_state_sources() -> serde_json::Value {
+    serde_json::json!([
+        "packages/schema/src/v1/session.ts:ToolPart/ToolState",
+        "packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall/failToolCall"
+    ])
 }
 
 fn tool_name(kind: &ToolKind) -> &'static str {
