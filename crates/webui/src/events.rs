@@ -6,7 +6,7 @@ use axum::{
     response::sse::{Event, KeepAlive, Sse},
     Json,
 };
-use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest};
+use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest, ToolResult};
 use futures_util::{stream, Stream};
 use serde::Deserialize;
 use std::{collections::VecDeque, convert::Infallible};
@@ -64,6 +64,7 @@ pub async fn chat_stream(
                                                 for result in results {
                                                     let event_name = if result.success { "tool-result" } else { "tool-error" };
                                                     events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
+                                                    append_file_change_events(&mut events, result);
                                                 }
                                             }
                                         }
@@ -207,12 +208,29 @@ async fn append_tool_events(
         "input": input
     })));
     match state.agent.execute_tool(req).await {
-        Ok(result) => events.push_back(event("tool-result", serde_json::to_value(result).unwrap_or_default())),
+        Ok(result) => {
+            events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
+            append_file_change_events(events, &result);
+        }
         Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
             "id": id,
             "name": name,
             "message": tool_err.to_string()
         }))),
+    }
+}
+
+fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, result: &ToolResult) {
+    let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else {
+        return;
+    };
+    for file_event in file_events {
+        let mut payload = file_event.clone();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("tool_id".to_string(), serde_json::json!(result.id.0.to_string()));
+            obj.insert("tool_kind".to_string(), serde_json::json!(tool_name(&result.kind)));
+        }
+        events.push_back(event("file-change", payload));
     }
 }
 
