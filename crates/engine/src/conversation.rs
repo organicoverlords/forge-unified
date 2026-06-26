@@ -75,12 +75,13 @@ impl ConversationManager {
 
     pub fn add_assistant_message_with_tools(&mut self, id: &ConversationId, content: String, tool_calls: Option<Vec<ToolRequest>>) {
         if let Some(conv) = self.conversations.get_mut(id) {
+            let (content, metadata) = normalize_assistant_content(content);
             conv.messages.push(Message {
                 role: MessageRole::Assistant,
                 content,
                 tool_calls,
                 tool_results: None,
-                metadata: Default::default(),
+                metadata,
             });
             conv.updated_at = chrono::Utc::now();
         }
@@ -117,4 +118,36 @@ impl ConversationManager {
             }
         }
     }
+}
+
+fn normalize_assistant_content(content: String) -> (String, HashMap<String, serde_json::Value>) {
+    if !content.starts_with("[Provider error:") {
+        return (content, HashMap::new());
+    }
+
+    let lower = content.to_ascii_lowercase();
+    let classification = if lower.contains("busy") || lower.contains("exhausted") || lower.contains("capacity") {
+        "model_busy_capacity"
+    } else if lower.contains("429") || lower.contains("rate") {
+        "rate_limited"
+    } else if lower.contains("missing") || lower.contains("unauthorized") || lower.contains("api key") {
+        "missing_key"
+    } else {
+        "provider_error"
+    };
+
+    let message = match classification {
+        "model_busy_capacity" => "Provider error: model is temporarily busy; retrying another model is safe.",
+        "rate_limited" => "Provider error: model-level throttle; this is not a provider-wide outage.",
+        "missing_key" => "Provider error: runtime is missing a usable model API key.",
+        _ => "Provider error: model route could not complete this turn.",
+    };
+
+    let metadata = HashMap::from([
+        ("type".to_string(), serde_json::json!("provider-error")),
+        ("classification".to_string(), serde_json::json!(classification)),
+        ("retryable".to_string(), serde_json::json!(classification != "missing_key")),
+    ]);
+
+    (message.to_string(), metadata)
 }
