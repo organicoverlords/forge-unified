@@ -13,6 +13,8 @@ LOG="$PROOF_DIR/server.log"
 STREAM_OUT="$PROOF_DIR/chat-stream.sse"
 PROOF_JSON="$PROOF_DIR/browser-proof.json"
 PROOF_PNG="$PROOF_DIR/webui.png"
+PATCH_OUT="$PROOF_DIR/webui-generated.patch"
+STATUS_OUT="$PROOF_DIR/git-status.txt"
 
 cargo build --workspace
 
@@ -20,6 +22,8 @@ cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
 PID=$!
 cleanup() {
   kill "$PID" >/dev/null 2>&1 || true
+  git status --short > "$STATUS_OUT" 2>/dev/null || true
+  git diff -- crates/webui/src/events.rs > "$PATCH_OUT" 2>/dev/null || true
   cp -a "$PROOF_DIR/." "$PUBLIC_PROOF_DIR/" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -67,6 +71,9 @@ grep -q '"name":"shell_command"' "$STREAM_OUT"
 grep -q 'cargo check --workspace --all-targets' "$STREAM_OUT"
 
 grep -q "live patch proof" crates/webui/src/events.rs
+git status --short > "$STATUS_OUT"
+git diff -- crates/webui/src/events.rs > "$PATCH_OUT"
+grep -q "live patch proof" "$PATCH_OUT"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
@@ -80,4 +87,4 @@ curl -fsS -X POST "$BASE/api/browser-proof" \
 jq -e '.success == true' "$PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$PROOF_PNG"
 
-echo "LIVE WebUI patch-and-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR"
+echo "LIVE WebUI patch-and-build smoke passed: $BASE conversation=$CONV_ID proof_dir=$PROOF_DIR public_proof_dir=$PUBLIC_PROOF_DIR patch=$PATCH_OUT"
