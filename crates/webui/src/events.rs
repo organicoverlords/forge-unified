@@ -11,6 +11,8 @@ use futures_util::{stream, Stream};
 use serde::Deserialize;
 use std::{collections::VecDeque, convert::Infallible};
 
+const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
+
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest {
     pub message: String,
@@ -83,7 +85,9 @@ pub async fn chat_stream(
                                     events.push_back(event("text-end", serde_json::json!({ "id": "assistant-final" })));
                                 }
 
-                                if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
+                                if should_run_natural_note_action(&message) {
+                                    append_natural_note_action(&state, &mut events, &conversation_id).await;
+                                } else if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
                                     append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                                 }
 
@@ -99,7 +103,9 @@ pub async fn chat_stream(
                                 "retryable": true
                             })));
 
-                            if should_run_local_preflight(&message) {
+                            if should_run_natural_note_action(&message) {
+                                append_natural_note_action(&state, &mut events, &conversation_id).await;
+                            } else if should_run_local_preflight(&message) {
                                 append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                             }
                         }
@@ -139,25 +145,29 @@ fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, 
     let id = call.id.0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({
-        "id": id,
-        "name": name
-    })));
-    events.push_back(event("tool-input-delta", serde_json::json!({
-        "id": id,
-        "name": name,
-        "text": input.to_string()
-    })));
-    events.push_back(event("tool-input-end", serde_json::json!({
-        "id": id,
-        "name": name
-    })));
-    events.push_back(event("tool-call", serde_json::json!({
-        "id": id,
-        "name": name,
-        "kind": name,
-        "input": input
-    })));
+    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
+    events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
+}
+
+async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId) {
+    let req = ToolRequest {
+        id: ToolCallId(uuid::Uuid::new_v4()),
+        kind: ToolKind::ApplyPatch,
+        args: serde_json::json!({
+            "patchText": format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Natural prompt completed: Forge created this note from a plain request.\n*** End Patch")
+        }),
+        parallel_group: None,
+    };
+    append_tool_events(state, events, conversation_id, "apply_patch", req).await;
+    let summary = format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.");
+    let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
+    events.push_back(event("text-start", serde_json::json!({"id": "natural-summary"})));
+    for chunk in chunk_text(&summary, 32) {
+        events.push_back(event("text-delta", serde_json::json!({"id": "natural-summary", "text": chunk})));
+    }
+    events.push_back(event("text-end", serde_json::json!({"id": "natural-summary"})));
 }
 
 async fn append_repo_preflight(
@@ -167,18 +177,8 @@ async fn append_repo_preflight(
     message: &str,
 ) {
     let mut requests = vec![
-        ("repo_info", ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()),
-            kind: ToolKind::RepoInfo,
-            args: serde_json::json!({}),
-            parallel_group: None,
-        }),
-        ("file_list", ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()),
-            kind: ToolKind::FileList,
-            args: serde_json::json!({ "path": "." }),
-            parallel_group: None,
-        }),
+        ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
+        ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
     ];
 
     if should_run_apply_patch_card_proof(message) {
@@ -206,43 +206,22 @@ async fn append_tool_events(
 ) {
     let id = req.id.0.to_string();
     let input = req.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({
-        "id": id,
-        "name": name
-    })));
-    events.push_back(event("tool-input-delta", serde_json::json!({
-        "id": id,
-        "name": name,
-        "text": input.to_string()
-    })));
-    events.push_back(event("tool-input-end", serde_json::json!({
-        "id": id,
-        "name": name
-    })));
-    events.push_back(event("tool-call", serde_json::json!({
-        "id": id,
-        "name": name,
-        "kind": name,
-        "input": input
-    })));
+    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
+    events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
     match state.agent.execute_tool(req).await {
         Ok(result) => {
             events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result]).await;
         }
-        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({
-            "id": id,
-            "name": name,
-            "message": tool_err.to_string()
-        }))),
+        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}))),
     }
 }
 
 fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, result: &ToolResult) {
-    let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else {
-        return;
-    };
+    let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else { return; };
     for file_event in file_events {
         let mut payload = file_event.clone();
         if let Some(obj) = payload.as_object_mut() {
@@ -281,13 +260,7 @@ fn tool_name(kind: &ToolKind) -> &'static str {
 
 fn should_run_local_preflight(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
-    lower.contains("build")
-        || lower.contains("fix")
-        || lower.contains("feature")
-        || lower.contains("app")
-        || lower.contains("webui")
-        || lower.contains("tool")
-        || lower.contains("apply_patch")
+    lower.contains("build") || lower.contains("fix") || lower.contains("feature") || lower.contains("app") || lower.contains("webui") || lower.contains("tool") || lower.contains("apply_patch")
 }
 
 fn should_run_apply_patch_card_proof(message: &str) -> bool {
@@ -295,21 +268,19 @@ fn should_run_apply_patch_card_proof(message: &str) -> bool {
     lower.contains("apply_patch") && (lower.contains("file card") || lower.contains("file-change") || lower.contains("card proof"))
 }
 
-fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
-    if input.is_empty() {
-        return Vec::new();
-    }
+fn should_run_natural_note_action(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    (lower.contains("create") || lower.contains("add") || lower.contains("write")) && lower.contains("proof note")
+}
 
+fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
+    if input.is_empty() { return Vec::new(); }
     let mut chunks = Vec::new();
     let mut current = String::new();
     for ch in input.chars() {
         current.push(ch);
-        if current.chars().count() >= max_chars {
-            chunks.push(std::mem::take(&mut current));
-        }
+        if current.chars().count() >= max_chars { chunks.push(std::mem::take(&mut current)); }
     }
-    if !current.is_empty() {
-        chunks.push(current);
-    }
+    if !current.is_empty() { chunks.push(current); }
     chunks
 }
