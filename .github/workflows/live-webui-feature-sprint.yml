@@ -1,0 +1,32 @@
+name: Live WebUI Feature Sprint
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Natural language feature prompt to run through Forge WebUI
+        required: true
+        type: string
+
+jobs:
+  live-webui-feature-sprint:
+    runs-on: ubuntu-latest
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
+      FORGE_FEATURE_PROMPT: ${{ inputs.prompt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run live WebUI feature sprint
+        run: bash scripts/smoke/live-webui-feature-sprint.sh
+
+      - name: Upload feature sprint proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-webui-feature-sprint-proof
+          path: forge-proof/live-webui-feature-sprint/
