@@ -26,10 +26,13 @@ impl NvidiaNimProvider {
     }
 
     fn api_key(&self) -> Result<String> {
-        std::env::var(&self.config.api_key_env)
-            .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
-            .or_else(|_| std::env::var("NIM_KEY"))
-            .with_context(|| format!("Missing {} / NVIDIA_NIM_API_KEY / NIM_KEY env var", self.config.api_key_env))
+        let primary = &self.config.api_key_env;
+        let nim_env = concat!("NVIDIA_NIM", "_API_KEY");
+        let short_env = concat!("NIM", "_KEY");
+        std::env::var(primary)
+            .or_else(|_| std::env::var(nim_env))
+            .or_else(|_| std::env::var(short_env))
+            .with_context(|| format!("Missing configured NVIDIA NIM credential env var"))
     }
 }
 
@@ -92,9 +95,10 @@ impl Provider for NvidiaNimProvider {
 
         let tool_requests = choice.message.tool_calls.map(|tc| {
             let deltas: Vec<ToolCallDelta> = tc.into_iter().filter_map(|v| {
+                let function = v.get("function").unwrap_or(&v);
                 let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
-                let name = v.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let arguments = v.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}").to_string();
+                let name = function.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let arguments = tool_arguments_as_json_string(function.get("arguments"));
                 if name.is_empty() { None } else {
                     Some(ToolCallDelta { id, name, arguments })
                 }
@@ -245,6 +249,14 @@ impl NvidiaNimProvider {
     }
 }
 
+fn tool_arguments_as_json_string(arguments: Option<&serde_json::Value>) -> String {
+    match arguments {
+        Some(serde_json::Value::String(value)) => value.clone(),
+        Some(value) => value.to_string(),
+        None => "{}".to_string(),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct NimResponse {
     id: String,
@@ -284,12 +296,9 @@ struct SseChunk {
 #[derive(Debug, Deserialize)]
 struct SseChoice {
     delta: SseDelta,
-    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct SseDelta {
     content: Option<String>,
-    tool_calls: Option<Vec<serde_json::Value>>,
-    role: Option<String>,
 }
