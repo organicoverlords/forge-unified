@@ -13,7 +13,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | `packages/opencode/src/session/prompt/default.txt` | Concise, direct coding-agent answers; inspect code before editing; verify when completing work | Partially copied in natural WebUI proof style; orchestrator system prompt still needs a source-gated rewrite |
 | `packages/opencode/src/session/prompt.ts` | Prompt/session flow, title generation, subtask and shell message/part handling | Studied only; not fully copied |
 | `packages/opencode/src/session/system.ts` | Provider-specific prompt selection and environment context prompt | Studied only; not copied |
-| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, permission metadata, file updates, watcher events, LSP diagnostics, `A/D/M` success summary | Forge parses OpenCode patch markers/hunks, rejects empty patch bodies, validates paths, records edit-permission/diff metadata, applies add/update/delete/move mutations, returns `A/D/M` summary lines, and renders file-change cards; watcher events, LSP diagnostics, real permission prompt, BOM, and formatter hooks remain incomplete |
+| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, `ctx.ask` edit approval before mutation, file updates, watcher events, LSP diagnostics, `A/D/M` success summary | Forge now parses/validates patches, returns a pending edit approval before mutation, exposes approval API/UI, mutates add/update/delete/move only after approval, returns `Updated N file(s)` + `A/D/M` lines, and renders approval/file cards; watcher events, LSP diagnostics, BOM, and formatter hooks remain incomplete |
 | `packages/opencode/src/patch/index.ts` | Begin/end markers, add/delete/update/move hunk parsing, update chunks, EOF markers, multi-pass line matching, derive new contents from chunks | Parser and derive/apply replacement slice copied into Rust helpers; exact/rstrip/trim/Unicode matching implemented; BOM behavior is still not fully equivalent |
 | `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, formatting/diagnostics hooks | Partially aligned through Forge `file_edit`; needs deeper comparison |
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
@@ -25,16 +25,15 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 ## Current highest-priority parity gaps
 
-1. Real permission/edit approval flow for `apply_patch`.
-2. Watcher/file edited event bus for file mutations.
-3. LSP touch/diagnostics after patch mutations.
-4. BOM preservation and formatter hooks.
-5. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
-6. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
-7. Full context compaction process: summary generation, replay, overflow handling, and auto-continue.
-8. Durable session/message/part persistence beyond current snapshots.
-9. Agent/subtask session part behavior.
-10. Retry/fallback receipts as OpenCode-style retry parts.
+1. Watcher/file edited event bus for approved file mutations.
+2. LSP touch/diagnostics after patch mutations.
+3. BOM preservation and formatter hooks.
+4. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
+5. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
+6. Full context compaction process: summary generation, replay, overflow handling, and auto-continue.
+7. Durable session/message/part persistence beyond current snapshots.
+8. Agent/subtask session part behavior.
+9. Retry/fallback receipts as OpenCode-style retry parts.
 
 ## Session part target behavior
 
@@ -48,9 +47,9 @@ Implemented / proofed:
 - `ReasoningPart`: safe public progress summary on assistant messages, with `private_chain_of_thought=false` and `visibility=public_progress_summary`.
 - `SnapshotPart`: explicit snapshot save messages and WebUI card.
 - `CompactionPart`: durable compaction request marker with `auto`, `overflow`, and optional `tail_start_id`; WebUI card and proof route added.
-- `FilePart`: changed-file metadata for successful `apply_patch`, including `mime`, `filename`, `workspace://...` URL, and `FilePartSource`-style file source.
+- `FilePart`: changed-file metadata for approved `apply_patch`, including `mime`, `filename`, `workspace://...` URL, and `FilePartSource`-style file source.
 - `ToolPart`: running/completed/error cards from tool calls/results, preserving metadata and compact visible output.
-- `PatchPart`: patch hash and changed file list for successful `apply_patch`.
+- `PatchPart`: patch hash and changed file list for approved `apply_patch`.
 
 Not done / do not overclaim:
 
@@ -67,34 +66,36 @@ Before claiming full `apply_patch` parity, Forge must prove these behaviors:
 - Reject empty patch text. — implemented.
 - Reject empty begin/end patch. — implemented.
 - Parse hunks rather than shelling out blindly. — implemented for add/update/delete/move.
-- Support add, update, delete, and move. — mutation implemented.
-- Validate target paths stay inside the allowed workspace. — implemented before mutation.
+- Support add, update, delete, and move. — mutation implemented after approval.
+- Validate target paths stay inside the allowed workspace. — implemented before approval and before mutation.
 - Collect per-file diff metadata. — implemented with a simple per-file diff summary.
-- Ask/record edit permission metadata before applying changes. — metadata recorded; real interactive approval is not wired yet.
-- Write changes safely. — implemented with parent-directory creation for writes.
-- Publish file change events. — implemented as tool metadata/SSE/WebUI file cards; not yet a real watcher event bus.
+- Ask/record edit permission before applying changes. — implemented with pending approval metadata, WebUI card, approval API, and proof that files are not written before approval.
+- Write changes safely. — implemented with parent-directory creation for writes after approval.
+- Publish file change events. — implemented as tool metadata/SSE/WebUI file cards after approval; not yet a real watcher event bus.
 - Trigger diagnostics/touch equivalent where available. — not yet.
 - Preserve BOM and run formatter hooks where appropriate. — partially implemented at file write level; not fully equivalent to OpenCode's format/BOM sync flow.
-- Return a human-readable success summary listing changed files. — implemented with `Success. Updated the following files:` and `A/D/M` lines.
+- Return a human-readable success summary listing changed files. — implemented with `Success. Updated the following files:`, `Updated N file(s)`, and `A/D/M` lines.
 
 ## WebUI / tool result parity status
 
 Implemented and proofed:
 
-- Natural prompt creates a file through real `apply_patch` and shows an `ADDED` file card.
+- Natural prompt creates a pending edit approval first and does not write a file before approval.
+- WebUI shows `OpenCode edit permission request`, `Approve edit`, and `Edit approval metadata`.
+- Approval API applies the patch and then shows file-change cards, FilePart, and PatchPart.
 - Natural repo inspection runs real `repo_info` and `file_list` tool calls.
 - Tool cards show compact visible output first.
 - Raw JSON details are preserved under metadata (`raw_output`) instead of being the primary visible UI.
 - Live WebUI proof at `c3f15e4` requires text/snapshot/file/tool/patch parts in the stream, persisted conversation JSON, and browser DOM.
 - Live WebUI proof at `a0efdb6` also requires visible/persisted OpenCode `ReasoningPart` proof.
-- Live WebUI proof after `bd118d7` also requires visible/persisted OpenCode `CompactionPart` proof.
+- Live WebUI proof at `84e459e` also requires visible/persisted OpenCode `CompactionPart` proof.
+- Live WebUI proof at `a83ddac` requires real edit approval-before-write proof.
 
 Not done:
 
 - Browser UI still does not fully implement OpenCode's pending/running/completed/error lifecycle semantics.
 - Attachments are not modeled like OpenCode tool parts.
 - Tool timing is not preserved in the same complete shape.
-- Real approval controls for edit permission are not implemented.
 - Compaction card does not yet mean full OpenCode summary/replay/autocontinue behavior.
 
 ## File size rule
