@@ -1,23 +1,31 @@
-//! Forge WebUI — axum HTTP/WS server with REST API for the chat-first UI.
+//! Forge WebUI — axum HTTP server with REST API for the chat-first UI.
 
+pub mod chat_ui;
+pub mod events;
 pub mod routes;
 pub mod state;
 pub mod ws;
 
-use axum::{Router, routing::{get, post, delete}};
+use axum::{response::Html, routing::{delete, get, post}, Router};
 use state::AppState;
 use std::net::SocketAddr;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+
+async fn index() -> Html<&'static str> {
+    Html(chat_ui::CHAT_HTML)
+}
 
 pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     let app = Router::new()
+        .route("/", get(index))
         .route("/api/health", get(routes::health))
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
         .route("/api/conversations/:id", delete(routes::delete_conversation))
         .route("/api/conversations/:id/chat", post(routes::chat))
+        .route("/api/conversations/:id/chat/stream", post(events::chat_stream))
         .route("/api/conversations/:id/cancel", post(routes::cancel))
         .route("/api/conversations/:id/pause", post(routes::pause))
         .route("/api/conversations/:id/resume", post(routes::resume))
