@@ -32,6 +32,7 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/api/conversations/:id/pause", post(routes::pause))
         .route("/api/conversations/:id/resume", post(routes::resume))
         .route("/api/conversations/:id/snapshot", post(routes::save_snapshot))
+        .route("/api/conversations/:id/compact", post(routes::compact_conversation))
         .route("/api/browser-proof", post(routes::browser_proof))
         .route("/api/vision-review", post(routes::vision_review))
         .route("/api/benchmark", get(routes::benchmark))
