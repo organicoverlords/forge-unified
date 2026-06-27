@@ -37,10 +37,9 @@ done
 
 curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
-curl -fsS "$BASE/" | grep -q "file-change"
-curl -fsS "$BASE/" | grep -q "file-card"
-curl -fsS "$BASE/" | grep -q "OpenCode ToolPart cards"
-curl -fsS "$BASE/" | grep -q "OpenCode PatchPart cards"
+curl -fsS "$BASE/" | grep -q "OpenCode TextPart"
+curl -fsS "$BASE/" | grep -q "OpenCode ToolPart"
+curl -fsS "$BASE/" | grep -q "OpenCode PatchPart"
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
@@ -109,6 +108,10 @@ grep -q "natural-proof-note.txt" "$CONVERSATION_JSON"
 grep -q "permission_request" "$CONVERSATION_JSON"
 grep -q '"permission":"edit"' "$CONVERSATION_JSON"
 grep -q "opencode_permission_source" "$CONVERSATION_JSON"
+grep -q "text_parts" "$CONVERSATION_JSON"
+grep -q '"type":"text"' "$CONVERSATION_JSON"
+grep -q '"identifier":"TextPart"' "$CONVERSATION_JSON"
+grep -q "opencode_text_part_source" "$CONVERSATION_JSON"
 grep -q "tool_parts" "$CONVERSATION_JSON"
 grep -q '"type":"tool"' "$CONVERSATION_JSON"
 grep -q '"status":"completed"' "$CONVERSATION_JSON"
@@ -146,10 +149,11 @@ grep -q "repo_info" "$BROWSER_PROOF_JSON"
 grep -q "file_list" "$BROWSER_PROOF_JSON"
 grep -q "Repository status" "$BROWSER_PROOF_JSON"
 grep -q "Top-level repository entries" "$BROWSER_PROOF_JSON"
+grep -q "OpenCode TextPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "OpenCode ToolPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "OpenCode PatchPart" "$BROWSER_PROOF_JSON"
 grep -q "PatchPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "patch_" "$BROWSER_PROOF_JSON"
 grep -q "completed" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI natural file creation + compact repo inspection + visible OpenCode ToolPart/PatchPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural file creation + compact repo inspection + visible OpenCode TextPart/ToolPart/PatchPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
