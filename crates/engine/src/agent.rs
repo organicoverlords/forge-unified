@@ -39,7 +39,7 @@ impl Agent {
     }
 
     pub async fn chat(&self, id: &ConversationId, message: String) -> Result<RunRecord> {
-        let record = self.orchestrator.run(id.clone(), message, 10).await?;
+        let record = self.orchestrator.run(id.clone(), message, 20).await?;
         self.save_snapshot(id).await?;
         Ok(record)
     }
