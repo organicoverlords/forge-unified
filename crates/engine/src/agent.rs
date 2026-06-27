@@ -1,6 +1,6 @@
 //! Agent — high-level interface wrapping orchestrator, router, and conversation.
 
-use crate::change_bus::ChangeEvent;
+use crate::change_bus::{ChangeBusStatus, ChangeEvent};
 use crate::config::Config;
 use crate::conversation::ConversationManager;
 use crate::orchestrator::Orchestrator;
@@ -41,6 +41,7 @@ impl Agent {
 
     pub async fn execute_tool(&self, request: ToolRequest) -> Result<ToolResult> { self.orchestrator.execute_tool(request).await }
     pub fn recent_change_events(&self) -> Vec<ChangeEvent> { self.orchestrator.recent_change_events() }
+    pub fn change_bus_status(&self) -> ChangeBusStatus { self.orchestrator.change_bus_status() }
     pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.orchestrator.subscribe_change_events() }
 
     pub async fn record_user_message(&self, id: &ConversationId, content: String) -> Result<()> {
@@ -111,6 +112,7 @@ impl Agent {
         }));
         if let Some(object) = result.as_object_mut() {
             object.insert("event_bus_receipts".to_string(), serde_json::json!([started, finished]));
+            object.insert("event_bus_status".to_string(), serde_json::json!(self.change_bus_status()));
             object.insert("opencode_compaction_event_source".to_string(), serde_json::json!({"path":"packages/core/src/session/compaction.ts","behavior":"compaction lifecycle start/end events around summary creation"}));
         }
         Ok(result)
