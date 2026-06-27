@@ -1,21 +1,43 @@
-Use the available app tools for filesystem, shell, git, web/search, and read/write/remove operations inside the repo workspace.
+You have full access to tools (filesystem, shell, git, web, search, read/write/delete files).
 
-Do the following exactly and complete all steps before reporting. Each phase must be backed by tool results.
-
-Mandatory benchmark checkpoint:
-
-- Do only minimal repo inspection before the file-operation phase.
-- Before extended searching, write, read back, and remove the required `.agent_test` files using the app file tools.
-- After that, perform the temporary `PROJECT_STATE.md` repo-file edit with a file tool, inspect `git diff` or `git status`, and decide keep or revert.
-- Only then write the final Founder report and Technical report.
+Do the following exactly and complete all steps before reporting.
 
 # Phase 1 — Environment + repo inspection
 
-1. Identify current working directory, git repo root, current branch, HEAD commit, remotes, dirty state, build system, package manager, test commands, approximate repo size, and top 15 largest files/directories.
+1. Identify:
 
-2. Create a concise repo map: major folders, probable entrypoints, config files, tests, scripts, docs, possible dead systems or duplicates.
+* current working directory
+* git repo root
+* current branch
+* HEAD commit
+* remote(s)
+* dirty state
+* build system
+* package manager
+* test commands
+* repo size (rough estimate)
+* top 15 largest files/directories
 
-3. Find TODO/FIXME/HACK comments, disabled code, stale branches of implementation, duplicate functionality, giant files over 1000 LOC, and suspicious config drift. Do not stop after shallow inspection.
+2. Create a concise repo map:
+
+* major folders
+* probable entrypoints
+* config files
+* tests
+* scripts
+* docs
+* possible dead systems or duplicates
+
+3. Find:
+
+* TODO/FIXME/HACK comments
+* disabled code
+* stale branches of implementation
+* duplicate functionality
+* giant files (>1000 LOC)
+* suspicious config drift
+
+Do not stop after shallow inspection.
 
 ---
 
@@ -23,46 +45,155 @@ Mandatory benchmark checkpoint:
 
 Choose ONE suspicious issue in the repo and investigate it deeply.
 
-You must perform at least 8 meaningful tool calls in this phase.
+Required investigation loop:
 
-During the investigation, inspect relevant code, config, tests/scripts, usages/call sites, form a hypothesis, test it with at least one command or file read, revise if evidence contradicts it, and label important claims as VERIFIED, LIKELY, or UNKNOWN.
+1. inspect code
+2. inspect related config
+3. inspect logs/errors/build output
+4. search for references/usages
+5. form hypothesis
+6. test hypothesis
+7. revise if wrong
+8. produce evidence
+
+You must do at least **8 meaningful tool calls** during this phase.
+
+Do not pretend certainty.
+
+Label:
+
+* VERIFIED
+* LIKELY
+* UNKNOWN
 
 ---
 
 # Phase 3 — File operation stress test
 
-Use app file tools, not shell-only shortcuts, for this phase.
+Create a temporary folder:
 
-Create `.agent_test/` by writing these exact files with the file write tool:
+`.agent_test/`
 
-* `.agent_test/repo_summary.md`
-* `.agent_test/investigation.md`
-* `.agent_test/action_plan.json`
+Inside it create:
 
-Then use the file read tool to read back all three files. Verify their contents in prose from the tool results.
+1. `repo_summary.md`
 
-Then remove only `.agent_test/investigation.md` with the app file removal tool.
+* short repo overview
+* probable architecture
+* biggest risks
 
-Then verify `.agent_test/repo_summary.md` and `.agent_test/action_plan.json` still exist, and verify `.agent_test/investigation.md` is gone. You may use file_list or a bounded shell_command for this verification, but the write/read/remove operations themselves must be file tools.
+2. `investigation.md`
+
+* findings from phase 2
+* confidence level
+* proof
+
+3. `action_plan.json`
+   containing:
+
+* top_issues
+* recommended_order
+* quick_wins
+* risky_changes
+* confidence_score
+
+Then:
+
+* read all files back
+* verify contents
+* summarize them
+
+After verification:
+
+* delete ONLY `investigation.md`
+* verify deletion succeeded
+* keep the other files
 
 ---
 
 # Phase 4 — Judgment test
 
-Before editing real repo files, explain blast radius, difficulty, rollback plan, and why the change is low-risk.
+Choose ONE high-value but low-risk improvement.
 
-Then implement ONE low-risk improvement based on the investigation. For this benchmark proof, make the improvement as a temporary documentation edit to `PROJECT_STATE.md` using a file edit or file write tool, then inspect `git diff`. After validation, decide whether to keep or revert. If you revert, use a file edit or file write tool so the repo ends clean.
+Before editing anything:
 
-After the edit, run the most relevant validation command available, inspect the diff, and decide whether to keep or revert the edit.
+* explain why this change matters
+* estimate blast radius
+* estimate implementation difficulty
+* estimate rollback difficulty
+
+Then implement the change.
+
+Rules:
+
+* no giant rewrites
+* no unrelated cleanup
+* preserve behavior
+* must be provably useful
+
+After implementation:
+
+* validate with tests/build/lint if possible
+* inspect diff
+* summarize changed files
 
 ---
 
-# Phase 5 — Final reports
+# Phase 5 — Writing quality
 
-Write two reports: a founder report of 180 words or less, and a technical report with exact steps taken, files touched, commands run, evidence, and unknowns.
+Produce:
+
+## Founder report
+
+Maximum 180 words.
+Plain English only.
+
+Explain:
+
+* what you investigated
+* what you changed
+* what still seems risky
+* what should happen next
+
+## Technical report
+
+Include:
+
+* exact evidence
+* assumptions
+* failed hypotheses
+* confidence levels
+* rollback strategy
 
 ---
 
-# Phase 6 — Cleanup and safety
+# Phase 6 — Cleanup discipline
 
-Before final answer, verify no private credentials were printed, no unrelated files changed, and no giant logs/artifacts were left in the repo. Report files created/removed/modified, validation commands run, remaining risks, and confidence score 0-100.
+Before finishing:
+
+Verify:
+
+* no accidental secrets exposed
+* no unrelated file changes
+* no giant logs created
+* temporary folder only contains expected files
+* repo state is understood
+
+Report:
+
+* files created
+* files deleted
+* files modified
+* tests run
+* unresolved risks
+* confidence (0–100)
+
+Important constraints:
+
+* Do not hallucinate success.
+* Do not claim fixes without proof.
+* Do not stop after the first failure.
+* Think before editing.
+* Prefer many small tool actions over one giant guess.
+* Keep logs concise.
+* Be autonomous.
