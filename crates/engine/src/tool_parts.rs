@@ -72,7 +72,7 @@ fn mime_for(path: &str) -> &'static str {
 
 pub fn pending_tool_part(call: &ToolRequest) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind),
+        "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
         "state": {"status": "pending", "input": {}, "raw": call.args.to_string()},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending"}
     })
@@ -80,7 +80,7 @@ pub fn pending_tool_part(call: &ToolRequest) -> serde_json::Value {
 
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind),
+        "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
         "state": {"status": "running", "input": call.args.clone(), "title": tool_name(&call.kind), "metadata": {}, "time": {"start": 0}},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running"}
     })
@@ -99,7 +99,7 @@ pub fn finished_tool_lifecycle_parts(result: &ToolResult) -> Vec<serde_json::Val
 pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
     let title = result.metadata.get("title").and_then(serde_json::Value::as_str).unwrap_or_else(|| tool_name(&result.kind));
     serde_json::json!({
-        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
         "state": {"status": "completed", "input": tool_input(result), "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "completed"}
     })
@@ -107,7 +107,7 @@ pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
 
 pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
         "state": {"status": "error", "input": tool_input(result), "error": result.error.clone().unwrap_or_else(|| result.output.clone()), "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "error"}
     })
@@ -115,7 +115,7 @@ pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
 
 fn pending_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
         "state": {"status": "pending", "input": {}, "raw": tool_input(result).to_string()},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending", "derived_from_result": true}
     })
@@ -123,7 +123,7 @@ fn pending_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
 
 fn running_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
         "state": {"status": "running", "input": tool_input(result), "title": tool_name(&result.kind), "metadata": {}, "time": {"start": 0}},
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running", "derived_from_result": true}
     })
@@ -157,7 +157,7 @@ fn patch_files(result: &ToolResult) -> Vec<String> {
 
 fn patch_hash(result: &ToolResult, files: &[String]) -> String {
     let mut hasher = DefaultHasher::new();
-    result.id.0.to_string().hash(&mut hasher); result.output.hash(&mut hasher);
+    result.id.clone().0.to_string().hash(&mut hasher); result.output.hash(&mut hasher);
     for file in files { file.hash(&mut hasher); }
     format!("patch_{:016x}", hasher.finish())
 }
