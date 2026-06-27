@@ -30,31 +30,32 @@ impl ToolExecutor {
         #[derive(serde::Deserialize)]
         #[allow(non_snake_case)]
         struct Args { patchText: String, approved: Option<bool>, approval_id: Option<String> }
+        let request_id = request.id.clone();
         let args: Args = serde_json::from_value(request.args)?;
         let patch_text = args.patchText;
         let patch_len = patch_text.len();
         let approved = args.approved.unwrap_or(false);
-        let approval_id = args.approval_id.unwrap_or_else(|| request.id.0.to_string());
+        let approval_id = args.approval_id.unwrap_or_else(|| request_id.0.to_string());
         if patch_text.trim().is_empty() { anyhow::bail!("patchText cannot be empty"); }
 
         let hunks = match parse_opencode_patch(&patch_text) {
             Ok(hunks) => hunks,
-            Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
+            Err(err) => return Ok(apply_patch_failure(request_id.clone(), patch_len, err.to_string())),
         };
         if hunks.is_empty() {
             let normalized = patch_text.replace("\r\n", "\n").replace('\r', "\n");
             let empty_doc = [patch_marker("Begin Patch"), patch_marker("End Patch")].join("\n");
             let error = if normalized.trim() == empty_doc.as_str() { "patch rejected: empty patch" } else { "apply_patch verification failed: no hunks found" };
-            return Ok(apply_patch_failure(request.id, patch_len, error));
+            return Ok(apply_patch_failure(request_id.clone(), patch_len, error));
         }
 
         let validated_paths = match validate_patch_paths(&hunks, &self.workspace_root) {
             Ok(paths) => paths,
-            Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
+            Err(err) => return Ok(apply_patch_failure(request_id.clone(), patch_len, err.to_string())),
         };
         let changes = match prepare_file_changes(&hunks, &self.workspace_root).await {
             Ok(changes) => changes,
-            Err(err) => return Ok(apply_patch_failure(request.id, patch_len, err.to_string())),
+            Err(err) => return Ok(apply_patch_failure(request_id.clone(), patch_len, err.to_string())),
         };
 
         let files: Vec<_> = changes.iter().map(file_change_metadata).collect();
@@ -63,11 +64,11 @@ impl ToolExecutor {
         let permission_request = edit_permission_request(&hunks, &files, diff.clone(), approved, &approval_id);
 
         if !approved {
-            return Ok(apply_patch_pending(request.id, patch_len, hunks.len(), files, summary_lines, validated_paths, permission_request, patch_text, diff, approval_id));
+            return Ok(apply_patch_pending(request_id.clone(), patch_len, hunks.len(), files, summary_lines, validated_paths, permission_request, patch_text, diff, approval_id));
         }
 
         if let Err(err) = apply_file_changes(&changes).await {
-            return Ok(apply_patch_failure(request.id, patch_len, err.to_string()));
+            return Ok(apply_patch_failure(request_id.clone(), patch_len, err.to_string()));
         }
 
         let file_events = patch_events::file_change_events(&files);
@@ -79,7 +80,7 @@ impl ToolExecutor {
         let diagnostic_reports = patch_events::diagnostic_reports(&files);
         let output = format!("Success. Updated the following files:\n{}\n{}", change_count_summary(summary_lines.len()), summary_lines.join("\n"));
         Ok(ToolResult {
-            id: request.id, kind: ToolKind::ApplyPatch, success: true, output, error: None, duration_ms: 0,
+            id: request_id, kind: ToolKind::ApplyPatch, success: true, output, error: None, duration_ms: 0,
             metadata: HashMap::from([
                 ("title".to_string(), serde_json::json!("apply_patch")),
                 ("opencode_source".to_string(), opencode_source()),
