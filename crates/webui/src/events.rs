@@ -132,9 +132,9 @@ fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, 
     let id = call.id.0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
-    events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
+    events.push_back(event("tool-input-start", serde_json::json!({"id": id.clone(), "name": name})));
+    events.push_back(event("tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()})));
+    events.push_back(event("tool-input-end", serde_json::json!({"id": id.clone(), "name": name})));
     events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
 }
 
@@ -194,10 +194,10 @@ async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Ev
 async fn append_tool_events(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
     let id = req.id.0.to_string();
     let input = req.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-input-delta", serde_json::json!({"id": id, "name": name, "text": input.to_string()})));
-    events.push_back(event("tool-input-end", serde_json::json!({"id": id, "name": name})));
-    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
+    events.push_back(event("tool-input-start", serde_json::json!({"id": id.clone(), "name": name})));
+    events.push_back(event("tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()})));
+    events.push_back(event("tool-input-end", serde_json::json!({"id": id.clone(), "name": name})));
+    events.push_back(event("tool-call", serde_json::json!({"id": id.clone(), "name": name, "kind": name, "input": input})));
     match state.agent.execute_tool(req).await {
         Ok(mut result) => {
             present_tool_result(name, &mut result);
