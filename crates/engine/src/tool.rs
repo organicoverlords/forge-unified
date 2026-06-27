@@ -38,7 +38,7 @@ impl ToolExecutor {
 
     pub async fn execute(&self, request: ToolRequest) -> Result<ToolResult> {
         let start = Instant::now();
-        let result = match request.kind {
+        let result = match &request.kind {
             ToolKind::FileRead => self.execute_file_read(request).await,
             ToolKind::FileWrite => self.execute_file_write(request).await,
             ToolKind::FileEdit => self.execute_file_edit(request).await,
@@ -90,7 +90,7 @@ impl ToolExecutor {
             let mut payload = value.clone();
             if let Some(object) = payload.as_object_mut() {
                 object.insert("tool_id".to_string(), json!(result.id.0.to_string()));
-                object.insert("tool_kind".to_string(), json!(format!("{:?}", result.kind)));
+                object.insert("tool_kind".to_string(), json!(format!("{:?}", &result.kind)));
                 object.insert("metadata_key".to_string(), json!(key));
             }
             self.change_bus.publish(event_type, "opencode.apply_patch", payload)
@@ -175,87 +175,54 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "pattern": { "type": "string", "description": "Glob pattern (e.g. **/*.rs)" }
+                    "pattern": { "type": "string", "description": "Glob pattern" }
                 },
                 "required": ["pattern"]
             }),
         },
         ToolConfig {
             name: "file_search".to_string(),
-            description: "Search for text in files using regex".to_string(),
+            description: "Search for text in files".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "pattern": { "type": "string", "description": "Regex pattern to search" },
-                    "path": { "type": "string", "description": "Directory to search (optional)" }
+                    "query": { "type": "string", "description": "Search query" }
                 },
-                "required": ["pattern"]
+                "required": ["query"]
             }),
         },
         ToolConfig {
             name: "web_fetch".to_string(),
-            description: "Fetch the contents of a URL and return the text".to_string(),
-            parameters: json!({"type":"object","properties":{"url":{"type":"string","description":"URL to fetch"}},"required":["url"]}),
-        },
-        ToolConfig {
-            name: "web_search".to_string(),
-            description: "Search the web for information".to_string(),
-            parameters: json!({"type":"object","properties":{"query":{"type":"string","description":"Search query"}},"required":["query"]}),
+            description: "Fetch content from a URL".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "URL to fetch" }
+                },
+                "required": ["url"]
+            }),
         },
         ToolConfig {
             name: "shell_command".to_string(),
-            description: "Run a shell command and return its output".to_string(),
-            parameters: json!({"type":"object","properties":{"command":{"type":"string","description":"Shell command to run"},"timeout":{"type":"number","description":"Timeout in seconds (optional)"}},"required":["command"]}),
+            description: "Execute a shell command".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string", "description": "Command to execute" }
+                },
+                "required": ["command"]
+            }),
         },
         ToolConfig {
-            name: "terminal_run".to_string(),
-            description: "Run a command in an interactive terminal".to_string(),
-            parameters: json!({"type":"object","properties":{"command":{"type":"string","description":"Command to run"},"cwd":{"type":"string","description":"Working directory (optional)"}},"required":["command"]}),
-        },
-        ToolConfig {
-            name: "task".to_string(),
-            description: "Create a subagent task for delegated work".to_string(),
-            parameters: json!({"type":"object","properties":{"description":{"type":"string","description":"Task description"},"background":{"type":"boolean","description":"Run in background"}},"required":["description"]}),
-        },
-        ToolConfig {
-            name: "repo_info".to_string(),
-            description: "Get repository information (git root, branch, HEAD)".to_string(),
-            parameters: json!({"type":"object","properties":{},"required":[]}),
-        },
-        ToolConfig {
-            name: "propose_patch".to_string(),
-            description: "Propose a patch/summary of changes".to_string(),
-            parameters: json!({"type":"object","properties":{"summary":{"type":"string","description":"Summary of changes"},"diff":{"type":"string","description":"Diff content"}},"required":["summary","diff"]}),
-        },
-        ToolConfig {
-            name: "apply_patch".to_string(),
-            description: "OpenCode-compatible patch tool. Accepts patchText, validates paths, records edit approval, emits post-edit receipts, and applies add/update/delete/move file mutations inside the workspace.".to_string(),
-            parameters: json!({"type":"object","properties":{"patchText":{"type":"string","description":"Full OpenCode apply_patch patch text with Begin/End markers"},"approved":{"type":"boolean","description":"True only after the edit approval request is accepted"},"approval_id":{"type":"string","description":"Pending approval id to apply"}},"required":["patchText"]}),
-        },
-        ToolConfig {
-            name: "switch_mode".to_string(),
-            description: "Switch the agent mode (chat, explore, plan, build)".to_string(),
-            parameters: json!({"type":"object","properties":{"mode":{"type":"string","enum":["chat","explore","plan","build"],"description":"Mode to switch to"}},"required":["mode"]}),
-        },
-        ToolConfig {
-            name: "browser_proof".to_string(),
-            description: "Open a headless browser, take a screenshot, and optionally dump the DOM. Use this to debug UI issues, verify that pages load correctly, or inspect visual output.".to_string(),
-            parameters: json!({"type":"object","properties":{"url":{"type":"string","description":"URL to open in the browser"},"width":{"type":"integer","description":"Viewport width in pixels (default 1280)"},"height":{"type":"integer","description":"Viewport height in pixels (default 720)"},"capture_dom":{"type":"boolean","description":"Whether to capture DOM snapshot (default true)"}},"required":["url"]}),
-        },
-        ToolConfig {
-            name: "vision_review".to_string(),
-            description: "Send a screenshot image to a vision-capable AI model for analysis. Use this to detect UI bugs, visual errors, or layout issues in screenshots.".to_string(),
-            parameters: json!({"type":"object","properties":{"image_base64":{"type":"string","description":"Base64-encoded PNG screenshot"},"prompt":{"type":"string","description":"Custom analysis prompt (optional)"}},"required":["image_base64"]}),
-        },
-        ToolConfig {
-            name: "graph_build".to_string(),
-            description: "Build a knowledge graph from code files in the workspace. Extracts imports, dependencies, and file structure into a queryable graph.".to_string(),
-            parameters: json!({"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern for files to include (default **/crates/**/*.rs)","default":"**/crates/**/*.rs"}},"required":[]}),
-        },
-        ToolConfig {
-            name: "graph_query".to_string(),
-            description: "Query a previously built knowledge graph. Search for files, functions, or dependencies by keyword.".to_string(),
-            parameters: json!({"type":"object","properties":{"graph_json":{"type":"string","description":"JSON output from a previous graph_build call"},"query":{"type":"string","description":"Search query (file name, function, import, etc.)"}},"required":["graph_json","query"]}),
+            name: "batch_parallel".to_string(),
+            description: "Execute multiple tool calls in parallel",
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "requests": { "type": "array", "description": "Tool requests to execute" }
+                },
+                "required": ["requests"]
+            }),
         },
     ]
 }
