@@ -1,0 +1,51 @@
+Use the available app tools for filesystem, shell, git, web/search, and read/write/remove operations inside the repo workspace.
+
+Do the following exactly and complete all steps before reporting.
+
+# Phase 1 — Environment + repo inspection
+
+1. Identify current working directory, git repo root, current branch, HEAD commit, remotes, dirty state, build system, package manager, test commands, approximate repo size, and top 15 largest files/directories.
+
+2. Create a concise repo map: major folders, probable entrypoints, config files, tests, scripts, docs, possible dead systems or duplicates.
+
+3. Find TODO/FIXME/HACK comments, disabled code, stale branches of implementation, duplicate functionality, giant files over 1000 LOC, and suspicious config drift. Do not stop after shallow inspection.
+
+---
+
+# Phase 2 — Long tool loop test
+
+Choose ONE suspicious issue in the repo and investigate it deeply.
+
+You must perform at least 8 meaningful tool calls in this phase.
+
+During the investigation, inspect relevant code, config, tests/scripts, usages/call sites, form a hypothesis, test it with at least one command or file read, revise if evidence contradicts it, and label important claims as VERIFIED, LIKELY, or UNKNOWN.
+
+---
+
+# Phase 3 — File operation stress test
+
+Create `.agent_test/` with `repo_summary.md`, `investigation.md`, and `action_plan.json`.
+
+Then read back all three files, verify the contents, remove only `.agent_test/investigation.md`, verify `repo_summary.md` and `action_plan.json` still exist, and verify `investigation.md` is gone.
+
+---
+
+# Phase 4 — Judgment test
+
+Before editing real repo files, explain blast radius, difficulty, rollback plan, and why the change is low-risk.
+
+Then implement ONE low-risk improvement based on the investigation.
+
+After the edit, run the most relevant validation command available, inspect the diff, and decide whether to keep or revert the edit.
+
+---
+
+# Phase 5 — Final reports
+
+Write two reports: a founder report of 180 words or less, and a technical report with exact steps taken, files touched, commands run, evidence, and unknowns.
+
+---
+
+# Phase 6 — Cleanup and safety
+
+Before final answer, verify no secrets were printed, no unrelated files changed, and no giant logs/artifacts were left in the repo. Report files created/removed/modified, validation commands run, remaining risks, and confidence score 0-100.
