@@ -45,7 +45,7 @@ pub async fn run(state: &AppState, conversation_id: &ConversationId) -> EventBuf
     outputs.push(run_file_read(state, &mut events, conversation_id, INVESTIGATION).await);
     outputs.push(run_file_read(state, &mut events, conversation_id, PLAN).await);
     outputs.push(run_file_delete(state, &mut events, conversation_id, INVESTIGATION).await);
-    outputs.push(run_shell(state, &mut events, conversation_id, "verify_agent_test", "test -f .agent_test/repo_summary.md && test -f .agent_test/action_plan.json && test ! -e .agent_test/investigation.md && find .agent_test -maxdepth 1 -type f -printf '%f\\n' | sort", 5_000).await);
+    outputs.push(run_shell(state, &mut events, conversation_id, "verify_agent_test", "test -f .agent_test/repo_summary.md && test -f .agent_test/action_plan.json && test ! -e .agent_test/investigation.md && find .agent_test -maxdepth 1 -type f -printf '%f\n' | sort", 5_000).await);
 
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 4 — Judgment test"));
     let before = run_file_read(state, &mut events, conversation_id, ".gitignore").await;
@@ -55,10 +55,10 @@ pub async fn run(state: &AppState, conversation_id: &ConversationId) -> EventBuf
         next.push_str("\n.agent_test/\n");
         outputs.push(run_file_write(state, &mut events, conversation_id, ".gitignore", &next).await);
     }
-    outputs.push(run_shell(state, &mut events, conversation_id, "validate_after_change", "cargo check -q -p forge-webui && git diff -- .gitignore && git status --short", 90_000).await);
+    outputs.push(run_shell(state, &mut events, conversation_id, "validate_after_change", "cargo check -q -p forge-webui && git diff -- .gitignore && git status --short", 120_000).await);
 
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 5/6 — Reports + cleanup discipline"));
-    outputs.push(run_shell(state, &mut events, conversation_id, "cleanup_verify", "git diff --name-only && find .agent_test -maxdepth 1 -type f -printf '%f\\n' | sort", 10_000).await);
+    outputs.push(run_shell(state, &mut events, conversation_id, "cleanup_verify", "git diff --name-only && find .agent_test -maxdepth 1 -type f -printf '%f\n' | sort", 10_000).await);
 
     let confidence = confidence_score(&outputs);
     let failed_steps = failed_step_names(&outputs);
@@ -140,7 +140,7 @@ fn phase_one_commands() -> Vec<(&'static str, &'static str)> {
     vec![
         ("env_repo_identity", "pwd; git rev-parse --show-toplevel; git branch --show-current; git rev-parse --short HEAD; git remote -v; git status --short"),
         ("build_system_scan", "test -f Cargo.toml && echo cargo; test -f Cargo.lock && echo cargo-lock; find crates -maxdepth 2 -name Cargo.toml -print | sort"),
-        ("repo_size_largest", "du -sh . 2>/dev/null; find . -maxdepth 3 -path './.git' -prune -o -path './target' -prune -o -type f -printf '%s %p\\n' | sort -nr | head -15"),
+        ("repo_size_largest", "du -sh . 2>/dev/null; find . -maxdepth 3 -path './.git' -prune -o -path './target' -prune -o -type f -printf '%s %p\n' | sort -nr | head -15"),
         ("repo_map", "find . -maxdepth 2 -path './.git' -prune -o -path './target' -prune -o -type d -print | sort | head -80; find . -maxdepth 2 -type f | sort | head -120"),
         ("suspicious_scan", "find . -name '*.rs' -not -path './target/*' -print0 | xargs -0 wc -l | sort -nr | head -20"),
     ]
@@ -151,9 +151,9 @@ fn phase_two_commands() -> Vec<(&'static str, &'static str, u64)> {
         ("inspect_code_events", "sed -n '1,220p' crates/webui/src/events.rs", 20_000),
         ("inspect_code_file_ops", "sed -n '1,180p' crates/engine/src/tool/file_ops.rs", 20_000),
         ("inspect_config", "sed -n '1,120p' Cargo.toml; sed -n '1,120p' crates/webui/Cargo.toml", 20_000),
-        ("build_output", "cargo check -q -p forge-webui", 90_000),
+        ("build_output", "cargo check -q -p forge-webui", 180_000),
         ("search_references", "find crates scripts -type f | head -120", 20_000),
-        ("form_hypothesis", "printf 'LIKELY: long natural prompts need a deterministic WebUI execution path with visible tool events.\\nUNKNOWN: native watcher parity and full LSP server state.\\nVERIFIED: file and shell tools are available in the local agent path.\\n'", 5_000),
+        ("form_hypothesis", "printf 'LIKELY: long natural prompts need a deterministic WebUI execution path with visible tool events.\nUNKNOWN: native watcher parity and full LSP server state.\nVERIFIED: file and shell tools are available in the local agent path.\n'", 5_000),
         ("test_hypothesis", "test -f crates/webui/src/events.rs && test -f crates/engine/src/tool/file_ops.rs && echo VERIFIED", 5_000),
         ("evidence_collect", "git diff --stat; git status --short; find .agent_test -maxdepth 2 -type f 2>/dev/null | sort || true", 10_000),
     ]
