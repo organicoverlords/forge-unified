@@ -1,5 +1,6 @@
 //! Agent — high-level interface wrapping orchestrator, router, and conversation.
 
+use crate::change_bus::ChangeEvent;
 use crate::config::Config;
 use crate::conversation::ConversationManager;
 use crate::orchestrator::Orchestrator;
@@ -25,9 +26,7 @@ impl Agent {
         let snapshots = Arc::new(SnapshotManager::new(&config.data_dir));
         let mut manager = ConversationManager::new();
         if let Ok(ids) = snapshots.list() {
-            for id in ids {
-                if let Ok(conv) = snapshots.load(&id) { manager.insert(id, conv); }
-            }
+            for id in ids { if let Ok(conv) = snapshots.load(&id) { manager.insert(id, conv); } }
         }
         let conversations = Arc::new(RwLock::new(manager));
         let orchestrator = Arc::new(Orchestrator::new(config.clone(), conversations.clone()));
@@ -41,6 +40,8 @@ impl Agent {
     }
 
     pub async fn execute_tool(&self, request: ToolRequest) -> Result<ToolResult> { self.orchestrator.execute_tool(request).await }
+    pub fn recent_change_events(&self) -> Vec<ChangeEvent> { self.orchestrator.recent_change_events() }
+    pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.orchestrator.subscribe_change_events() }
 
     pub async fn record_user_message(&self, id: &ConversationId, content: String) -> Result<()> {
         self.conversations.write().await.add_user_message(id, content);
@@ -64,9 +65,7 @@ impl Agent {
     }
 
     pub async fn list_conversations(&self) -> Vec<ConversationSummary> {
-        self.conversations.read().await.list().iter().map(|c| ConversationSummary {
-            id: c.id.clone(), title: c.title.clone(), message_count: c.messages.len(), mode: c.mode.clone(), updated_at: c.updated_at,
-        }).collect()
+        self.conversations.read().await.list().iter().map(|c| ConversationSummary { id: c.id.clone(), title: c.title.clone(), message_count: c.messages.len(), mode: c.mode.clone(), updated_at: c.updated_at }).collect()
     }
 
     pub async fn get_conversation(&self, id: &ConversationId) -> Option<Conversation> { self.conversations.read().await.get(id).cloned() }
@@ -90,8 +89,7 @@ impl Agent {
     }
 
     pub async fn compact_with_part(&self, id: &ConversationId, keep_last: usize, auto: bool, overflow: bool) -> Result<Value> {
-        let result = self.conversations.write().await.add_compaction_part(id, keep_last, auto, overflow)
-            .ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
+        let result = self.conversations.write().await.add_compaction_part(id, keep_last, auto, overflow).ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
         self.save_snapshot(id).await?;
         Ok(result)
     }
@@ -108,30 +106,21 @@ impl Agent {
     pub async fn resume(&self, id: &ConversationId) -> Result<()> { self.orchestrator.resume(id).await }
 
     pub async fn browser_proof(&self, url: &str, width: u32, height: u32, capture_dom: bool) -> Result<BrowserProofResult> {
-        let req = ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::BrowserProof,
-            args: serde_json::json!({"url": url, "width": width, "height": height, "capture_dom": capture_dom}), parallel_group: None,
-        };
+        let req = ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::BrowserProof, args: serde_json::json!({"url": url, "width": width, "height": height, "capture_dom": capture_dom}), parallel_group: None };
         let result = self.orchestrator.execute_tool(req).await?;
         if !result.success { anyhow::bail!("Browser proof failed: {}", result.error.unwrap_or_default()); }
         serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse browser proof result: {}", e))
     }
 
     pub async fn vision_review(&self, image_base64: &str, prompt: Option<&str>, provider_id: Option<ProviderId>, model_id: Option<ModelId>) -> Result<VisionReviewResult> {
-        let req = ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::VisionReview,
-            args: serde_json::json!({"image_base64": image_base64, "prompt": prompt, "provider_id": provider_id, "model_id": model_id}), parallel_group: None,
-        };
+        let req = ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::VisionReview, args: serde_json::json!({"image_base64": image_base64, "prompt": prompt, "provider_id": provider_id, "model_id": model_id}), parallel_group: None };
         let result = self.orchestrator.execute_tool(req).await?;
         if !result.success { anyhow::bail!("Vision review failed: {}", result.error.unwrap_or_default()); }
         serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse vision review result: {}", e))
     }
 
     pub async fn graph_build(&self, pattern: Option<String>) -> Result<Value> {
-        let req = ToolRequest {
-            id: ToolCallId(Uuid::new_v4()), kind: ToolKind::GraphBuild,
-            args: serde_json::json!({"pattern": pattern.unwrap_or_else(|| "**/crates/**/*.rs".to_string())}), parallel_group: None,
-        };
+        let req = ToolRequest { id: ToolCallId(Uuid::new_v4()), kind: ToolKind::GraphBuild, args: serde_json::json!({"pattern": pattern.unwrap_or_else(|| "**/crates/**/*.rs".to_string())}), parallel_group: None };
         let result = self.orchestrator.execute_tool(req).await?;
         if !result.success { anyhow::bail!("Graph build failed: {}", result.error.unwrap_or_default()); }
         serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse graph result: {}", e))
