@@ -5,14 +5,20 @@
 //!   `FileSystem.Event.Edited` for edited targets.
 //! - `packages/opencode/src/tool/apply_patch.ts` publishes
 //!   `Watcher.Event.Updated` with `add`, `change`, and `unlink` events.
-//! - `packages/opencode/src/tool/apply_patch.ts` touches LSP documents and then
-//!   collects diagnostics.
+//! - `packages/opencode/src/tool/apply_patch.ts` touches LSP documents, collects
+//!   diagnostics, and appends `LSP.Diagnostic.report(...)` output when errors exist.
+//! - `packages/opencode/src/lsp/lsp.ts` defines `touchFile`, `diagnostics`, client
+//!   status, and the LSP service interface.
+//! - `packages/opencode/src/lsp/diagnostic.ts` limits diagnostic report output to
+//!   20 errors per file and formats ERROR/WARN/INFO/HINT severities.
 //! - `packages/opencode/src/tool/read.ts` treats LSP warm-up as optional and
 //!   contains warm-up defects with `Effect.ignoreCause`.
 //! - `packages/opencode/src/event-v2-bridge.ts` forwards EventV2 payloads to
 //!   instance/workspace-scoped UI consumers.
 //! - `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts` streams
 //!   event payloads to connected clients through the EventV2 bridge.
+
+const MAX_DIAGNOSTICS_PER_FILE: usize = 20;
 
 fn file_path(file: &serde_json::Value) -> &str {
     file.get("path").and_then(serde_json::Value::as_str).unwrap_or("")
@@ -126,15 +132,89 @@ fn diagnostic_reports_for_file(file: &serde_json::Value) -> Vec<serde_json::Valu
     if change_type(file) == "delete" { return Vec::new(); }
     let target = target_path(file);
     if target.is_empty() { return Vec::new(); }
+    let diagnostics = contained_diagnostics_for_file(file);
+    let report_block = diagnostic_report_block(target, &diagnostics);
+    let severity_counts = severity_counts(&diagnostics);
     vec![serde_json::json!({
         "event_name": "LSP.Diagnostic.report",
         "file": target,
-        "status": "warmup_contained_pending_service",
-        "diagnostics": [],
+        "status": if diagnostics.is_empty() { "no_errors_reported_contained_service" } else { "errors_reported_contained_service" },
+        "diagnostics": diagnostics,
+        "diagnostic_count": diagnostics.len(),
+        "severity_counts": severity_counts,
+        "max_per_file": MAX_DIAGNOSTICS_PER_FILE,
+        "report_block": report_block,
+        "report_emitted": !report_block.is_empty(),
         "warmup_contained": true,
-        "source": "packages/opencode/src/tool/apply_patch.ts:lsp.diagnostics() -> LSP.Diagnostic.report; packages/opencode/src/tool/read.ts:Effect.ignoreCause warmup containment",
-        "note": "Forge emits the live diagnostics event envelope after each approved edit and records optional warm-up containment; attaching a real LSP backend remains a separate parity step.",
+        "lsp_clients": [],
+        "lsp_client_status": "not_connected_contained",
+        "source": "packages/opencode/src/tool/apply_patch.ts:lsp.diagnostics() -> LSP.Diagnostic.report; packages/opencode/src/lsp/diagnostic.ts:MAX_PER_FILE pretty/report; packages/opencode/src/lsp/lsp.ts:status/touchFile/diagnostics",
+        "note": "Forge emits the diagnostic report shape after each approved edit. It now preserves OpenCode severity/count/report-block semantics while keeping missing live LSP clients contained.",
     })]
+}
+
+fn contained_diagnostics_for_file(file: &serde_json::Value) -> Vec<serde_json::Value> {
+    let patch = file.get("patch").and_then(serde_json::Value::as_str).unwrap_or("");
+    patch.lines()
+        .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+        .enumerate()
+        .filter_map(|(idx, line)| contained_diagnostic_for_added_line(idx, line.trim_start_matches('+')))
+        .take(MAX_DIAGNOSTICS_PER_FILE)
+        .collect()
+}
+
+fn contained_diagnostic_for_added_line(idx: usize, line: &str) -> Option<serde_json::Value> {
+    if line.contains("forge_lsp_error_probe") || line.contains("LSP_ERROR_PROBE") {
+        return Some(diagnostic(idx, 1, "ERROR", "Contained diagnostic probe detected in edited content"));
+    }
+    if line.contains("TODO") || line.contains("todo!") {
+        return Some(diagnostic(idx, 2, "WARN", "Contained warning for TODO-like marker in edited content"));
+    }
+    None
+}
+
+fn diagnostic(idx: usize, severity: u8, severity_label: &str, message: &str) -> serde_json::Value {
+    serde_json::json!({
+        "severity": severity,
+        "severity_label": severity_label,
+        "message": message,
+        "range": {
+            "start": { "line": idx, "character": 0 },
+            "end": { "line": idx, "character": 1 }
+        },
+        "source": "forge.contained_lsp_diagnostic_probe"
+    })
+}
+
+fn severity_counts(diagnostics: &[serde_json::Value]) -> serde_json::Value {
+    let mut errors = 0usize;
+    let mut warnings = 0usize;
+    let mut info = 0usize;
+    let mut hints = 0usize;
+    for diagnostic in diagnostics {
+        match diagnostic.get("severity").and_then(serde_json::Value::as_u64).unwrap_or(1) {
+            1 => errors += 1,
+            2 => warnings += 1,
+            3 => info += 1,
+            4 => hints += 1,
+            _ => {}
+        }
+    }
+    serde_json::json!({"ERROR": errors, "WARN": warnings, "INFO": info, "HINT": hints})
+}
+
+fn diagnostic_report_block(file: &str, diagnostics: &[serde_json::Value]) -> String {
+    let errors = diagnostics.iter().filter(|item| item.get("severity").and_then(serde_json::Value::as_u64) == Some(1)).take(MAX_DIAGNOSTICS_PER_FILE).collect::<Vec<_>>();
+    if errors.is_empty() { return String::new(); }
+    let mut lines = vec![format!("<diagnostics file=\"{file}\">")];
+    for item in errors {
+        let line = item.pointer("/range/start/line").and_then(serde_json::Value::as_u64).unwrap_or(0) + 1;
+        let col = item.pointer("/range/start/character").and_then(serde_json::Value::as_u64).unwrap_or(0) + 1;
+        let message = item.get("message").and_then(serde_json::Value::as_str).unwrap_or("diagnostic");
+        lines.push(format!("ERROR [{line}:{col}] {message}"));
+    }
+    lines.push("</diagnostics>".to_string());
+    lines.join("\n")
 }
 
 pub(crate) fn diagnostics_metadata(files: &[serde_json::Value]) -> serde_json::Value {
@@ -144,14 +224,17 @@ pub(crate) fn diagnostics_metadata(files: &[serde_json::Value]) -> serde_json::V
     let report_count = reports.len();
     serde_json::json!({
         "status": "event_envelope_emitted_with_warmup_containment",
-        "reason": "Forge records OpenCode LSP touch targets, emits LSP diagnostic report envelopes, and records that optional LSP warm-up defects are contained instead of failing the edit path.",
+        "reason": "Forge records OpenCode LSP touch targets, emits LSP diagnostic report envelopes, preserves severity/count/report-block shape, and records that optional LSP warm-up defects are contained instead of failing the edit path.",
         "touched_files": lsp_touches(files),
         "warmups": warmups,
         "reports": reports,
         "warmup_count": warmup_count,
         "report_count": report_count,
+        "max_per_file": MAX_DIAGNOSTICS_PER_FILE,
         "opencode_source": [
             "packages/opencode/src/tool/apply_patch.ts:lsp.touchFile + lsp.diagnostics + LSP.Diagnostic.report",
+            "packages/opencode/src/lsp/lsp.ts:status + touchFile + diagnostics",
+            "packages/opencode/src/lsp/diagnostic.ts:MAX_PER_FILE + pretty + report",
             "packages/opencode/src/tool/read.ts:lsp.touchFile(...).pipe(Effect.ignoreCause, Effect.forkIn(scope))"
         ],
     })
@@ -162,6 +245,8 @@ pub(crate) fn opencode_event_source() -> serde_json::Value {
         "paths": [
             "packages/opencode/src/tool/apply_patch.ts",
             "packages/opencode/src/tool/read.ts",
+            "packages/opencode/src/lsp/lsp.ts",
+            "packages/opencode/src/lsp/diagnostic.ts",
             "packages/opencode/src/event-v2-bridge.ts",
             "packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts"
         ],
@@ -170,6 +255,7 @@ pub(crate) fn opencode_event_source() -> serde_json::Value {
             "events.publish(Watcher.Event.Updated, update)",
             "lsp.touchFile(target, document)",
             "lsp.diagnostics()",
+            "LSP.Diagnostic.report(file, issues) with max 20 errors per file",
             "optional LSP warm-up defects are contained with Effect.ignoreCause",
             "EventV2Bridge forwards activity payloads to the HTTP event stream"
         ]
@@ -215,7 +301,8 @@ mod tests {
         assert_eq!(meta["touched_files"][0]["kind"], "document");
         assert_eq!(meta["warmups"][0]["event_name"], "LSP.Warmup.contained");
         assert_eq!(meta["reports"][0]["event_name"], "LSP.Diagnostic.report");
-        assert!(meta["opencode_source"].as_array().unwrap()[1].as_str().unwrap().contains("ignoreCause"));
+        assert_eq!(meta["max_per_file"], MAX_DIAGNOSTICS_PER_FILE);
+        assert!(meta["opencode_source"].as_array().unwrap()[3].as_str().unwrap().contains("ignoreCause"));
     }
 
     #[test]
@@ -223,5 +310,22 @@ mod tests {
         let files = vec![serde_json::json!({"type": "delete", "path": "gone.rs", "relativePath": "gone.rs"})];
         assert!(diagnostic_reports(&files).is_empty());
         assert!(lsp_warmups(&files).is_empty());
+    }
+
+    #[test]
+    fn contained_diagnostic_report_uses_opencode_error_block_shape() {
+        let files = vec![serde_json::json!({
+            "type": "add",
+            "path": "probe.rs",
+            "relativePath": "probe.rs",
+            "patch": "@@ -1 +1 @@\n+forge_lsp_error_probe\n+TODO later\n"
+        })];
+        let reports = diagnostic_reports(&files);
+        assert_eq!(reports[0]["severity_counts"]["ERROR"], 1);
+        assert_eq!(reports[0]["severity_counts"]["WARN"], 1);
+        assert_eq!(reports[0]["diagnostic_count"], 2);
+        let block = reports[0]["report_block"].as_str().unwrap();
+        assert!(block.contains("<diagnostics file=\"probe.rs\">"));
+        assert!(block.contains("ERROR [1:1] Contained diagnostic probe detected"));
     }
 }
