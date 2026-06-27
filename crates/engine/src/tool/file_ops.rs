@@ -34,8 +34,7 @@ impl ToolExecutor {
     }
 
     pub async fn execute_file_write(&self, request: ToolRequest) -> Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args { path: String, content: String }
+        #[derive(serde::Deserialize)] struct Args { path: String, content: String }
         let args: Args = serde_json::from_value(request.args)?;
         let full_path = self.resolve_path(&args.path)?;
         let existed = full_path.exists();
@@ -60,20 +59,11 @@ impl ToolExecutor {
         metadata.insert("formatter_status".to_string(), formatter_status);
         metadata.insert("opencode_formatter_source".to_string(), opencode_formatter_source());
         metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::FileWrite,
-            success: true,
-            output: format!("Written {} bytes to {}", final_bytes.len(), metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")),
-            error: None,
-            duration_ms: 0,
-            metadata,
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::FileWrite, success: true, output: format!("Written {} bytes to {}", final_bytes.len(), metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")), error: None, duration_ms: 0, metadata })
     }
 
     pub async fn execute_file_edit(&self, request: ToolRequest) -> Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args { path: String, old_string: String, new_string: String, replace_all: Option<bool> }
+        #[derive(serde::Deserialize)] struct Args { path: String, old_string: String, new_string: String, replace_all: Option<bool> }
         let args: Args = serde_json::from_value(request.args)?;
         let full_path = self.resolve_path(&args.path)?;
         let bytes = fs::read(&full_path).await?;
@@ -82,15 +72,7 @@ impl ToolExecutor {
         let replace_all = args.replace_all.unwrap_or(false);
         let new_content = if replace_all { content.replace(&args.old_string, &args.new_string) } else { content.replacen(&args.old_string, &args.new_string, 1) };
         if new_content == content {
-            return Ok(ToolResult {
-                id: request.id,
-                kind: ToolKind::FileEdit,
-                success: false,
-                output: "Old string not found in file".to_string(),
-                error: Some("Old string not found".to_string()),
-                duration_ms: 0,
-                metadata: HashMap::new(),
-            });
+            return Ok(ToolResult { id: request.id, kind: ToolKind::FileEdit, success: false, output: "Old string not found in file".to_string(), error: Some("Old string not found".to_string()), duration_ms: 0, metadata: HashMap::new() });
         }
         let keep_bom = existing_bom || new_content.starts_with(UTF8_BOM);
         let write_content = join_bom(&new_content, keep_bom);
@@ -123,50 +105,31 @@ impl ToolExecutor {
     }
 
     pub async fn execute_file_list(&self, request: ToolRequest) -> Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args { path: Option<String>, depth: Option<usize> }
+        #[derive(serde::Deserialize)] struct Args { path: Option<String>, depth: Option<usize> }
         let args: Args = serde_json::from_value(request.args)?;
-        let path = args.path.unwrap_or_else(|| ".".to_string());
+        let path = workspace_path(args.path);
         let full_path = self.resolve_path(&path)?;
         let max_depth = args.depth.unwrap_or(3);
         let mut entries = Vec::new();
         self.list_dir_recursive(&full_path, Path::new(""), 0, max_depth, &mut entries).await?;
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::FileList,
-            success: true,
-            output: serde_json::to_string_pretty(&entries)?,
-            error: None,
-            duration_ms: 0,
-            metadata: HashMap::from([("path".to_string(), serde_json::json!(path)), ("count".to_string(), serde_json::json!(entries.len()))]),
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::FileList, success: true, output: serde_json::to_string_pretty(&entries)?, error: None, duration_ms: 0, metadata: HashMap::from([("path".to_string(), serde_json::json!(path)), ("count".to_string(), serde_json::json!(entries.len()))]) })
     }
 
     pub async fn execute_file_glob(&self, request: ToolRequest) -> Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args { pattern: String, path: Option<String> }
+        #[derive(serde::Deserialize)] struct Args { pattern: String, path: Option<String> }
         let args: Args = serde_json::from_value(request.args)?;
-        let path = args.path.unwrap_or_else(|| ".".to_string());
+        let path = workspace_path(args.path);
         let full_path = self.resolve_path(&path)?;
         let pattern = args.pattern.clone();
         let mut matches = Vec::new();
         for entry in glob::glob(full_path.join(&pattern).to_str().unwrap())? { matches.push(entry?.to_string_lossy().to_string()); }
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::FileGlob,
-            success: true,
-            output: serde_json::to_string_pretty(&matches)?,
-            error: None,
-            duration_ms: 0,
-            metadata: HashMap::from([("pattern".to_string(), serde_json::json!(pattern)), ("count".to_string(), serde_json::json!(matches.len()))]),
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::FileGlob, success: true, output: serde_json::to_string_pretty(&matches)?, error: None, duration_ms: 0, metadata: HashMap::from([("pattern".to_string(), serde_json::json!(pattern)), ("count".to_string(), serde_json::json!(matches.len()))]) })
     }
 
     pub async fn execute_file_search(&self, request: ToolRequest) -> Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args { pattern: String, path: Option<String>, file_pattern: Option<String> }
+        #[derive(serde::Deserialize)] struct Args { pattern: String, path: Option<String>, file_pattern: Option<String> }
         let args: Args = serde_json::from_value(request.args)?;
-        let path = args.path.unwrap_or_else(|| ".".to_string());
+        let path = workspace_path(args.path);
         let full_path = self.resolve_path(&path)?;
         let mut results = Vec::new();
         let file_pattern = args.file_pattern.unwrap_or_else(|| "**".to_string());
@@ -180,19 +143,12 @@ impl ToolExecutor {
                 }
             }
         }
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::FileSearch,
-            success: true,
-            output: serde_json::to_string_pretty(&results)?,
-            error: None,
-            duration_ms: 0,
-            metadata: HashMap::from([("pattern".to_string(), serde_json::json!(args.pattern)), ("matches".to_string(), serde_json::json!(results.len()))]),
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::FileSearch, success: true, output: serde_json::to_string_pretty(&results)?, error: None, duration_ms: 0, metadata: HashMap::from([("pattern".to_string(), serde_json::json!(args.pattern)), ("matches".to_string(), serde_json::json!(results.len()))]) })
     }
 
     pub fn resolve_path(&self, path: &str) -> Result<PathBuf> {
-        let path = Path::new(path);
+        let normalized = workspace_path(Some(path.to_string()));
+        let path = Path::new(&normalized);
         let full = if path.is_absolute() { path.to_path_buf() } else { Path::new(&self.workspace_root).join(path) };
         let canonical = full.canonicalize().or_else(|_| Ok::<PathBuf, anyhow::Error>(full.clone()))?;
         let workspace_canonical = Path::new(&self.workspace_root).canonicalize()?;
@@ -210,23 +166,25 @@ impl ToolExecutor {
             let name = entry.file_name().to_string_lossy().to_string();
             if is_dir && (name == ".git" || name == "target" || name == "node_modules") { continue; }
             entries.push(serde_json::json!({"name": name, "path": rel_path.to_string_lossy(), "is_dir": is_dir}));
-            if is_dir {
-                let fut = Box::pin(self.list_dir_recursive(&path, &rel_path, depth + 1, max_depth, entries));
-                fut.await?;
-            }
+            if is_dir { let fut = Box::pin(self.list_dir_recursive(&path, &rel_path, depth + 1, max_depth, entries)); fut.await?; }
         }
         Ok(())
     }
 }
 
+fn workspace_path(path: Option<String>) -> String {
+    let raw = path.unwrap_or_else(|| ".".to_string());
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed == "/" { ".".to_string() } else { trimmed.to_string() }
+}
+
 fn path_arg(value: &serde_json::Value) -> Result<String> {
-    if let Some(path) = value.as_str() { return Ok(path.to_string()); }
-    if let Some(path) = value.get("path").and_then(serde_json::Value::as_str) { return Ok(path.to_string()); }
+    if let Some(path) = value.as_str() { return Ok(workspace_path(Some(path.to_string()))); }
+    if let Some(path) = value.get("path").and_then(serde_json::Value::as_str) { return Ok(workspace_path(Some(path.to_string()))); }
     anyhow::bail!("expected path string or object with path")
 }
 
 fn line_count(value: &str) -> usize { value.lines().count().max(1) }
-
 fn file_change_record(path: &str, kind: &str, additions: usize, deletions: usize, bom: bool) -> serde_json::Value { serde_json::json!({"type": kind, "path": path, "relativePath": path, "additions": additions, "deletions": deletions, "bom": bom}) }
 
 fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_json::Value> {
@@ -238,66 +196,30 @@ fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_j
     let diagnostic_reports = patch_events::diagnostic_reports(&files);
     let diagnostics = patch_events::diagnostics_metadata(&files);
     HashMap::from([
-        ("files".to_string(), serde_json::json!(files)),
-        ("file_events".to_string(), serde_json::json!(file_events)),
-        ("opencode_event_publisher".to_string(), serde_json::json!("opencode.file_tool")),
-        ("opencode_event_source".to_string(), patch_events::opencode_event_source()),
-        ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)),
-        ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
-        ("opencode_lsp_warmups".to_string(), serde_json::json!(lsp_warmups)),
-        ("opencode_lsp_diagnostics".to_string(), serde_json::json!(diagnostic_reports)),
-        ("lsp_touches".to_string(), serde_json::json!(lsp_touches)),
-        ("diagnostics".to_string(), diagnostics),
+        ("files".to_string(), serde_json::json!(files)), ("file_events".to_string(), serde_json::json!(file_events)),
+        ("opencode_event_publisher".to_string(), serde_json::json!("opencode.file_tool")), ("opencode_event_source".to_string(), patch_events::opencode_event_source()),
+        ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)), ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
+        ("opencode_lsp_warmups".to_string(), serde_json::json!(lsp_warmups)), ("opencode_lsp_diagnostics".to_string(), serde_json::json!(diagnostic_reports)),
+        ("lsp_touches".to_string(), serde_json::json!(lsp_touches)), ("diagnostics".to_string(), diagnostics),
     ])
 }
 
 async fn format_file_like_opencode(path: &Path, desired_bom: bool) -> serde_json::Value {
-    let Some(formatter) = formatter_for(path) else {
-        return serde_json::json!({"name": serde_json::Value::Null,"matched": false,"enabled": false,"applied": false,"status": "no_formatter","source": "packages/opencode/src/format/index.ts: Format.file(filepath) returns false when no formatter matches extension"});
-    };
-    if Command::new(formatter.command).arg("--version").output().await.is_err() {
-        return serde_json::json!({"name": formatter.name,"matched": true,"enabled": false,"applied": false,"status": "formatter_unavailable","command": formatter.command,"extensions": formatter.extensions,"source": "packages/opencode/src/format/index.ts: formatter commands are probed and disabled when unavailable"});
-    }
+    let Some(formatter) = formatter_for(path) else { return serde_json::json!({"name": serde_json::Value::Null,"matched": false,"enabled": false,"applied": false,"status": "no_formatter","source": "packages/opencode/src/format/index.ts: Format.file(filepath) returns false when no formatter matches extension"}); };
+    if Command::new(formatter.command).arg("--version").output().await.is_err() { return serde_json::json!({"name": formatter.name,"matched": true,"enabled": false,"applied": false,"status": "formatter_unavailable","command": formatter.command,"extensions": formatter.extensions,"source": "packages/opencode/src/format/index.ts: formatter commands are probed and disabled when unavailable"}); }
     let output = Command::new(formatter.command).args(formatter.args).arg(path).output().await;
     match output {
-        Ok(result) => {
-            let _ = sync_bom_to_file(path, desired_bom).await;
-            serde_json::json!({"name": formatter.name,"matched": true,"enabled": true,"applied": result.status.success(),"status": if result.status.success() { "formatted" } else { "formatter_failed_contained" },"exit_code": result.status.code(),"command": formatter.command,"extensions": formatter.extensions,"bom_resynced": true,"source": "packages/opencode/src/tool/write.ts and edit.ts: if format.file(filepath) succeeds, sync BOM before events"})
-        }
+        Ok(result) => { let _ = sync_bom_to_file(path, desired_bom).await; serde_json::json!({"name": formatter.name,"matched": true,"enabled": true,"applied": result.status.success(),"status": if result.status.success() { "formatted" } else { "formatter_failed_contained" },"exit_code": result.status.code(),"command": formatter.command,"extensions": formatter.extensions,"bom_resynced": true,"source": "packages/opencode/src/tool/write.ts and edit.ts: if format.file(filepath) succeeds, sync BOM before events"}) }
         Err(error) => serde_json::json!({"name": formatter.name,"matched": true,"enabled": true,"applied": false,"status": "spawn_failed_contained","command": formatter.command,"extensions": formatter.extensions,"error": error.to_string(),"source": "packages/opencode/src/format/index.ts: formatter spawn errors are logged/contained"}),
     }
 }
 
 struct FormatterSpec { name: &'static str, command: &'static str, args: &'static [&'static str], extensions: &'static [&'static str] }
-
-fn formatter_for(path: &Path) -> Option<FormatterSpec> {
-    let ext = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
-    match ext { "rs" => Some(FormatterSpec { name: "rustfmt", command: "rustfmt", args: &[], extensions: &["rs"] }), _ => None }
-}
-
-async fn sync_bom_to_file(path: &Path, desired_bom: bool) -> Result<()> {
-    let bytes = fs::read(path).await?;
-    let normalized = normalize_bom_bytes(&bytes, desired_bom);
-    if normalized != bytes { fs::write(path, normalized).await?; }
-    Ok(())
-}
-
-fn normalize_bom_bytes(bytes: &[u8], desired_bom: bool) -> Vec<u8> {
-    let mut body = bytes;
-    while body.starts_with(UTF8_BOM_BYTES) { body = &body[UTF8_BOM_BYTES.len()..]; }
-    if desired_bom { let mut result = UTF8_BOM_BYTES.to_vec(); result.extend_from_slice(body); result } else { body.to_vec() }
-}
-
+fn formatter_for(path: &Path) -> Option<FormatterSpec> { let ext = path.extension().and_then(|value| value.to_str()).unwrap_or_default(); match ext { "rs" => Some(FormatterSpec { name: "rustfmt", command: "rustfmt", args: &[], extensions: &["rs"] }), _ => None } }
+async fn sync_bom_to_file(path: &Path, desired_bom: bool) -> Result<()> { let bytes = fs::read(path).await?; let normalized = normalize_bom_bytes(&bytes, desired_bom); if normalized != bytes { fs::write(path, normalized).await?; } Ok(()) }
+fn normalize_bom_bytes(bytes: &[u8], desired_bom: bool) -> Vec<u8> { let mut body = bytes; while body.starts_with(UTF8_BOM_BYTES) { body = &body[UTF8_BOM_BYTES.len()..]; } if desired_bom { let mut result = UTF8_BOM_BYTES.to_vec(); result.extend_from_slice(body); result } else { body.to_vec() } }
 fn has_utf8_bom(content: &[u8]) -> bool { content.starts_with(UTF8_BOM_BYTES) }
-
 fn split_bom(text: &str) -> (bool, String) { let stripped = text.trim_start_matches(UTF8_BOM); (stripped.len() != text.len(), stripped.to_string()) }
-
 fn join_bom(text: &str, bom: bool) -> String { let (_, stripped) = split_bom(text); if bom { format!("{UTF8_BOM}{stripped}") } else { stripped } }
-
-fn opencode_formatter_source() -> serde_json::Value {
-    serde_json::json!({"paths": ["packages/opencode/src/format/index.ts", "packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["Format.file(filepath) probes matching formatter commands by extension", "formatter spawn failures are contained", "write/edit call format.file after writing", "Bom.syncFile restores the desired BOM after formatter mutation"]})
-}
-
-fn opencode_file_tool_source() -> serde_json::Value {
-    serde_json::json!({"paths": ["packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/opencode/src/tool/apply_patch.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["events.publish(FileSystem.Event.Edited)", "events.publish(Watcher.Event.Updated)", "lsp.touchFile(document)", "lsp.diagnostics() -> LSP.Diagnostic.report", "FileMutation.writeTextPreservingBom preserves an existing/input UTF-8 BOM and emits at most one BOM", "Format.file(filepath) runs after write/edit and BOM is resynced"]})
-}
+fn opencode_formatter_source() -> serde_json::Value { serde_json::json!({"paths": ["packages/opencode/src/format/index.ts", "packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["Format.file(filepath) probes matching formatter commands by extension", "formatter spawn failures are contained", "write/edit call format.file after writing", "Bom.syncFile restores the desired BOM after formatter mutation"]}) }
+fn opencode_file_tool_source() -> serde_json::Value { serde_json::json!({"paths": ["packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/opencode/src/tool/apply_patch.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["events.publish(FileSystem.Event.Edited)", "events.publish(Watcher.Event.Updated)", "lsp.touchFile(document)", "lsp.diagnostics() -> LSP.Diagnostic.report", "FileMutation.writeTextPreservingBom preserves an existing/input UTF-8 BOM and emits at most one BOM", "Format.file(filepath) runs after write/edit and BOM is resynced"]}) }
