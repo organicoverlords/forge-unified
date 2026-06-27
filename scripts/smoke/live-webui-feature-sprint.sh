@@ -80,7 +80,7 @@ wait_for_webui() {
 
 wait_for_webui
 
-CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural lsp warmup compaction lifecycle event proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural mutable toolpart lifecycle proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
@@ -108,7 +108,8 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "
 for marker in "event: run-start" "event: run-finish" "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "file_write" "file_edit" "file_delete" "file-tool-event-proof.txt" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "packages/opencode/src/session/processor.ts" "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle" "ToolStatePending" "ToolStateRunning" "ToolStateCompleted" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
 if test -e "$FILE_TOOL_PATH"; then echo "::error::file tool proof file remained after delete"; exit 5; fi
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"identifier":"FilePart"' '"path":"packages/schema/src/v1/session.ts"' '"tool":"file_write"' "opencode_session_processor" "packages/opencode/src/session/processor.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"identifier":"FilePart"' '"path":"packages/schema/src/v1/session.ts"' '"tool":"file_write"' "opencode_session_processor" "packages/opencode/src/session/processor.ts" "mutable_tool_part_updates" "opencode_mutable_tool_part_source" "before_status" "after_status" "same ToolPart row updated by callID"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+jq -e '[.messages[]?.metadata.mutable_tool_part_updates[]? | select(.before_status == "running" and .after_status == "completed")] | length >= 1' "$CONVERSATION_JSON" >/dev/null
 
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
@@ -128,7 +129,7 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural lsp warmup compaction lifecycle event proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart" "packages/opencode/src/session/processor.ts" "OpenCode SessionProcessor lifecycle receipts"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural mutable toolpart lifecycle proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart" "packages/opencode/src/session/processor.ts" "OpenCode SessionProcessor lifecycle receipts"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
