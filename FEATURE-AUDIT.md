@@ -10,7 +10,12 @@ PR: #3 into `master`
 Latest fully green code HEAD: `6a34928048b86e6d7b91468789eeef4489744ae8`
 Latest post-edit event proof artifact: `/mnt/data/live-webui-feature-sprint-proof-6a34928.zip`
 
-Latest fully green baselines include `805406542b55f803924401459f881f5df43680b7` for the modern dark Codex/OpenCode WebUI theme and `6a34928048b86e6d7b91468789eeef4489744ae8` for OpenCode post-edit event and LSP touch receipts. The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
+Latest fully green baselines include:
+
+- `805406542b55f803924401459f881f5df43680b7` — modern dark Codex/OpenCode-style WebUI theme.
+- `6a34928048b86e6d7b91468789eeef4489744ae8` — OpenCode post-edit event and LSP touch receipts.
+
+The latest docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
 
 ## Source-first OpenCode rule
 
@@ -30,17 +35,17 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 - `apply_patch` returns a pending edit approval and does not write files before approval.
 - Approval re-runs the same patch with `approved=true` and only then applies add/update/delete/move mutations inside the workspace.
 - `apply_patch` records diff metadata, edit-permission metadata, pending/approved approval state, parsed hunk metadata, and OpenCode-style `A/D/M` summary lines.
-- `apply_patch` records OpenCode-shaped `FileSystem.Event.Edited`, `Watcher.Event.Updated`, and `lsp.touchFile(..., "document")` receipts after approved mutation.
+- `apply_patch` records OpenCode-shaped post-edit event receipts after approved mutation.
 - `apply_patch` file changes appear as WebUI file cards only after approval.
 - Normal proof prompts cover edit approval, approved file creation, repository inspection, snapshot, compaction, and screenshot artifacts.
 - Repo-inspection tool cards show compact visible output while preserving raw JSON in `metadata.raw_output`.
-- OpenCode-style `TextPart`, `ReasoningPart`, `SnapshotPart`, `CompactionPart`, `FilePart`, `ToolPart`, and `PatchPart` persistence/rendering are proven green through `6a34928`.
+- OpenCode-style session parts are proven green through `6a34928`.
 - CI and Build Proof enforce a hard 500-line source file limit.
 
 ## Partial / do not overclaim
 
 - `apply_patch` is still not full upstream parity. Current Forge implementation gates writes behind approval and records post-edit event receipts, but it does not yet implement a real watcher/file-edited event bus, live LSP diagnostics, full BOM preservation, or formatter hooks.
-- File-change cards and OpenCode event receipts are implemented, but a live event bus equivalent to OpenCode's `FileSystem.Event.Edited` and `Watcher.Event.Updated` is not wired yet.
+- File-change cards and OpenCode event receipts are implemented, but a live event bus equivalent to upstream is not wired yet.
 - Orchestrator prompting is not yet fully copied from OpenCode.
 - Provider routing and fallback are basic; receipts and policy are immature.
 - Conversation persistence is mostly in-memory plus snapshots.
