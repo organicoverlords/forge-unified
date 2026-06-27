@@ -8,7 +8,7 @@ Updated: 2026-06-27
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest work after that proof: OpenCode-style durable part base fields in `crates/engine/src/tool_parts.rs`.
+- Latest work after that proof: OpenCode-style durable part base fields and OpenCode-style repeated-tool doom-loop interruption.
 
 ## Accepted live full benchmark proof
 
@@ -35,10 +35,11 @@ Proof requirements satisfied by the older accepted artifact:
 - Added clean no-tools finalization from a compact evidence digest when the model exhausts tool rounds.
 - Added OpenCode-style provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
 - Added deterministic OpenCode-style `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
+- Added an OpenCode-style repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
 
 ## OpenCode source anchors retained
 
-- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, and same-call ToolPart update semantics.
+- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, same-call ToolPart update semantics, and `DOOM_LOOP_THRESHOLD` repeated tool-call detection.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — `partBase`, ToolPart / ToolState / FilePart schema shape.
 - `anomalyco/opencode:packages/schema/src/session-id.ts` — `SessionID` prefix semantics.
 - `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — EventV2Bridge receipt behavior.
@@ -51,6 +52,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
 - Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, and schema-compatible part base fields.
+- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops while preserving an explicit OpenCode source marker.
 - Native watcher publishes `watcher.started` and live `watcher.updated` events.
 - LSP diagnostic envelopes and report blocks are visible in the event rail, but live language-server collection remains incomplete.
 - Conversation compaction emits OpenCode `session.next.compaction.started` and `session.next.compaction.ended` receipts.
@@ -58,6 +60,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
+- The doom-loop guard is detection/interruption only; it does not yet ask the OpenCode-style permission question to continue.
 - Full provider-side OpenCode processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
 - Full OpenCode formatter catalog/config/runtime remains partial.
@@ -68,7 +71,8 @@ Proof requirements satisfied by the older accepted artifact:
 
 1. Prove the latest HEAD with same-head CI, Build Proof, and Live WebUI Feature Sprint.
 2. Prove provider-selected tool results visibly carry provider metadata and schema-compatible part IDs in WebUI screenshots/DOM.
-3. Continue live LSP diagnostics.
-4. Continue full formatter registry/config/runtime parity.
-5. Continue deeper watcher parity.
-6. Continue NIM-backed compaction summaries.
+3. Add the full OpenCode doom-loop permission question/recovery path.
+4. Continue live LSP diagnostics.
+5. Continue full formatter registry/config/runtime parity.
+6. Continue deeper watcher parity.
+7. Continue NIM-backed compaction summaries.
