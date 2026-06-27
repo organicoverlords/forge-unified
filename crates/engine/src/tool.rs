@@ -92,8 +92,8 @@ impl ToolExecutor {
         values.iter().map(|value| {
             let mut payload = value.clone();
             if let Some(object) = payload.as_object_mut() {
-                object.insert("tool_id".to_string(), json!(tool_id));
-                object.insert("tool_kind".to_string(), json!(tool_kind));
+                object.insert("tool_id".to_string(), json!(tool_id.clone()));
+                object.insert("tool_kind".to_string(), json!(tool_kind.clone()));
                 object.insert("metadata_key".to_string(), json!(key));
             }
             self.change_bus.publish(event_type, "opencode.apply_patch", payload)
