@@ -73,7 +73,11 @@ impl ToolExecutor {
         }
 
         let file_events = file_change_events(&files);
-        let output = format!("Success. Updated the following files:\n{}", summary_lines.join("\n"));
+        let output = format!(
+            "Success. Updated the following files:\n{}\n{}",
+            change_count_summary(summary_lines.len()),
+            summary_lines.join("\n")
+        );
         Ok(ToolResult {
             id: request.id,
             kind: ToolKind::ApplyPatch,
@@ -102,6 +106,10 @@ impl ToolExecutor {
             ]),
         })
     }
+}
+
+fn change_count_summary(count: usize) -> String {
+    if count == 1 { "Updated 1 file".to_string() } else { format!("Updated {count} files") }
 }
 
 fn apply_patch_pending(
@@ -379,6 +387,12 @@ mod tests {
         assert_eq!(request["metadata"]["files"][0]["relativePath"], "proof.txt");
         assert_eq!(request["status"], "pending");
         assert_eq!(request["interactive"], true);
+    }
+
+    #[test]
+    fn summarizes_changed_file_count() {
+        assert_eq!(change_count_summary(1), "Updated 1 file");
+        assert_eq!(change_count_summary(2), "Updated 2 files");
     }
 
     fn patch_summary_lines(hunks: &[PatchHunk]) -> Vec<String> {
