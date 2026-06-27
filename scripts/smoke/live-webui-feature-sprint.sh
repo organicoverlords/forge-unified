@@ -57,4 +57,6 @@ grep -Fq 'LIVE_NIM_BROWSER_PROOF' "$MODEL_STREAM"
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$CONVERSATION_JSON" >/dev/null
 MODEL_ID="$(jq -r '.model' "$CONVERSATION_JSON")"
-echo "conversation=$CONV_ID model=$MODEL_ID" > "$PROOF_DIR/live-proof-status.txt"
+bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "$MODEL_ID" "$PROOF_DIR"
+echo "conversation=$CONV_ID model=$MODEL_ID screenshot=$PROOF_DIR/webui.png event_rail=$PROOF_DIR/event-rail.png" > "$PROOF_DIR/live-proof-status.txt"
+echo "LIVE model-backed browser proof passed: $BASE conversation=$CONV_ID model=$MODEL_ID"
