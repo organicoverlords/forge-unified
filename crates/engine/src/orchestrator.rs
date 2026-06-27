@@ -17,16 +17,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct Orchestrator {
-    state: Arc<RwLock<EngineState>>,
-    router: Arc<Router>,
-    tool_executor: Arc<ToolExecutor>,
-    conversation_mgr: Arc<RwLock<ConversationManager>>,
-    strategy: Arc<StrategyEngine>,
-    safety: Arc<SafetyChecker>,
-    #[allow(dead_code)]
-    snapshot: Arc<SnapshotManager>,
-    #[allow(dead_code)]
-    config: Config,
+    state: Arc<RwLock<EngineState>>, router: Arc<Router>, tool_executor: Arc<ToolExecutor>,
+    conversation_mgr: Arc<RwLock<ConversationManager>>, strategy: Arc<StrategyEngine>, safety: Arc<SafetyChecker>,
+    #[allow(dead_code)] snapshot: Arc<SnapshotManager>, #[allow(dead_code)] config: Config,
 }
 
 impl Orchestrator {
@@ -50,9 +43,7 @@ impl Orchestrator {
         {
             let mut mgr = self.conversation_mgr.write().await;
             if let Some(conv) = mgr.get_mut(&conversation_id) {
-                conv.provider = Some(provider.clone());
-                conv.model = Some(model.clone());
-                conv.updated_at = chrono::Utc::now();
+                conv.provider = Some(provider.clone()); conv.model = Some(model.clone()); conv.updated_at = chrono::Utc::now();
             }
             mgr.add_user_message(&conversation_id, user_message.clone());
         }
@@ -68,11 +59,7 @@ impl Orchestrator {
             let request = ChatRequest { model: model.clone(), messages, temperature: Some(0.2), max_tokens: Some(4096), stream: false, tools: Some(crate::tool::tool_definitions()), tool_choice: Some("auto".to_string()) };
             let response = match self.router.chat(request).await {
                 Ok(r) => r,
-                Err(e) => {
-                    tracing::warn!("LLM route failed: {}", e);
-                    self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[Provider route failed: {}]", e));
-                    break;
-                }
+                Err(e) => { tracing::warn!("LLM route failed: {}", e); self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[Provider route failed: {}]", e)); break; }
             };
             self.conversation_mgr.write().await.add_assistant_message_with_tools(&conversation_id, response.message.content.clone(), response.message.tool_calls.clone());
             if response.message.tool_calls.as_ref().map(|t| t.is_empty()).unwrap_or(true) { break; }
@@ -85,9 +72,10 @@ impl Orchestrator {
             let results = if decision.strategy == crate::model_caps::ToolStrategy::Serial {
                 let mut results = Vec::new();
                 for req in allowed_requests {
-                    match self.tool_executor.execute(req).await {
-                        Ok(r) => { total_tool_calls += 1; if !r.success { total_tool_failures += 1; } results.push(r); }
-                        Err(_) => total_tool_failures += 1,
+                    total_tool_calls += 1;
+                    match self.tool_executor.execute(req.clone()).await {
+                        Ok(r) => { if !r.success { total_tool_failures += 1; } results.push(r); }
+                        Err(error) => { total_tool_failures += 1; results.push(tool_error_result(req, error.to_string())); }
                     }
                 }
                 results
@@ -115,12 +103,14 @@ impl Orchestrator {
     pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.tool_executor.subscribe_change_events() }
 }
 
+fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
+    ToolResult { id: req.id, kind: req.kind, success: false, output: format!("Tool execution failed: {error}"), error: Some(error), duration_ms: 0, metadata: HashMap::from([("tool_execution_error".to_string(), serde_json::json!(true))]) }
+}
+
 fn build_system_prompt(user_message: &str) -> String {
     let lower = user_message.to_ascii_lowercase();
-    let repo_work = ["repo", "repository", "inspect", "build", "fix", "patch", "webui", "test", "phase", "files", "git"]
-        .iter()
-        .any(|needle| lower.contains(needle));
+    let repo_work = ["repo", "repository", "inspect", "build", "fix", "patch", "webui", "test", "phase", "files", "git"].iter().any(|needle| lower.contains(needle));
     let base = "You are Forge, an OpenCode-style coding agent. Use available tools for repository work, keep file changes low-risk, and keep final answers brief.";
     if !repo_work { return base.to_string(); }
-    format!("{base} For repository tasks, call tools before answering. Inspect the repo first with repo_info, file_list, file_search, file_read, and bounded shell_command as needed. For multi-phase prompts, complete phases in order, verify file operations by reading or listing files, run a validation command when feasible, and then summarize what changed, tests run, risks, and confidence. Do not pretend to have inspected files or run commands without tool results.")
+    format!("{base} For repository tasks, call tools before answering. Inspect the repo first with repo_info, file_list, file_search, file_read, and bounded shell_command as needed. Treat tool errors as evidence and choose another tool or path instead of repeating the same failing call. For multi-phase prompts, complete phases in order, but once you have enough evidence, stop searching and write the requested final reports. Verify file operations by reading or listing files, run validation when feasible, and summarize changes, tests, risks, and confidence. Do not pretend to have inspected files or run commands without tool results.")
 }
