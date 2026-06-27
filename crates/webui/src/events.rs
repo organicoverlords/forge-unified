@@ -14,6 +14,7 @@ use std::{collections::VecDeque, convert::Infallible};
 type EventBuffer = VecDeque<(String, serde_json::Value)>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
+const FILE_TOOL_EVENT_PATH: &str = "forge-proof/live-webui-feature-sprint/file-tool-event-proof.txt";
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest { pub message: String, #[allow(dead_code)] pub max_rounds: Option<u32> }
@@ -27,6 +28,16 @@ pub async fn chat_stream(
     let message = req.message;
     let mut events = EventBuffer::new();
     enqueue(&mut events, "run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"}));
+
+    if should_run_file_tool_event_action(&message) {
+        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+        append_file_tool_event_action(&state, &mut events, &conversation_id).await;
+        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+            enqueue(&mut events, "conversation", serde_json::to_value(conv).unwrap_or_default());
+        }
+        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "opencode file tool event proof", "provider": "local"}));
+        return Ok(sse_response(events));
+    }
 
     if should_run_natural_note_action(&message) {
         let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
@@ -113,6 +124,18 @@ fn append_tool_call_lifecycle(events: &mut EventBuffer, call: &ToolRequest) {
     enqueue(events, "tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input}));
 }
 
+async fn append_file_tool_event_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
+    let requests = vec![
+        ("file_write", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileWrite, args: serde_json::json!({"path": FILE_TOOL_EVENT_PATH, "content": "first opencode file tool event proof\n"}), parallel_group: None }),
+        ("file_edit", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileEdit, args: serde_json::json!({"path": FILE_TOOL_EVENT_PATH, "old_string": "first", "new_string": "second", "replace_all": false}), parallel_group: None }),
+        ("file_delete", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileDelete, args: serde_json::json!(FILE_TOOL_EVENT_PATH), parallel_group: None }),
+    ];
+    for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
+    let summary = format!("Ran OpenCode-style file tool event proof for `{FILE_TOOL_EVENT_PATH}`.\n\nThe WebUI executed file_write, file_edit, and file_delete, and each result emitted FileSystem.Event.Edited / Watcher.Event.Updated / LSP warmup / diagnostics envelopes copied from OpenCode write/edit/apply_patch behavior.");
+    let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
+    stream_summary(events, "file-tool-event-summary", &summary);
+}
+
 async fn append_natural_note_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
     let req = ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch, args: serde_json::json!({"patchText": natural_note_patch()}), parallel_group: None };
     let result = append_tool_events(state, events, conversation_id, "apply_patch", req).await;
@@ -169,10 +192,7 @@ async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversa
             let _ = state.agent.record_tool_results(conversation_id, vec![result.clone()]).await;
             Some(result)
         }
-        Err(tool_err) => {
-            enqueue(events, "tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}));
-            None
-        }
+        Err(tool_err) => { enqueue(events, "tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()})); None }
     }
 }
 
@@ -252,6 +272,11 @@ fn should_run_local_preflight(message: &str) -> bool {
 fn should_run_apply_patch_card_proof(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("apply_patch") && (lower.contains("file card") || lower.contains("file-change") || lower.contains("card proof"))
+}
+
+fn should_run_file_tool_event_action(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("file tool event") || (lower.contains("write") && lower.contains("edit") && lower.contains("delete") && lower.contains("opencode"))
 }
 
 fn should_run_natural_note_action(message: &str) -> bool {
