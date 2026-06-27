@@ -31,10 +31,7 @@ pub async fn chat_stream(
         |state| async move {
             match state {
                 ChatEventState::Start { state, conversation_id, message } => Some((
-                    event("run-start", serde_json::json!({
-                        "conversation_id": conversation_id.0.to_string(),
-                        "phase": "started"
-                    })),
+                    event("run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"})),
                     ChatEventState::Run { state, conversation_id, message },
                 )),
                 ChatEventState::Run { state, conversation_id, message } => {
@@ -45,11 +42,7 @@ pub async fn chat_stream(
                         if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
                             events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
                         }
-                        events.push_back(event("run-finish", serde_json::json!({
-                            "status": "completed",
-                            "task": "natural file creation",
-                            "provider": "local"
-                        })));
+                        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "natural file creation", "provider": "local"})));
                         return ChatEventState::emit_next(events);
                     }
                     if should_run_repo_inspection_action(&message) {
@@ -58,11 +51,7 @@ pub async fn chat_stream(
                         if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
                             events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
                         }
-                        events.push_back(event("run-finish", serde_json::json!({
-                            "status": "completed",
-                            "task": "repository inspection",
-                            "provider": "local"
-                        })));
+                        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "repository inspection", "provider": "local"})));
                         return ChatEventState::emit_next(events);
                     }
 
@@ -74,17 +63,11 @@ pub async fn chat_stream(
                                 for msg in &conv.messages {
                                     match msg.role {
                                         MessageRole::Assistant => {
-                                            if msg.metadata
-                                                .get("type")
-                                                .and_then(|value| value.as_str())
-                                                == Some("provider-error")
-                                            {
+                                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
                                                 run_local_preflight = true;
                                             }
                                             if let Some(calls) = &msg.tool_calls {
-                                                for call in calls {
-                                                    append_tool_call_lifecycle(&mut events, call);
-                                                }
+                                                for call in calls { append_tool_call_lifecycle(&mut events, call); }
                                             }
                                         }
                                         MessageRole::Tool => {
@@ -103,26 +86,17 @@ pub async fn chat_stream(
                                 if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
                                     stream_summary(&mut events, "assistant-final", &assistant.content);
                                 }
-
                                 if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
                                     append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
                                 }
-
                                 let latest = state.agent.get_conversation(&conversation_id).await.unwrap_or(conv);
                                 events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
                             }
-
                             events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
                         }
                         Err(err) => {
-                            events.push_back(event("provider-error", serde_json::json!({
-                                "message": err.to_string(),
-                                "retryable": true
-                            })));
-
-                            if should_run_local_preflight(&message) {
-                                append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
-                            }
+                            events.push_back(event("provider-error", serde_json::json!({"message": err.to_string(), "retryable": true})));
+                            if should_run_local_preflight(&message) { append_repo_preflight(&state, &mut events, &conversation_id, &message).await; }
                         }
                     }
 
@@ -152,9 +126,7 @@ impl ChatEventState {
     }
 }
 
-fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> {
-    Ok(Event::default().event(name).data(data.to_string()))
-}
+fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
 
 fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, call: &ToolRequest) {
     let id = call.id.0.to_string();
@@ -170,13 +142,16 @@ async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Resu
     let req = ToolRequest {
         id: ToolCallId(uuid::Uuid::new_v4()),
         kind: ToolKind::ApplyPatch,
-        args: serde_json::json!({
-            "patchText": format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Natural prompt completed: Forge created this note from a plain request.\n*** End Patch")
-        }),
+        args: serde_json::json!({"patchText": format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Natural prompt completed: Forge created this note from a plain request.\n*** End Patch")}),
         parallel_group: None,
     };
-    append_tool_events(state, events, conversation_id, "apply_patch", req).await;
-    let summary = format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.");
+    let result = append_tool_events(state, events, conversation_id, "apply_patch", req).await;
+    let pending = result.as_ref().and_then(|r| r.metadata.get("pending_edit_approval")).is_some();
+    let summary = if pending {
+        format!("Prepared an edit approval request for `{NATURAL_NOTE_PATH}`.\n\nApprove edit to apply the patch; no file is written until approval completes.")
+    } else {
+        format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.")
+    };
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "natural-summary", &summary);
 }
@@ -186,9 +161,7 @@ async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<R
         ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
         ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
     ];
-    for (name, req) in requests {
-        append_tool_events(state, events, conversation_id, name, req).await;
-    }
+    for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
     let summary = "Inspected the repository with `repo_info` and `file_list`.\n\nThe workspace is reachable, top-level files were listed, and the tool cards above contain compact inspection details.".to_string();
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "repo-inspection-summary", &summary);
@@ -196,18 +169,11 @@ async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<R
 
 fn stream_summary(events: &mut VecDeque<Result<Event, Infallible>>, id: &str, summary: &str) {
     events.push_back(event("text-start", serde_json::json!({"id": id})));
-    for chunk in chunk_text(summary, 32) {
-        events.push_back(event("text-delta", serde_json::json!({"id": id, "text": chunk})));
-    }
+    for chunk in chunk_text(summary, 32) { events.push_back(event("text-delta", serde_json::json!({"id": id, "text": chunk}))); }
     events.push_back(event("text-end", serde_json::json!({"id": id})));
 }
 
-async fn append_repo_preflight(
-    state: &AppState,
-    events: &mut VecDeque<Result<Event, Infallible>>,
-    conversation_id: &ConversationId,
-    message: &str,
-) {
+async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId, message: &str) {
     let mut requests = vec![
         ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
         ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
@@ -217,25 +183,15 @@ async fn append_repo_preflight(
         requests.push(("apply_patch", ToolRequest {
             id: ToolCallId(uuid::Uuid::new_v4()),
             kind: ToolKind::ApplyPatch,
-            args: serde_json::json!({
-                "patchText": "*** Begin Patch\n*** Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt\n+apply_patch file-change card proof\n*** End Patch"
-            }),
+            args: serde_json::json!({"patchText": "*** Begin Patch\n*** Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt\n+apply_patch file-change card proof\n*** End Patch"}),
             parallel_group: None,
         }));
     }
 
-    for (name, req) in requests {
-        append_tool_events(state, events, conversation_id, name, req).await;
-    }
+    for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
 }
 
-async fn append_tool_events(
-    state: &AppState,
-    events: &mut VecDeque<Result<Event, Infallible>>,
-    conversation_id: &ConversationId,
-    name: &str,
-    req: ToolRequest,
-) {
+async fn append_tool_events(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
     let id = req.id.0.to_string();
     let input = req.args.clone();
     events.push_back(event("tool-input-start", serde_json::json!({"id": id, "name": name})));
@@ -247,9 +203,13 @@ async fn append_tool_events(
             present_tool_result(name, &mut result);
             events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
             append_file_change_events(events, &result);
-            let _ = state.agent.record_tool_results(conversation_id, vec![result]).await;
+            let _ = state.agent.record_tool_results(conversation_id, vec![result.clone()]).await;
+            Some(result)
         }
-        Err(tool_err) => events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}))),
+        Err(tool_err) => {
+            events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()})));
+            None
+        }
     }
 }
 
@@ -274,8 +234,7 @@ fn compact_file_list_output(output: &str) -> Option<String> {
     let entries = serde_json::from_str::<Vec<serde_json::Value>>(output).ok()?;
     let mut names = Vec::new();
     for entry in entries.iter().take(12) {
-        let name = entry.get("path").and_then(serde_json::Value::as_str)
-            .or_else(|| entry.get("name").and_then(serde_json::Value::as_str))?;
+        let name = entry.get("path").and_then(serde_json::Value::as_str).or_else(|| entry.get("name").and_then(serde_json::Value::as_str))?;
         let suffix = if entry.get("is_dir").and_then(serde_json::Value::as_bool).unwrap_or(false) { "/" } else { "" };
         names.push(format!("- {name}{suffix}"));
     }
@@ -310,27 +269,13 @@ fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, r
 
 fn tool_name(kind: &ToolKind) -> &'static str {
     match kind {
-        ToolKind::FileRead => "file_read",
-        ToolKind::FileWrite => "file_write",
-        ToolKind::FileEdit => "file_edit",
-        ToolKind::FileDelete => "file_delete",
-        ToolKind::FileList => "file_list",
-        ToolKind::FileGlob => "file_glob",
-        ToolKind::FileSearch => "file_search",
-        ToolKind::WebFetch => "web_fetch",
-        ToolKind::WebSearch => "web_search",
-        ToolKind::ShellCommand => "shell_command",
-        ToolKind::TerminalRun => "terminal_run",
-        ToolKind::Task => "task",
-        ToolKind::BatchParallel => "batch_parallel",
-        ToolKind::RepoInfo => "repo_info",
-        ToolKind::ProposePatch => "propose_patch",
-        ToolKind::ApplyPatch => "apply_patch",
-        ToolKind::SwitchMode => "switch_mode",
-        ToolKind::BrowserProof => "browser_proof",
-        ToolKind::VisionReview => "vision_review",
-        ToolKind::GraphBuild => "graph_build",
-        ToolKind::GraphQuery => "graph_query",
+        ToolKind::FileRead => "file_read", ToolKind::FileWrite => "file_write", ToolKind::FileEdit => "file_edit",
+        ToolKind::FileDelete => "file_delete", ToolKind::FileList => "file_list", ToolKind::FileGlob => "file_glob",
+        ToolKind::FileSearch => "file_search", ToolKind::WebFetch => "web_fetch", ToolKind::WebSearch => "web_search",
+        ToolKind::ShellCommand => "shell_command", ToolKind::TerminalRun => "terminal_run", ToolKind::Task => "task",
+        ToolKind::BatchParallel => "batch_parallel", ToolKind::RepoInfo => "repo_info", ToolKind::ProposePatch => "propose_patch",
+        ToolKind::ApplyPatch => "apply_patch", ToolKind::SwitchMode => "switch_mode", ToolKind::BrowserProof => "browser_proof",
+        ToolKind::VisionReview => "vision_review", ToolKind::GraphBuild => "graph_build", ToolKind::GraphQuery => "graph_query",
     }
 }
 
