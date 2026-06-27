@@ -87,11 +87,13 @@ impl ToolExecutor {
 
     fn publish_metadata_array(&self, result: &ToolResult, key: &str, event_type: &str) -> Vec<ChangeEvent> {
         let Some(values) = result.metadata.get(key).and_then(Value::as_array) else { return Vec::new(); };
+        let tool_id = result.id.clone().0.to_string();
+        let tool_kind = format!("{:?}", &result.kind);
         values.iter().map(|value| {
             let mut payload = value.clone();
             if let Some(object) = payload.as_object_mut() {
-                object.insert("tool_id".to_string(), json!(result.id.0.to_string()));
-                object.insert("tool_kind".to_string(), json!(format!("{:?}", &result.kind)));
+                object.insert("tool_id".to_string(), json!(tool_id));
+                object.insert("tool_kind".to_string(), json!(tool_kind));
                 object.insert("metadata_key".to_string(), json!(key));
             }
             self.change_bus.publish(event_type, "opencode.apply_patch", payload)
