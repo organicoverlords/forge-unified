@@ -120,7 +120,9 @@ jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) 
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'Founder report' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+grep -Eiq 'Founder report|Founder Report' "$PROOF_DIR/browser-proof.json"
+grep -Eiq 'Technical report|Technical Report' "$PROOF_DIR/browser-proof.json"
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
