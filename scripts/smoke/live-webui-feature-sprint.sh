@@ -96,9 +96,9 @@ cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 step "create full benchmark conversation"
 BENCH_CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"Full six-phase agentic benchmark prompt"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$BENCH_CONV_ID"
-jq -Rs '{message: ., max_rounds: 10}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
+jq -Rs '{message: ., max_rounds: 20}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
 
-timeout 480s curl -fsS --connect-timeout 2 --max-time 470 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
+timeout 600s curl -fsS --connect-timeout 2 --max-time 590 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   echo "::error::full benchmark used local/scripted shortcut" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
@@ -115,12 +115,26 @@ if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_pat
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 14
 fi
+for marker in 'file_write' 'file_read' 'file_delete' '.agent_test/repo_summary.md' '.agent_test/investigation.md' '.agent_test/action_plan.json' 'PROJECT_STATE.md'; do grep -Fq "$marker" "$BENCH_STREAM"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$BENCH_CONVERSATION_JSON" >/dev/null
+jq -e '
+  def results: [.messages[]?.tool_results[]?];
+  def path($r): ($r.metadata.path // "");
+  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/repo_summary.md" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/action_plan.json" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/repo_summary.md" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/action_plan.json" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "FileDelete" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
+  ([results[] | select((.kind == "FileEdit" or .kind == "FileWrite") and (path(.) | startswith(".agent_test/") | not) and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "ShellCommand" and ((.metadata.command // "") | test("git diff|git status|cargo check|cargo test|bash -n"; "i")) and .success == true)] | length) >= 1
+' "$BENCH_CONVERSATION_JSON" >/dev/null
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'OpenCode Tool Catalog' 'apply_patch' '.agent_test/repo_summary.md' '.agent_test/action_plan.json'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
 grep -Eiq 'Founder report|Founder Report' "$PROOF_DIR/browser-proof.json"
 grep -Eiq 'Technical report|Technical Report' "$PROOF_DIR/browser-proof.json"
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
@@ -128,4 +142,4 @@ cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
 echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON" > "$PROOF_DIR/live-proof-status.txt"
 step "done"
-echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, and full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
+echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, and semantic full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
