@@ -1,6 +1,6 @@
 # Forge Unified — Current State
 
-Updated: 2026-06-26
+Updated: 2026-06-27
 
 ## Current branch
 
@@ -8,7 +8,8 @@ Updated: 2026-06-26
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Server port: `3000`
-- Latest proven code baseline before this docs refresh: `e160fa4bf9326c26d5731e9fb474574a4d068b2f`
+- Latest fully green baseline before the ReasoningPart slice: `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7`
+- Latest ReasoningPart source/proof code head before docs refresh: `d880f839a44b7ad551e47e95bc9cd1b1987d60ae`
 
 ## Latest validation state
 
@@ -20,8 +21,10 @@ Latest fully green baselines:
 | `65c1cb5f5c534149d4e08000e8553a498767ed00` | success | success | success | Cleaner WebUI tool cards: output/file cards first, metadata collapsed |
 | `7f46ea1c0e7498a353fa18a3781b062580105236` | success | success | success | Natural proof note + repo inspection two-prompt proof |
 | `e160fa4bf9326c26d5731e9fb474574a4d068b2f` | success | success | success | Compact `repo_info`/`file_list` presentation with raw JSON preserved in metadata |
+| `b7b0e7eb88570900ad8e3252d8190004342678fd` | success | success | success | OpenCode `SnapshotPart` persistence and visible WebUI card proof |
+| `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` | success | success | success | OpenCode `FilePart` persistence and visible DOM proof |
 
-The latest docs-updated HEAD after this refresh still needs its own Actions check before merge/green claims.
+The latest docs-updated ReasoningPart HEAD after this refresh still needs its own Actions check before merge/green claims.
 
 ## Latest product behavior
 
@@ -41,6 +44,7 @@ Proven behavior:
 - Persists the tool result and file-change metadata.
 - Shows a visible `ADDED` file card in the WebUI.
 - Returns a human-readable assistant summary.
+- Persists OpenCode-style `TextPart`, `FilePart`, `ToolPart`, and `PatchPart` metadata for the turn.
 
 ### Natural repository inspection proof
 
@@ -50,7 +54,7 @@ A second normal user prompt inspects the repository:
 Please inspect this repository and summarize what you find.
 ```
 
-Proven behavior at `e160fa4`:
+Proven behavior:
 
 - Runs real `repo_info` and `file_list` tools.
 - Presents compact visible output:
@@ -59,6 +63,24 @@ Proven behavior at `e160fa4`:
 - Preserves raw JSON under `metadata.raw_output` for details.
 - Persists the tool results and assistant summary.
 - Browser proof requires the compact output in the live DOM/screenshot.
+
+### OpenCode session parts
+
+Implemented/proofed through `c3f15e4`:
+
+- `TextPart` metadata for user/assistant public text.
+- `SnapshotPart` card for explicit snapshot save.
+- `FilePart` card for changed files, including `workspace://...` URL.
+- `ToolPart` cards for running/completed/error states.
+- `PatchPart` card with patch hash and file list.
+
+New ReasoningPart slice at `d880f839`:
+
+- Adds a helper for upstream `ReasoningPart` shape from `packages/schema/src/v1/session.ts`.
+- Persists `reasoning_parts` on assistant messages as safe public progress summaries.
+- Marks the metadata as `visibility=public_progress_summary` and `private_chain_of_thought=false`.
+- WebUI renders `OpenCode ReasoningPart` and collapsed `ReasoningPart metadata`.
+- Live proof requires persisted JSON and browser DOM markers for ReasoningPart.
 
 ## OpenCode-source work copied so far
 
@@ -76,6 +98,7 @@ Forge changes:
 - Updated `crates/engine/src/tool.rs` to register `patch_apply` and advertise mutation support.
 - Added WebUI file-change cards and compact tool-result presentation.
 - Added natural local action paths for file creation and repository inspection, using real Forge tools and normal user prompts.
+- Added OpenCode-style session part helpers and WebUI cards for text, reasoning, snapshot, file, tool, and patch parts.
 
 Behavior now present:
 
@@ -88,6 +111,7 @@ Behavior now present:
 - Returns human-readable `Success. Updated the following files:` with `A/D/M` summary lines.
 - Emits/persists file-change metadata and renders `ADDED` file cards.
 - Presents repo inspection as human-readable output while keeping raw details under metadata.
+- Persists safe public `ReasoningPart` summaries without exposing private chain-of-thought.
 
 Remaining parity gaps:
 
@@ -95,7 +119,8 @@ Remaining parity gaps:
 - Watcher/file edited events are not yet published as a real event bus.
 - LSP touch/diagnostics are not yet collected.
 - BOM preservation and formatter hooks are not yet equivalent to upstream OpenCode.
-- WebUI tool cards are improved, but durable OpenCode `ToolPart` pending/running/completed/error state is not fully first-class yet.
+- Tool cards and parts are visible/durable enough for proof, but not full OpenCode lifecycle parity.
+- ReasoningPart is a safe public summary only, not provider/private reasoning capture.
 
 ## Features implemented
 
@@ -112,7 +137,7 @@ Remaining parity gaps:
 - Tool calling: file read/write/edit/delete/list/glob/search, web fetch/search, shell, terminal, task, batch parallel, repo info, propose patch, apply_patch, switch mode, browser proof, vision review, graph build/query.
 - Parallel tool execution via `futures::stream::buffer_unordered`.
 - Tool approval gates through current safety checker.
-- `apply_patch` now parses OpenCode-style patch text, validates patch paths, derives update contents, mutates files for add/update/delete/move, records diff/edit metadata, and returns `A/D/M` summary lines.
+- `apply_patch` parses OpenCode-style patch text, validates patch paths, derives update contents, mutates files for add/update/delete/move, records diff/edit metadata, and returns `A/D/M` summary lines.
 
 ### Model & Provider
 
@@ -126,7 +151,8 @@ Remaining parity gaps:
 - Bundled root chat UI.
 - Live SSE events for run phases, text deltas, tool calls, tool results/errors, file-change events, and run finish.
 - Browser proof route and NIM vision review route.
-- Live WebUI Feature Sprint now proves normal-prompt file creation and repository inspection with real screenshot artifacts.
+- Live WebUI Feature Sprint proves normal-prompt file creation and repository inspection with real screenshot artifacts.
+- Latest proof script now requires visible OpenCode `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `ToolPart`, and `PatchPart` markers.
 
 ### CI/CD
 
@@ -139,7 +165,7 @@ Remaining parity gaps:
 | Area | Feature | Priority |
 |------|---------|----------|
 | Engine | Real edit permission prompt/gating for `apply_patch` | P0 |
-| Engine/WebUI | Durable OpenCode tool-part state model | P0 |
+| Engine/WebUI | Full durable OpenCode tool-part lifecycle parity | P0 |
 | Engine | Watcher/file edited events and LSP diagnostics for patch changes | P1 |
 | Engine | BOM preservation and formatter hooks | P1 |
 | Router | Visible routing/fallback receipts and cooldown policy | P1 |
@@ -151,4 +177,5 @@ Remaining parity gaps:
 - Do not claim full OpenCode parity for `apply_patch` yet.
 - Do not add invented workflows when OpenCode has a source-defined behavior.
 - Do not remove or weaken the 500-line hard gate.
+- Do not expose private chain-of-thought through `ReasoningPart`; only public progress summaries are allowed.
 - Do not accept JSON-only screenshots as UX proof.
