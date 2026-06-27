@@ -1,6 +1,6 @@
 //! Conversation manager — CRUD for conversations with messages.
 
-use crate::tool_parts::{finished_tool_part, patch_parts, running_tool_part};
+use crate::tool_parts::{finished_tool_part, patch_parts, running_tool_part, text_parts};
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -10,9 +10,7 @@ pub struct ConversationManager {
 }
 
 impl ConversationManager {
-    pub fn new() -> Self {
-        Self { conversations: HashMap::new() }
-    }
+    pub fn new() -> Self { Self { conversations: HashMap::new() } }
 
     pub fn create(&mut self, title: String) -> ConversationId {
         let id = ConversationId(Uuid::new_v4());
@@ -36,7 +34,8 @@ impl ConversationManager {
 
     pub fn add_user_message(&mut self, id: &ConversationId, content: String) {
         if let Some(conv) = self.conversations.get_mut(id) {
-            conv.messages.push(Message { role: MessageRole::User, content, tool_calls: None, tool_results: None, metadata: Default::default() });
+            let metadata = message_text_metadata(&content, false);
+            conv.messages.push(Message { role: MessageRole::User, content, tool_calls: None, tool_results: None, metadata });
             conv.updated_at = chrono::Utc::now();
         }
     }
@@ -48,6 +47,7 @@ impl ConversationManager {
     pub fn add_assistant_message_with_tools(&mut self, id: &ConversationId, content: String, tool_calls: Option<Vec<ToolRequest>>) {
         if let Some(conv) = self.conversations.get_mut(id) {
             let (content, mut metadata) = normalize_assistant_content(content);
+            metadata.extend(message_text_metadata(&content, true));
             if let Some(calls) = &tool_calls {
                 metadata.insert("tool_parts".to_string(), serde_json::json!(calls.iter().map(running_tool_part).collect::<Vec<_>>()));
             }
@@ -88,6 +88,15 @@ impl ConversationManager {
             }
         }
     }
+}
+
+fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serde_json::Value> {
+    let parts = text_parts(content, synthetic);
+    if parts.is_empty() { return HashMap::new(); }
+    HashMap::from([
+        ("text_parts".to_string(), serde_json::json!(parts)),
+        ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source()),
+    ])
 }
 
 fn normalize_assistant_content(content: String) -> (String, HashMap<String, serde_json::Value>) {
