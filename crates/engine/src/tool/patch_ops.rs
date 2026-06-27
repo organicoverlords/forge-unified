@@ -77,7 +77,9 @@ impl ToolExecutor {
         let watcher_updates = patch_events::watcher_updates(&files);
         let filesystem_edits = patch_events::filesystem_edits(&files);
         let lsp_touches = patch_events::lsp_touches(&files);
+        let lsp_warmups = patch_events::lsp_warmups(&files);
         let diagnostics = patch_events::diagnostics_metadata(&files);
+        let diagnostic_reports = patch_events::diagnostic_reports(&files);
         let output = format!(
             "Success. Updated the following files:\n{}\n{}",
             change_count_summary(summary_lines.len()),
@@ -102,6 +104,8 @@ impl ToolExecutor {
                 ("file_events".to_string(), serde_json::json!(file_events)),
                 ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)),
                 ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
+                ("opencode_lsp_warmups".to_string(), serde_json::json!(lsp_warmups)),
+                ("opencode_lsp_diagnostics".to_string(), serde_json::json!(diagnostic_reports)),
                 ("lsp_touches".to_string(), serde_json::json!(lsp_touches)),
                 ("summary_lines".to_string(), serde_json::json!(summary_lines)),
                 ("validated_paths".to_string(), serde_json::json!(validated_paths)),
@@ -179,7 +183,7 @@ fn apply_patch_failure(id: ToolCallId, patch_length: usize, error: impl Into<Str
 }
 
 fn opencode_source() -> serde_json::Value {
-    serde_json::json!(["packages/opencode/src/tool/apply_patch.ts", "packages/opencode/src/patch/index.ts"])
+    serde_json::json!(["packages/opencode/src/tool/apply_patch.ts", "packages/opencode/src/tool/read.ts", "packages/opencode/src/patch/index.ts"])
 }
 
 fn opencode_permission_source() -> serde_json::Value {
