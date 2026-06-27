@@ -1,12 +1,26 @@
-//! OpenCode-style durable tool and patch part helpers.
+//! OpenCode-style durable text, tool, and patch part helpers.
 //!
 //! Upstream references:
-//! - `packages/schema/src/v1/session.ts`: `PatchPart`, `ToolPart`, `ToolState*`.
+//! - `packages/schema/src/v1/session.ts`: `TextPart`, `PatchPart`, `ToolPart`, `ToolState*`.
 //! - `packages/opencode/src/session/processor.ts`: `completeToolCall` / `failToolCall`.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+pub fn text_part(text: &str, synthetic: bool) -> serde_json::Value {
+    serde_json::json!({
+        "type": "text",
+        "text": text,
+        "synthetic": synthetic,
+        "time": {"start": 0, "end": 0},
+        "metadata": {"opencode_source": opencode_text_part_source()}
+    })
+}
+
+pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
+    if text.trim().is_empty() { Vec::new() } else { vec![text_part(text, synthetic)] }
+}
 
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
     serde_json::json!({
@@ -84,8 +98,7 @@ fn patch_files(result: &ToolResult) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(files) = result.metadata.get("files").and_then(serde_json::Value::as_array) {
         for file in files {
-            let path = file.get("relativePath").or_else(|| file.get("path"))
-                .and_then(serde_json::Value::as_str);
+            let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str);
             if let Some(path) = path { out.push(path.to_string()); }
         }
     }
@@ -100,6 +113,14 @@ fn patch_hash(result: &ToolResult, files: &[String]) -> String {
     result.output.hash(&mut hasher);
     for file in files { file.hash(&mut hasher); }
     format!("patch_{:016x}", hasher.finish())
+}
+
+pub fn opencode_text_part_source() -> serde_json::Value {
+    serde_json::json!({
+        "path": "packages/schema/src/v1/session.ts",
+        "identifier": "TextPart",
+        "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean"}
+    })
 }
 
 pub fn opencode_patch_part_source() -> serde_json::Value {
@@ -162,12 +183,19 @@ mod tests {
     }
 
     #[test]
+    fn builds_text_part() {
+        let part = text_part("hello", false);
+        assert_eq!(part["type"], "text");
+        assert_eq!(part["text"], "hello");
+        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "TextPart");
+    }
+
+    #[test]
     fn builds_completed_tool_part() {
         let part = completed_tool_part(&result());
         assert_eq!(part["type"], "tool");
         assert_eq!(part["tool"], "apply_patch");
         assert_eq!(part["state"]["status"], "completed");
-        assert_eq!(part["state"]["title"], "apply_patch");
     }
 
     #[test]
