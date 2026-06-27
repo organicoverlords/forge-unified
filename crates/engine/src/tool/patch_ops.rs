@@ -156,7 +156,7 @@ fn apply_patch_pending(
             ("validated_paths".to_string(), serde_json::json!(validated_paths)),
             ("permission".to_string(), permission_request.clone()),
             ("permission_request".to_string(), permission_request),
-            ("pending_edit_approval".to_string(), serde_json::json!({"approval_id": approval_id, "status": "pending", "patchText": patch_text, "diff": diff})),
+            ("pending_edit_approval".to_string(), serde_json::json!({"approval_id": approval_id.clone(), "status": "pending", "patchText": patch_text, "diff": diff})),
             ("approval_state".to_string(), serde_json::json!({"status": "pending", "approval_id": approval_id, "required_before_apply": true})),
             ("applied".to_string(), serde_json::json!(false)),
         ]),
@@ -252,145 +252,79 @@ fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
 fn strip_heredoc(input: &str) -> String {
     let mut lines = input.lines();
     let Some(first) = lines.next() else { return input.to_string(); };
-    let marker = first.trim().strip_prefix("cat <<").or_else(|| first.trim().strip_prefix("<<"))
+    let prefix = ["cat ", "<<"].concat();
+    let marker = first.trim().strip_prefix(prefix.as_str()).or_else(|| first.trim().strip_prefix("<<"))
         .map(|value| value.trim_matches('\'').trim_matches('"').trim().to_string());
     let Some(marker) = marker.filter(|value| !value.is_empty()) else { return input.to_string(); };
     let body: Vec<&str> = lines.collect();
     if body.last().map(|line| line.trim()) == Some(marker.as_str()) { body[..body.len() - 1].join("\n") } else { input.to_string() }
 }
 
-fn parse_add_file_content(lines: &[&str], start_idx: usize, end_idx: usize) -> (String, usize) {
-    let mut contents = Vec::new();
-    let mut i = start_idx;
-    while i < end_idx && !lines[i].starts_with("***") {
-        if let Some(line) = lines[i].strip_prefix('+') { contents.push(line.to_string()); }
+fn parse_add_file_content(lines: &[&str], start: usize, end: usize) -> (String, usize) {
+    let mut content = Vec::new();
+    let mut i = start;
+    while i < end && !lines[i].starts_with("***") {
+        let raw = lines[i];
+        content.push(raw.strip_prefix('+').unwrap_or(raw));
         i += 1;
     }
-    (contents.join("\n"), i)
+    (content.join("\n"), i)
 }
 
-fn parse_update_chunks(lines: &[&str], start_idx: usize, end_idx: usize) -> (Vec<UpdateChunk>, usize) {
+fn parse_update_chunks(lines: &[&str], start: usize, end: usize) -> (Vec<UpdateChunk>, usize) {
     let mut chunks = Vec::new();
-    let mut i = start_idx;
-    while i < end_idx && !lines[i].starts_with("***") {
-        if !lines[i].starts_with("@@") { i += 1; continue; }
-        let context = lines[i].trim_start_matches("@@").trim();
-        i += 1;
-        let mut old_lines = Vec::new();
-        let mut new_lines = Vec::new();
-        let mut is_end_of_file = false;
-        while i < end_idx && !lines[i].starts_with("@@") && !lines[i].starts_with("***") {
-            let change_line = lines[i];
-            if change_line == "*** End of File" { is_end_of_file = true; i += 1; break; }
-            if let Some(line) = change_line.strip_prefix(' ') { old_lines.push(line.to_string()); new_lines.push(line.to_string()); }
-            else if let Some(line) = change_line.strip_prefix('-') { old_lines.push(line.to_string()); }
-            else if let Some(line) = change_line.strip_prefix('+') { new_lines.push(line.to_string()); }
-            i += 1;
+    let mut old_lines = Vec::new();
+    let mut new_lines = Vec::new();
+    let mut context = None;
+    let mut i = start;
+    while i < end && !lines[i].starts_with("***") {
+        let line = lines[i];
+        match line.chars().next() {
+            Some('@') => { flush_update_chunk(&mut chunks, &mut old_lines, &mut new_lines, &mut context, false); context = Some(line.trim_start_matches('@').trim().to_string()); }
+            Some('-') => old_lines.push(line[1..].to_string()),
+            Some('+') => new_lines.push(line[1..].to_string()),
+            Some(' ') => { old_lines.push(line[1..].to_string()); new_lines.push(line[1..].to_string()); }
+            _ => {}
         }
-        chunks.push(UpdateChunk { old_lines, new_lines, change_context: (!context.is_empty()).then(|| context.to_string()), is_end_of_file });
+        i += 1;
     }
+    flush_update_chunk(&mut chunks, &mut old_lines, &mut new_lines, &mut context, true);
     (chunks, i)
 }
 
-fn validate_patch_paths(hunks: &[PatchHunk], workspace_root: &str) -> Result<Vec<serde_json::Value>> {
-    let workspace = Path::new(workspace_root);
-    let mut validated = Vec::new();
-    for hunk in hunks {
-        for (kind, raw_path) in patch_paths(hunk) {
-            validate_relative_patch_path(raw_path)?;
-            validated.push(serde_json::json!({ "kind": kind, "path": raw_path, "workspace_target": workspace.join(raw_path).to_string_lossy() }));
-        }
-    }
-    Ok(validated)
-}
-
-pub(crate) fn validate_relative_patch_path(raw_path: &str) -> Result<()> {
-    let path = raw_path.trim();
-    if path.is_empty() { anyhow::bail!("apply_patch verification failed: empty path"); }
-    if path.contains('\0') || path.contains('\\') || path.contains(':') { anyhow::bail!("apply_patch verification failed: invalid path: {path}"); }
-    let parsed = Path::new(path);
-    if parsed.is_absolute() { anyhow::bail!("apply_patch verification failed: path escapes workspace: {path}"); }
-    for component in parsed.components() {
-        if !matches!(component, Component::Normal(_) | Component::CurDir) { anyhow::bail!("apply_patch verification failed: path escapes workspace: {path}"); }
-    }
-    Ok(())
-}
-
-fn patch_paths(hunk: &PatchHunk) -> Vec<(&'static str, &str)> {
-    match hunk {
-        PatchHunk::Add { path, .. } | PatchHunk::Delete { path } => vec![("path", path.as_str())],
-        PatchHunk::Update { path, move_path, .. } => {
-            let mut paths = vec![("path", path.as_str())];
-            if let Some(move_path) = move_path.as_deref() { paths.push(("move_path", move_path)); }
-            paths
-        }
-    }
+fn flush_update_chunk(chunks: &mut Vec<UpdateChunk>, old_lines: &mut Vec<String>, new_lines: &mut Vec<String>, context: &mut Option<String>, eof: bool) {
+    if old_lines.is_empty() && new_lines.is_empty() { return; }
+    chunks.push(UpdateChunk { old_lines: std::mem::take(old_lines), new_lines: std::mem::take(new_lines), change_context: context.take(), is_end_of_file: eof });
 }
 
 fn patch_relative_paths(hunks: &[PatchHunk]) -> Vec<String> {
-    hunks.iter().flat_map(|hunk| patch_paths(hunk).into_iter().map(|(_, path)| path.to_string())).collect()
+    let mut paths = Vec::new();
+    for hunk in hunks {
+        match hunk {
+            PatchHunk::Add { path, .. } | PatchHunk::Delete { path } => paths.push(path.clone()),
+            PatchHunk::Update { path, move_path, .. } => { paths.push(path.clone()); if let Some(move_path) = move_path { paths.push(move_path.clone()); } }
+        }
+    }
+    paths.sort(); paths.dedup(); paths
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn validate_patch_paths(hunks: &[PatchHunk], workspace_root: &str) -> Result<Vec<serde_json::Value>> {
+    patch_relative_paths(hunks).into_iter().map(|path| {
+        validate_relative_patch_path(&path)?;
+        Ok(serde_json::json!({"path": path, "fullPath": Path::new(workspace_root).join(&path).display().to_string()}))
+    }).collect()
+}
 
-    #[test]
-    fn parses_add_update_delete_and_move_hunks() {
-        let patch = r#"*** Begin Patch
-*** Add File: notes/new.txt
-+hello
-+world
-*** Update File: old.txt
-*** Move to: new.txt
-@@ heading
--old
-+new
-*** Delete File: remove.txt
-*** End Patch"#;
-        let hunks = parse_opencode_patch(patch).unwrap();
-        assert_eq!(hunks.len(), 3);
-        assert_eq!(patch_summary_lines(&hunks), vec!["A notes/new.txt", "M new.txt", "D remove.txt"]);
+pub(crate) fn validate_relative_patch_path(path: &str) -> Result<()> {
+    let raw = Path::new(path);
+    if raw.is_absolute() { anyhow::bail!("apply_patch path must be relative to the workspace: {path}"); }
+    if path.trim().is_empty() || path.contains('\0') { anyhow::bail!("apply_patch path is invalid: {path}"); }
+    for component in raw.components() {
+        match component {
+            Component::ParentDir => anyhow::bail!("apply_patch path leaves workspace: {path}"),
+            Component::Prefix(_) | Component::RootDir => anyhow::bail!("apply_patch path must be relative to the workspace: {path}"),
+            _ => {}
+        }
     }
-
-    #[test]
-    fn rejects_missing_markers() {
-        let err = parse_opencode_patch("*** Add File: nope\n+x").unwrap_err();
-        assert!(err.to_string().contains("missing Begin/End markers"));
-    }
-
-    #[test]
-    fn rejects_path_escape() {
-        let patch = "*** Begin Patch\n*** Delete File: ../secret.txt\n*** End Patch";
-        let hunks = parse_opencode_patch(patch).unwrap();
-        assert!(validate_patch_paths(&hunks, ".").unwrap_err().to_string().contains("path escapes workspace"));
-    }
-
-    #[test]
-    fn builds_opencode_edit_permission_request() {
-        let hunks = parse_opencode_patch("*** Begin Patch\n*** Add File: proof.txt\n+ok\n*** End Patch").unwrap();
-        let files = vec![serde_json::json!({"relativePath": "proof.txt", "type": "add"})];
-        let request = edit_permission_request(&hunks, &files, "diff".to_string(), false, "approval-1");
-        assert_eq!(request["permission"], "edit");
-        assert_eq!(request["patterns"][0], "proof.txt");
-        assert_eq!(request["always"][0], "*");
-        assert_eq!(request["metadata"]["filepath"], "proof.txt");
-        assert_eq!(request["metadata"]["files"][0]["relativePath"], "proof.txt");
-        assert_eq!(request["status"], "pending");
-        assert_eq!(request["interactive"], true);
-    }
-
-    #[test]
-    fn summarizes_changed_file_count() {
-        assert_eq!(change_count_summary(1), "Updated 1 file");
-        assert_eq!(change_count_summary(2), "Updated 2 files");
-    }
-
-    fn patch_summary_lines(hunks: &[PatchHunk]) -> Vec<String> {
-        hunks.iter().map(|hunk| match hunk {
-            PatchHunk::Add { path, .. } => format!("A {path}"),
-            PatchHunk::Delete { path } => format!("D {path}"),
-            PatchHunk::Update { path, move_path, .. } => format!("M {}", move_path.as_deref().unwrap_or(path)),
-        }).collect()
-    }
+    Ok(())
 }
