@@ -15,33 +15,35 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this slice: `e562d783538b884b16558b8a62c4e495423f02b3`.
-- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28295482726`, artifact `7926326967`.
+- Latest fully green baseline before this slice: `04d35a5085a89658b158b7ee23f40510d9a949cd`.
+- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28297659029`, artifact `7926961624`.
 - Current branch HEAD after this slice needs Actions before calling it green.
 
 ## Latest source-backed slice
 
-Forge now makes OpenCode LSP diagnostics visible in the activity rail instead of hiding them inside raw event JSON.
+Forge now starts an OS-backed native workspace watcher and publishes real watcher updates, instead of only using receipt-backed watcher metadata from tool results.
 
 Upstream source paths:
 
-- `packages/opencode/src/lsp/diagnostic.ts`
-- `packages/opencode/src/lsp/lsp.ts`
+- `packages/core/src/filesystem/watcher.ts`
 - `packages/opencode/src/event-v2-bridge.ts`
 - `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`
 
 Copied behavior:
 
-- OpenCode `Diagnostic.report` maps severity numbers to `ERROR`, `WARN`, `INFO`, and `HINT`.
-- OpenCode diagnostic reports use one-based line/column formatting and diagnostics file blocks.
-- OpenCode caps rendered errors at `MAX_PER_FILE = 20`.
-- OpenCode LSP exposes status/touch/diagnostics as a service contract.
-- Forge now presents that copied envelope in the event rail with diagnostic totals, diagnostic file count, severity chips, per-event severity chips, and report-block text.
-- The live WebUI proof now requires `opencode-lsp-diagnostics-panel`, `diagnostic files`, `diagnostic report_block`, `severity_counts`, and the upstream LSP source paths in the captured event rail DOM/screenshot proof.
+- OpenCode detects watcher backend names (`windows`, `fs-events`, `inotify`).
+- OpenCode keeps `SUBSCRIBE_TIMEOUT_MS = 10_000` as watcher subscription metadata.
+- OpenCode subscribes to workspace changes and publishes `Watcher.Event.Updated` for create/update/delete.
+- Forge maps native create/update/delete to add/change/unlink and publishes `watcher.updated` from `opencode.native_filewatcher`.
+- Forge exposes active native watcher status through `/api/events/status`: `watcher_native_binding`, `native_filewatcher_active`, backend, ignore/protected paths, and copied source path.
+- The live WebUI proof now creates, edits, and deletes `native-watch-proof.txt` and requires the native watcher event in `/api/events/recent` and browser-captured event rail proof.
 
 Forge files touched:
 
-- `crates/webui/src/change_events.rs`
+- `Cargo.toml`
+- `crates/engine/Cargo.toml`
+- `crates/engine/src/change_bus.rs`
+- `crates/engine/src/tool.rs`
 - `scripts/smoke/live-webui-feature-sprint.sh`
 - `OPENCODE-PARITY.md`
 - `PROJECT_STATE.md`
@@ -50,15 +52,16 @@ Forge files touched:
 Still incomplete / do not overclaim:
 
 - Current HEAD is not yet workflow/browser-proof green.
-- Live LSP server/client diagnostics are not implemented yet; this slice improves source-backed visibility of the copied diagnostic envelope.
+- Native watcher config is partial: exact OpenCode config-driven ignore entries, protected path service, VCS-directory watch behavior, and scoped finalizer semantics are not fully copied.
+- Live LSP server/client diagnostics are not implemented yet; current LSP slice improves source-backed visibility of the copied diagnostic envelope.
 - Full OpenCode formatter catalog/config/runtime remains partial; only rustfmt `.rs` path is wired.
 - OpenCode database-backed part IDs are not fully copied.
 - `providerExecuted` delta updates are still partial.
-- Live OS filesystem watcher integration remains receipt-backed.
 - Full NIM-backed streamed compaction remains incomplete.
 
 ## Previous proven slices
 
+- `04d35a5085a89658b158b7ee23f40510d9a949cd` — six-phase natural WebUI repo benchmark path; CI `28297659041`, Build Proof `28297659050`, and Live WebUI Feature Sprint `28297659029` were green with proof artifact `7926961624`.
 - `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; CI `28295482729`, Build Proof `28295482721`, and Live WebUI Feature Sprint `28295482726` were green with proof artifact `7926326967`.
 - `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; CI `28293770704`, Build Proof `28293770703`, and Live WebUI Feature Sprint `28293770706` were green with proof artifact `7925827340`.
 - `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation; CI `28293331161`, Build Proof `28293331148`, and Live WebUI Feature Sprint `28293331147` were green.
@@ -73,8 +76,8 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current LSP diagnostics rail HEAD.
-2. If Rust compile/test fails, inspect the exact job logs; do not rerun deterministic failures blindly.
-3. If WebUI smoke fails, inspect the proof artifact, event rail DOM, and `server.log` first.
+1. Check Actions for the current native watcher HEAD.
+2. If Rust compile/test fails, inspect exact logs; do not rerun deterministic failures blindly.
+3. If WebUI smoke fails, inspect proof artifact, native watcher event status, event rail DOM, and `server.log` first.
 4. Inspect proof artifact screenshots after green.
-5. Continue toward live LSP server/client diagnostics, full formatter catalog/config, OS-backed watcher/file edited events, or NIM-backed compaction.
+5. Continue toward live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
