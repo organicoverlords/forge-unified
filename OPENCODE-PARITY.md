@@ -1,6 +1,6 @@
 # OpenCode Parity Tracker
 
-Updated: 2026-06-26
+Updated: 2026-06-27
 
 ## Rule
 
@@ -18,8 +18,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, formatting/diagnostics hooks | Partially aligned through Forge `file_edit`; needs deeper comparison |
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
 | `packages/core/src/session/runner/publish-llm-event.ts` | Tool lifecycle validation and ordering | Partially copied in WebUI SSE proof |
-| `packages/opencode/src/session/processor.ts` | Tool part lifecycle; completed tools expose `title`, `metadata`, `output`, optional attachments, and timing | Partially copied: Forge emits/persists tool results, uses `metadata.title`, preserves raw details in metadata, and presents compact output first; durable first-class `ToolPart` state is still incomplete |
-| `packages/schema/src/v1/session.ts` | `ToolPart` / `ToolState` schema: pending, running, completed, error | Studied; Forge does not yet fully persist this as first-class session parts |
+| `packages/opencode/src/session/processor.ts` | Tool part lifecycle; completed tools expose `title`, `metadata`, `output`, optional attachments, and timing | Partially copied: Forge emits/persists tool results, uses `metadata.title`, preserves raw details in metadata, and presents compact output first; durable lifecycle parity remains incomplete |
+| `packages/schema/src/v1/session.ts` | `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `PatchPart`, `ToolPart` / `ToolState` schema | Partially copied: Forge persists/render-proofs these shapes as OpenCode-style metadata/cards; not full OpenCode storage semantics yet |
 | `packages/opencode/specs/effect/tools.md` | Tool surface and migration list for tool-like behavior | Used as a guardrail: repo inspection uses existing Forge `repo_info` and `file_list` tools rather than inventing a fake OpenCode tool |
 
 ## Current highest-priority parity gaps
@@ -29,9 +29,32 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 3. LSP touch/diagnostics after patch mutations.
 4. BOM preservation and formatter hooks.
 5. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
-6. Durable tool part state model matching OpenCode pending/running/completed/error behavior.
+6. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
 7. Context compaction and prompt/session continuation behavior.
 8. Durable session/message/part persistence beyond current snapshots.
+9. Agent/subtask session part behavior.
+10. Retry/fallback receipts as OpenCode-style retry parts.
+
+## Session part target behavior
+
+Upstream source:
+
+- `packages/schema/src/v1/session.ts`
+
+Implemented / proofed:
+
+- `TextPart`: public user/assistant text with collapsed metadata.
+- `SnapshotPart`: explicit snapshot save messages and WebUI card.
+- `FilePart`: changed-file metadata for successful `apply_patch`, including `mime`, `filename`, `workspace://...` URL, and `FilePartSource`-style file source.
+- `ToolPart`: running/completed/error cards from tool calls/results, preserving metadata and compact visible output.
+- `PatchPart`: patch hash and changed file list for successful `apply_patch`.
+- `ReasoningPart`: safe public progress summary on assistant messages, with `private_chain_of_thought=false` and `visibility=public_progress_summary`.
+
+Not done / do not overclaim:
+
+- ReasoningPart is not hidden chain-of-thought capture and must not become that.
+- ToolPart is not yet full OpenCode lifecycle/storage parity.
+- AgentPart, CompactionPart, RetryPart, StepStartPart, StepFinishPart, and SubtaskPart remain to be implemented only when backed by a real Forge behavior path.
 
 ## `apply_patch` target behavior
 
@@ -59,13 +82,15 @@ Implemented and proofed:
 - Natural repo inspection runs real `repo_info` and `file_list` tool calls.
 - Tool cards show compact visible output first.
 - Raw JSON details are preserved under metadata (`raw_output`) instead of being the primary visible UI.
-- Live WebUI proof at `e160fa4` requires compact `Repository status` and `Top-level repository entries` output in the stream, persisted conversation JSON, and browser DOM.
+- Live WebUI proof at `c3f15e4` requires text/snapshot/file/tool/patch parts in the stream, persisted conversation JSON, and browser DOM.
+- Live WebUI proof after `d880f839` also requires visible/persisted OpenCode `ReasoningPart` proof.
 
 Not done:
 
-- Browser UI still does not render a persisted OpenCode `ToolPart` model with durable pending/running/completed/error states.
+- Browser UI still does not fully implement OpenCode's pending/running/completed/error lifecycle semantics.
 - Attachments are not modeled like OpenCode tool parts.
-- Tool timing is not preserved in the same shape.
+- Tool timing is not preserved in the same complete shape.
+- Real approval controls for edit permission are not implemented.
 
 ## File size rule
 
