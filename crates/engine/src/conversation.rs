@@ -1,8 +1,8 @@
 //! Conversation manager — CRUD for conversations with messages.
 
 use crate::tool_parts::{
-    file_parts, finished_tool_part, patch_parts, reasoning_parts, running_tool_part, snapshot_part,
-    text_parts,
+    compaction_part, file_parts, finished_tool_part, patch_parts, reasoning_parts, running_tool_part,
+    snapshot_part, text_parts,
 };
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
@@ -68,6 +68,37 @@ impl ConversationManager {
             });
             conv.updated_at = chrono::Utc::now();
         }
+    }
+
+    pub fn add_compaction_part(&mut self, id: &ConversationId, keep_last: usize, auto: bool, overflow: bool) -> Option<serde_json::Value> {
+        let conv = self.conversations.get_mut(id)?;
+        let before = conv.messages.len();
+        let keep_last = keep_last.max(1);
+        let tail_index = before.saturating_sub(keep_last);
+        let tail_start_id = (before > keep_last).then(|| format!("message-index-{tail_index}"));
+        let part = compaction_part(auto, Some(overflow), tail_start_id.clone());
+        let content = format!("Compaction requested: keep_last={keep_last}, before={before}");
+        conv.messages.push(Message {
+            role: MessageRole::System, content: content.clone(), tool_calls: None, tool_results: None,
+            metadata: HashMap::from([
+                ("compaction_parts".to_string(), serde_json::json!([part.clone()])),
+                ("opencode_compaction_part_source".to_string(), crate::tool_parts::opencode_compaction_part_source()),
+            ]),
+        });
+        let marker_count = conv.messages.len();
+        let compacted = marker_count > keep_last && before > keep_last;
+        if compacted {
+            let tail_start = conv.messages.len().saturating_sub(keep_last);
+            let mut kept: Vec<Message> = conv.messages.iter().filter(|m| m.role == MessageRole::System).cloned().collect();
+            kept.extend(conv.messages.iter().skip(tail_start).filter(|m| m.role != MessageRole::System).cloned());
+            conv.messages = kept;
+        }
+        conv.updated_at = chrono::Utc::now();
+        Some(serde_json::json!({
+            "compaction_created": true, "compacted": compacted, "before": before, "after": conv.messages.len(),
+            "keep_last": keep_last, "auto": auto, "overflow": overflow, "tail_start_id": tail_start_id,
+            "message": content, "part": part, "opencode_compaction_source": crate::tool_parts::opencode_compaction_part_source()
+        }))
     }
 
     pub fn add_tool_results(&mut self, id: &ConversationId, results: Vec<ToolResult>) {
