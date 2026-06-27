@@ -15,6 +15,8 @@ type EventBuffer = VecDeque<(String, serde_json::Value)>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
 const FILE_TOOL_EVENT_PATH: &str = "forge-proof/live-webui-feature-sprint/file-tool-event-proof.txt";
+const OPENCODE_PROCESSOR_SOURCE: &str = "packages/opencode/src/session/processor.ts";
+const OPENCODE_SCHEMA_SOURCE: &str = "packages/schema/src/v1/session.ts";
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest { pub message: String, #[allow(dead_code)] pub max_rounds: Option<u32> }
@@ -118,10 +120,11 @@ fn append_tool_call_lifecycle(events: &mut EventBuffer, call: &ToolRequest) {
     let id = call.id.clone().0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
-    enqueue(events, "tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()}));
-    enqueue(events, "tool-input-end", serde_json::json!({"id": id.clone(), "name": name}));
-    enqueue(events, "tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input}));
+    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({}));
+    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({})));
+    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string()})));
+    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({})));
+    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input})));
 }
 
 async fn append_file_tool_event_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
@@ -131,7 +134,7 @@ async fn append_file_tool_event_action(state: &AppState, events: &mut EventBuffe
         ("file_delete", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileDelete, args: serde_json::json!(FILE_TOOL_EVENT_PATH), parallel_group: None }),
     ];
     for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
-    let summary = format!("Ran OpenCode-style file tool event proof for `{FILE_TOOL_EVENT_PATH}`.\n\nThe WebUI executed file_write, file_edit, and file_delete, and each result emitted FileSystem.Event.Edited / Watcher.Event.Updated / LSP warmup / diagnostics envelopes copied from OpenCode write/edit/apply_patch behavior.");
+    let summary = format!("Ran OpenCode-style file tool event proof for `{FILE_TOOL_EVENT_PATH}`.\n\nThe WebUI executed file_write, file_edit, and file_delete. The stream now exposes OpenCode SessionProcessor lifecycle receipts from `{OPENCODE_PROCESSOR_SOURCE}`: pending input, running tool-call, completed result, FilePart attachments, filesystem events, watcher events, and LSP diagnostics envelopes.");
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "file-tool-event-summary", &summary);
 }
@@ -141,9 +144,9 @@ async fn append_natural_note_action(state: &AppState, events: &mut EventBuffer, 
     let result = append_tool_events(state, events, conversation_id, "apply_patch", req).await;
     let pending = result.as_ref().and_then(|r| r.metadata.get("pending_edit_approval")).is_some();
     let summary = if pending {
-        format!("Prepared an edit approval request for `{NATURAL_NOTE_PATH}`.\n\nApprove edit to apply the patch; no file is written until approval completes.")
+        format!("Prepared an edit approval request for `{NATURAL_NOTE_PATH}`.\n\nApprove edit to apply the patch; no file is written until approval completes. The stream includes OpenCode SessionProcessor pending/input/running lifecycle receipts from `{OPENCODE_PROCESSOR_SOURCE}`.")
     } else {
-        format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card for the new note.")
+        format!("Created `{NATURAL_NOTE_PATH}` from your request.\n\nUpdated 1 file and added a visible file-change card plus OpenCode SessionProcessor lifecycle receipts.")
     };
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "natural-summary", &summary);
@@ -180,20 +183,54 @@ async fn append_repo_preflight(state: &AppState, events: &mut EventBuffer, conve
 async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
     let id = req.id.clone().0.to_string();
     let input = req.args.clone();
-    enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
-    enqueue(events, "tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()}));
-    enqueue(events, "tool-input-end", serde_json::json!({"id": id.clone(), "name": name}));
-    enqueue(events, "tool-call", serde_json::json!({"id": id.clone(), "name": name, "kind": name, "input": input}));
+    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({}));
+    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({})));
+    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string()})));
+    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({})));
+    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input})));
     match state.agent.execute_tool(req).await {
         Ok(mut result) => {
             present_tool_result(name, &mut result);
-            enqueue(events, "tool-result", serde_json::to_value(&result).unwrap_or_default());
+            let final_stage = if result.success { "completed" } else { "error" };
+            result.metadata.insert("opencode_session_processor".to_string(), opencode_processor_meta(final_stage));
+            result.metadata.insert("opencode_lifecycle_stage".to_string(), serde_json::json!(final_stage));
+            enqueue_lifecycle(events, final_stage, &id, name, serde_json::json!({"success": result.success, "title": name, "attachments_source": "ToolStateCompleted.attachments"}));
+            enqueue(events, if result.success { "tool-result" } else { "tool-error" }, serde_json::to_value(&result).unwrap_or_default());
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result.clone()]).await;
             Some(result)
         }
-        Err(tool_err) => { enqueue(events, "tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()})); None }
+        Err(tool_err) => {
+            enqueue_lifecycle(events, "error", &id, name, serde_json::json!({"message": tool_err.to_string()}));
+            enqueue(events, "tool-error", lifecycle_payload("error", &id, name, serde_json::json!({"message": tool_err.to_string()})));
+            None
+        }
     }
+}
+
+fn enqueue_lifecycle(events: &mut EventBuffer, stage: &str, id: &str, name: &str, extra: serde_json::Value) {
+    enqueue(events, "tool-lifecycle", lifecycle_payload(stage, id, name, extra));
+}
+
+fn lifecycle_payload(stage: &str, id: &str, name: &str, extra: serde_json::Value) -> serde_json::Value {
+    let mut payload = serde_json::json!({"id": id, "name": name, "stage": stage, "metadata": opencode_processor_meta(stage)});
+    if let Some(obj) = payload.as_object_mut() {
+        if let Some(extra_obj) = extra.as_object() {
+            for (key, value) in extra_obj { obj.insert(key.clone(), value.clone()); }
+        }
+    }
+    payload
+}
+
+fn opencode_processor_meta(stage: &str) -> serde_json::Value {
+    serde_json::json!({
+        "opencode_source": OPENCODE_PROCESSOR_SOURCE,
+        "schema_source": OPENCODE_SCHEMA_SOURCE,
+        "copied_behavior": "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle",
+        "lifecycle_stage": stage,
+        "events": ["tool-input-start", "tool-input-delta", "tool-input-end", "tool-call", "tool-result", "tool-error"],
+        "state_shapes": ["ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"]
+    })
 }
 
 fn present_tool_result(name: &str, result: &mut ToolResult) {
