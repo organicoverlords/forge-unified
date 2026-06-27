@@ -59,7 +59,7 @@ step "model chat stream"
 timeout 180s curl -fsS --connect-timeout 2 --max-time 170 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$MODEL_STREAM"
 
 step "assert model stream"
-if grep -Fq '"provider":"local"' "$MODEL_STREAM" || grep -Fq 'event: benchmark-phase' "$MODEL_STREAM" || grep -Fq 'local_shortcut' "$MODEL_STREAM"; then
+if grep -Fq '"provider":"local"' "$MODEL_STREAM" || grep -Fq 'event: benchmark-phase' "$MODEL_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$MODEL_STREAM"; then
   echo "::error::local or scripted proof path detected" >&2
   tail -n 160 "$MODEL_STREAM" >&2 || true
   exit 8
@@ -99,7 +99,7 @@ test -n "$BENCH_CONV_ID"
 jq -Rs '{message: ., max_rounds: 10}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
 
 timeout 480s curl -fsS --connect-timeout 2 --max-time 470 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
-if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Fq 'local_shortcut' "$BENCH_STREAM"; then
+if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   echo "::error::full benchmark used local/scripted shortcut" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 12
