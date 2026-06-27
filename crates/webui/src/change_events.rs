@@ -26,8 +26,10 @@ pub async fn stream_events(State(state): State<AppState>) -> Sse<impl Stream<Ite
         loop {
             match rx.recv().await {
                 Ok(item) => {
-                    let payload = serde_json::json!({"type": item.event_type, "properties": item, "id": item.seq.to_string()});
-                    return Some((Ok(Event::default().event("message").id(item.seq.to_string()).data(payload.to_string())), rx));
+                    let seq = item.seq;
+                    let event_type = item.event_type.clone();
+                    let payload = serde_json::json!({"type": event_type, "properties": item, "id": seq.to_string()});
+                    return Some((Ok(Event::default().event("message").id(seq.to_string()).data(payload.to_string())), rx));
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
