@@ -14,78 +14,63 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
-- Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this run: `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed`.
-- Latest proven browser proof before this run: Live WebUI Feature Sprint run `28299351117`, artifact `7927453969`.
-- Current branch HEAD after this slice needs Actions before calling it green.
+- Accepted proof HEAD before this docs-only continuation update: `7a1951ec9b706bca9a3dea3d7204fff1e01f87cf`.
+- Accepted workflows at that head: CI `28301576019`, Build Proof `28301575992`, Live WebUI Feature Sprint `28301576020`.
+- Accepted artifact: `7928099674`, digest `sha256:ecee63563b695fbbc62e270dae86ca9347c202ca191a0eb0845da3144503d078`.
+- If this file has a newer docs-only HEAD, check Actions before calling the new HEAD green; do not lose the accepted proof above.
 
-## Latest source-backed slice
+## Latest accepted proof slice
 
-Forge now exposes and renders the provider-visible OpenCode-style tool catalog so the model/tool stream can see the real tool surface and browser proof can verify it in the UI.
+Forge now has real live browser proof for the full six-phase benchmark prompt through the WebUI.
 
-Upstream source paths:
+The accepted artifact proves:
 
-- `packages/opencode/src/tool/apply_patch.ts`
-- `packages/opencode/src/session/processor.ts`
-- `packages/schema/src/v1/session.ts`
-- `packages/opencode/src/tool/write.ts`
-- `packages/opencode/src/tool/edit.ts`
-- `packages/opencode/src/tool/read.ts`
-- `packages/opencode/src/tool/bash.ts`
-- `packages/opencode/src/tool/glob.ts`
-- `packages/opencode/src/tool/grep.ts`
-- `packages/opencode/src/tool/ls.ts`
-- `packages/opencode/src/tool/webfetch.ts`
+- Full benchmark prompt submitted through `/api/conversations/:id/chat/stream`.
+- Real `nvidia_nim` provider and model `deepseek-ai/deepseek-v4-flash`.
+- No local/scripted acceptance path: no `provider: local`, no `local_shortcut`, no `benchmark-phase`.
+- Real `tool-call` and `tool-result` events.
+- 28 tool calls and 28 tool results in the inspected proof.
+- Browser-visible full benchmark markers: `Full six-phase agentic benchmark prompt`, `Phase 1`, `Phase 2`, `Founder report`, and `Technical report`.
+- Proof files include `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
 
-Copied / improved behavior:
+## Recent implementation fixes
 
-- `tool_definitions()` now advertises the full Forge executor surface instead of only a minimal repo/file/shell subset.
-- `apply_patch` is provider-visible with `patchText` schema and OpenCode source metadata.
-- `task`, `batch_parallel`, `web_fetch`, `web_search`, `browser_proof`, `vision_review`, `graph_build`, `graph_query`, `terminal_run`, and `switch_mode` are provider-visible.
-- `/api/tools` exposes `opencode_provider_tool_catalog`, names, count, required tools, source paths, and full schemas.
-- The WebUI renders an `OpenCode Tool Catalog` panel with visible `apply_patch`.
-- Live WebUI smoke requires the catalog API and browser DOM to show the provider-visible catalog and `apply_patch` during natural prompt proof.
+- Provider-facing tool schema now exposes repo/shell/search/file tools needed by the full benchmark.
+- Full benchmark fixture lives at `scripts/smoke/full-agentic-benchmark-prompt.txt`.
+- Live WebUI smoke gates the full benchmark prompt and fails on local/scripted paths.
+- File read/delete accept schema-shaped `{path: ...}` arguments.
+- Failed tool executions are recorded back to the model as tool results.
+- `/` and empty paths normalize to workspace root for repo-scoped file tools.
+- When tool rounds are exhausted, the orchestrator uses a clean no-tools finalization pass from a compact evidence digest so the WebUI can show final Founder/Technical reports.
 
-Forge files touched:
+## Source-backed OpenCode anchors
 
-- `crates/engine/src/tool.rs`
-- `crates/webui/src/routes.rs`
-- `crates/webui/src/lib.rs`
-- `crates/webui/src/chat_ui.rs`
-- `scripts/smoke/live-webui-feature-sprint.sh`
-- `OPENCODE-PARITY.md`
-- `PROJECT_STATE.md`
-- `CONTINUE_HERE.md`
+- `packages/opencode/src/session/processor.ts` — lifecycle, ToolPart mutation, `providerExecuted`, and provider/tool stream processing.
+- `packages/schema/src/v1/session.ts` — ToolPart, ToolState, FilePart schema shape.
+- `packages/opencode/src/event-v2-bridge.ts` — visible EventV2Bridge receipt stream.
+- `packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — provider-visible tool catalog behavior anchors.
 
-Still incomplete / do not overclaim:
+## Previous proven slices
 
-- Current HEAD is not yet workflow/browser-proof green.
-- Provider-visible catalog is now exposed, but true providerExecuted tool calls from the NIM/provider stream still need deeper implementation.
+- `7a1951ec9b706bca9a3dea3d7204fff1e01f87cf` — real full six-phase benchmark prompt through WebUI; CI `28301576019`, Build Proof `28301575992`, Live WebUI Feature Sprint `28301576020`; artifact `7928099674`.
+- `332b5bbf98c4faaa481fe8a63cd64bb2b1359f92` — live NIM model proof plus visible OpenCode ToolPart lifecycle proof; artifact `7927706533`.
+- `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed` — live model-backed browser proof; artifact `7927453969`.
+- `04d35a5085a89658b158b7ee23f40510d9a949cd` — older local deterministic six-phase screenshot path. Do not use this as live model acceptance evidence.
+- `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; artifact `7926326967`.
+- `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; artifact `7925827340`.
+
+## Still incomplete / do not overclaim
+
+- True providerExecuted tool calls from provider-side execution are still incomplete for Forge-owned tools.
 - OpenCode database-backed part IDs are not fully copied.
 - Live LSP server/client diagnostics are not implemented yet.
 - Full OpenCode formatter catalog/config/runtime remains partial.
 - Full NIM-backed streamed compaction remains incomplete.
 
-## Previous proven slices
-
-- `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed` — live model-backed browser proof; CI `28299351121`, Build Proof `28299351118`, and Live WebUI Feature Sprint `28299351117` were green with proof artifact `7927453969`.
-- `04d35a5085a89658b158b7ee23f40510d9a949cd` — six-phase natural WebUI repo benchmark path; CI `28297659041`, Build Proof `28297659050`, and Live WebUI Feature Sprint `28297659029` were green with proof artifact `7926961624`.
-- `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; CI `28295482729`, Build Proof `28295482721`, and Live WebUI Feature Sprint `28295482726` were green with proof artifact `7926326967`.
-- `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; CI `28293770704`, Build Proof `28293770703`, and Live WebUI Feature Sprint `28293770706` were green with proof artifact `7925827340`.
-- `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation.
-- `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape.
-- `c3b826d7136298c7bb7d62ba30e11fd12cfeff70` — watcher status + local mutable ToolPart proof path.
-- `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity.
-- `98b408b0f8f8a132ba7df18617d103ea63d43ce1` — ToolStateCompleted FilePart attachment parity.
-- `d24d8e7183216aa8a50627b1bc280251d9171ee4` — OpenCode session compaction event-type parity.
-- `1734ae285237bee4c4bd06a418ecd719a1ccf87a` — durable OpenCode EventV2Bridge-style change bus replay.
-- `6a34928048b86e6d7b91468789eeef4489744ae8` — OpenCode post-edit event and LSP touch receipts.
-- `805406542b55f803924401459f881f5df43680b7` — modern dark Codex/OpenCode-style WebUI theme.
-
 ## Next source-backed targets
 
-1. Check Actions for the current provider tool catalog HEAD.
-2. If Rust compile/test fails, inspect exact logs; do not rerun deterministic failures blindly.
-3. If WebUI smoke fails, inspect `tool-catalog.json`, browser-proof DOM markers, `tool-lifecycle-stream.sse`, and `server.log` first.
-4. Inspect proof artifact screenshots after green.
-5. Continue toward true providerExecuted tool calls from NIM/provider stream, live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
+1. Check Actions for any docs-only HEAD after this continuation update.
+2. Continue toward true providerExecuted tool calls from the NIM/provider stream.
+3. Continue live LSP diagnostics.
+4. Continue full formatter registry/config/runtime parity.
+5. Continue deeper watcher parity or NIM-backed compaction.
