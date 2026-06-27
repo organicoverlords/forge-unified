@@ -1,9 +1,10 @@
 //! Tool execution system with parallel batch support.
 
+use crate::change_bus::{ChangeBus, ChangeEvent};
 use crate::types::{ToolKind, ToolRequest, ToolResult, ToolConfig};
 use anyhow::Result;
 use std::time::Instant;
-use serde_json::json;
+use serde_json::{json, Value};
 
 pub mod batch;
 pub mod browser;
@@ -22,12 +23,17 @@ pub struct ToolExecutor {
     pub(crate) workspace_root: String,
     timeout_ms: u64,
     max_parallel: usize,
+    change_bus: ChangeBus,
 }
 
 impl ToolExecutor {
     pub fn new(workspace_root: String, timeout_ms: u64, max_parallel: usize) -> Self {
-        Self { workspace_root, timeout_ms, max_parallel }
+        Self { workspace_root, timeout_ms, max_parallel, change_bus: ChangeBus::new() }
     }
+
+    pub fn change_bus(&self) -> ChangeBus { self.change_bus.clone() }
+    pub fn recent_change_events(&self) -> Vec<ChangeEvent> { self.change_bus.recent() }
+    pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.change_bus.subscribe() }
 
     pub async fn execute(&self, request: ToolRequest) -> Result<ToolResult> {
         let start = Instant::now();
@@ -54,17 +60,42 @@ impl ToolExecutor {
             ToolKind::GraphBuild => self.execute_graph_build(request).await,
             ToolKind::GraphQuery => self.execute_graph_query(request).await,
         };
-        
+
         let duration = start.elapsed().as_millis() as u64;
         result.map(|mut r| {
             r.duration_ms = duration;
+            let receipts = self.publish_change_events(&r);
+            if !receipts.is_empty() {
+                r.metadata.insert("event_bus_receipts".to_string(), json!(receipts));
+            }
             r
         })
     }
 
+    fn publish_change_events(&self, result: &ToolResult) -> Vec<ChangeEvent> {
+        if !result.success { return Vec::new(); }
+        let mut receipts = Vec::new();
+        receipts.extend(self.publish_metadata_array(result, "opencode_filesystem_edits", "filesystem.edited"));
+        receipts.extend(self.publish_metadata_array(result, "opencode_watcher_updates", "watcher.updated"));
+        receipts
+    }
+
+    fn publish_metadata_array(&self, result: &ToolResult, key: &str, event_type: &str) -> Vec<ChangeEvent> {
+        let Some(values) = result.metadata.get(key).and_then(Value::as_array) else { return Vec::new(); };
+        values.iter().map(|value| {
+            let mut payload = value.clone();
+            if let Some(object) = payload.as_object_mut() {
+                object.insert("tool_id".to_string(), json!(result.id.0.to_string()));
+                object.insert("tool_kind".to_string(), json!(format!("{:?}", result.kind)));
+                object.insert("metadata_key".to_string(), json!(key));
+            }
+            self.change_bus.publish(event_type, "opencode.apply_patch", payload)
+        }).collect()
+    }
+
     pub async fn execute_batch(&self, requests: Vec<ToolRequest>) -> Vec<ToolResult> {
         use futures::stream::{self, StreamExt};
-        
+
         stream::iter(requests)
             .map(|req| self.execute(req))
             .buffer_unordered(self.max_parallel)
@@ -160,154 +191,67 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
         ToolConfig {
             name: "web_fetch".to_string(),
             description: "Fetch the contents of a URL and return the text".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "url": { "type": "string", "description": "URL to fetch" }
-                },
-                "required": ["url"]
-            }),
+            parameters: json!({"type":"object","properties":{"url":{"type":"string","description":"URL to fetch"}},"required":["url"]}),
         },
         ToolConfig {
             name: "web_search".to_string(),
             description: "Search the web for information".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string", "description": "Search query" }
-                },
-                "required": ["query"]
-            }),
+            parameters: json!({"type":"object","properties":{"query":{"type":"string","description":"Search query"}},"required":["query"]}),
         },
         ToolConfig {
             name: "shell_command".to_string(),
             description: "Run a shell command and return its output".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string", "description": "Shell command to run" },
-                    "timeout": { "type": "number", "description": "Timeout in seconds (optional)" }
-                },
-                "required": ["command"]
-            }),
+            parameters: json!({"type":"object","properties":{"command":{"type":"string","description":"Shell command to run"},"timeout":{"type":"number","description":"Timeout in seconds (optional)"}},"required":["command"]}),
         },
         ToolConfig {
             name: "terminal_run".to_string(),
             description: "Run a command in an interactive terminal".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string", "description": "Command to run" },
-                    "cwd": { "type": "string", "description": "Working directory (optional)" }
-                },
-                "required": ["command"]
-            }),
+            parameters: json!({"type":"object","properties":{"command":{"type":"string","description":"Command to run"},"cwd":{"type":"string","description":"Working directory (optional)"}},"required":["command"]}),
         },
         ToolConfig {
             name: "task".to_string(),
             description: "Create a subagent task for delegated work".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "description": { "type": "string", "description": "Task description" },
-                    "background": { "type": "boolean", "description": "Run in background" }
-                },
-                "required": ["description"]
-            }),
+            parameters: json!({"type":"object","properties":{"description":{"type":"string","description":"Task description"},"background":{"type":"boolean","description":"Run in background"}},"required":["description"]}),
         },
         ToolConfig {
             name: "repo_info".to_string(),
             description: "Get repository information (git root, branch, HEAD)".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
+            parameters: json!({"type":"object","properties":{},"required":[]}),
         },
         ToolConfig {
             name: "propose_patch".to_string(),
             description: "Propose a patch/summary of changes".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "summary": { "type": "string", "description": "Summary of changes" },
-                    "diff": { "type": "string", "description": "Diff content" }
-                },
-                "required": ["summary", "diff"]
-            }),
+            parameters: json!({"type":"object","properties":{"summary":{"type":"string","description":"Summary of changes"},"diff":{"type":"string","description":"Diff content"}},"required":["summary","diff"]}),
         },
         ToolConfig {
             name: "apply_patch".to_string(),
             description: "OpenCode-compatible patch tool. Accepts patchText, validates paths, records edit approval, emits post-edit receipts, and applies add/update/delete/move file mutations inside the workspace.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "patchText": { "type": "string", "description": "Full OpenCode apply_patch patch text with Begin/End markers" },
-                    "approved": { "type": "boolean", "description": "True only after the edit approval request is accepted" },
-                    "approval_id": { "type": "string", "description": "Pending approval id to apply" }
-                },
-                "required": ["patchText"]
-            }),
+            parameters: json!({"type":"object","properties":{"patchText":{"type":"string","description":"Full OpenCode apply_patch patch text with Begin/End markers"},"approved":{"type":"boolean","description":"True only after the edit approval request is accepted"},"approval_id":{"type":"string","description":"Pending approval id to apply"}},"required":["patchText"]}),
         },
         ToolConfig {
             name: "switch_mode".to_string(),
             description: "Switch the agent mode (chat, explore, plan, build)".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "mode": { "type": "string", "enum": ["chat", "explore", "plan", "build"], "description": "Mode to switch to" }
-                },
-                "required": ["mode"]
-            }),
+            parameters: json!({"type":"object","properties":{"mode":{"type":"string","enum":["chat","explore","plan","build"],"description":"Mode to switch to"}},"required":["mode"]}),
         },
         ToolConfig {
             name: "browser_proof".to_string(),
             description: "Open a headless browser, take a screenshot, and optionally dump the DOM. Use this to debug UI issues, verify that pages load correctly, or inspect visual output.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "url": { "type": "string", "description": "URL to open in the browser" },
-                    "width": { "type": "integer", "description": "Viewport width in pixels (default 1280)" },
-                    "height": { "type": "integer", "description": "Viewport height in pixels (default 720)" },
-                    "capture_dom": { "type": "boolean", "description": "Whether to capture DOM snapshot (default true)" }
-                },
-                "required": ["url"]
-            }),
+            parameters: json!({"type":"object","properties":{"url":{"type":"string","description":"URL to open in the browser"},"width":{"type":"integer","description":"Viewport width in pixels (default 1280)"},"height":{"type":"integer","description":"Viewport height in pixels (default 720)"},"capture_dom":{"type":"boolean","description":"Whether to capture DOM snapshot (default true)"}},"required":["url"]}),
         },
         ToolConfig {
             name: "vision_review".to_string(),
             description: "Send a screenshot image to a vision-capable AI model for analysis. Use this to detect UI bugs, visual errors, or layout issues in screenshots.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "image_base64": { "type": "string", "description": "Base64-encoded PNG screenshot" },
-                    "prompt": { "type": "string", "description": "Custom analysis prompt (optional)" }
-                },
-                "required": ["image_base64"]
-            }),
+            parameters: json!({"type":"object","properties":{"image_base64":{"type":"string","description":"Base64-encoded PNG screenshot"},"prompt":{"type":"string","description":"Custom analysis prompt (optional)"}},"required":["image_base64"]}),
         },
         ToolConfig {
             name: "graph_build".to_string(),
             description: "Build a knowledge graph from code files in the workspace. Extracts imports, dependencies, and file structure into a queryable graph.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "pattern": { "type": "string", "description": "Glob pattern for files to include (default **/crates/**/*.rs)", "default": "**/crates/**/*.rs" }
-                },
-                "required": []
-            }),
+            parameters: json!({"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern for files to include (default **/crates/**/*.rs)","default":"**/crates/**/*.rs"}},"required":[]}),
         },
         ToolConfig {
             name: "graph_query".to_string(),
             description: "Query a previously built knowledge graph. Search for files, functions, or dependencies by keyword.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "graph_json": { "type": "string", "description": "JSON output from a previous graph_build call" },
-                    "query": { "type": "string", "description": "Search query (file name, function, import, etc.)" }
-                },
-                "required": ["graph_json", "query"]
-            }),
+            parameters: json!({"type":"object","properties":{"graph_json":{"type":"string","description":"JSON output from a previous graph_build call"},"query":{"type":"string","description":"Search query (file name, function, import, etc.)"}},"required":["graph_json","query"]}),
         },
     ]
 }
