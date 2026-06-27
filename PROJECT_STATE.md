@@ -8,8 +8,8 @@ Updated: 2026-06-27
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Server port: `3000`
-- Latest fully green baseline before the ReasoningPart slice: `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7`
-- Latest ReasoningPart source/proof code head before docs refresh: `d880f839a44b7ad551e47e95bc9cd1b1987d60ae`
+- Latest fully green baseline: `a0efdb6372cd92ac6b579bd152f009bb3debefbd` for OpenCode `ReasoningPart`.
+- Latest CompactionPart source/proof code head before docs refresh: `bd118d718e01469445fafaf266527b97511bbba5`.
 
 ## Latest validation state
 
@@ -23,8 +23,9 @@ Latest fully green baselines:
 | `e160fa4bf9326c26d5731e9fb474574a4d068b2f` | success | success | success | Compact `repo_info`/`file_list` presentation with raw JSON preserved in metadata |
 | `b7b0e7eb88570900ad8e3252d8190004342678fd` | success | success | success | OpenCode `SnapshotPart` persistence and visible WebUI card proof |
 | `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` | success | success | success | OpenCode `FilePart` persistence and visible DOM proof |
+| `a0efdb6372cd92ac6b579bd152f009bb3debefbd` | success | success | success | OpenCode `ReasoningPart` safe public summary card proof |
 
-The latest docs-updated ReasoningPart HEAD after this refresh still needs its own Actions check before merge/green claims.
+The latest docs-updated CompactionPart HEAD after this refresh still needs its own Actions check before merge/green claims.
 
 ## Latest product behavior
 
@@ -66,21 +67,24 @@ Proven behavior:
 
 ### OpenCode session parts
 
-Implemented/proofed through `c3f15e4`:
+Implemented/proofed through `a0efdb6`:
 
 - `TextPart` metadata for user/assistant public text.
+- `ReasoningPart` card for safe public progress summaries only.
 - `SnapshotPart` card for explicit snapshot save.
 - `FilePart` card for changed files, including `workspace://...` URL.
 - `ToolPart` cards for running/completed/error states.
 - `PatchPart` card with patch hash and file list.
 
-New ReasoningPart slice at `d880f839`:
+New CompactionPart slice at `bd118d7`:
 
-- Adds a helper for upstream `ReasoningPart` shape from `packages/schema/src/v1/session.ts`.
-- Persists `reasoning_parts` on assistant messages as safe public progress summaries.
-- Marks the metadata as `visibility=public_progress_summary` and `private_chain_of_thought=false`.
-- WebUI renders `OpenCode ReasoningPart` and collapsed `ReasoningPart metadata`.
-- Live proof requires persisted JSON and browser DOM markers for ReasoningPart.
+- Adds a helper for upstream `CompactionPart` shape from `packages/schema/src/v1/session.ts`.
+- Uses OpenCode compaction source `packages/opencode/src/session/compaction.ts` as runtime reference.
+- Adds `/api/conversations/:id/compact` for durable compaction request markers.
+- Persists `compaction_parts` on a system message with `auto`, `overflow`, and optional `tail_start_id`.
+- Adds a WebUI Compact button and visible `OpenCode CompactionPart` / `CompactionPart metadata` card.
+- Live proof requires persisted JSON and browser DOM markers for CompactionPart.
+- This is not full compaction parity yet; LLM summary generation, replay, plugin hooks, overflow processing, and auto-continue are still missing.
 
 ## OpenCode-source work copied so far
 
@@ -90,6 +94,7 @@ Studied upstream sources:
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/processor.ts`
 - `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/compaction.ts`
 
 Forge changes:
 
@@ -98,7 +103,7 @@ Forge changes:
 - Updated `crates/engine/src/tool.rs` to register `patch_apply` and advertise mutation support.
 - Added WebUI file-change cards and compact tool-result presentation.
 - Added natural local action paths for file creation and repository inspection, using real Forge tools and normal user prompts.
-- Added OpenCode-style session part helpers and WebUI cards for text, reasoning, snapshot, file, tool, and patch parts.
+- Added OpenCode-style session part helpers and WebUI cards for text, reasoning, snapshot, compaction, file, tool, and patch parts.
 
 Behavior now present:
 
@@ -112,6 +117,7 @@ Behavior now present:
 - Emits/persists file-change metadata and renders `ADDED` file cards.
 - Presents repo inspection as human-readable output while keeping raw details under metadata.
 - Persists safe public `ReasoningPart` summaries without exposing private chain-of-thought.
+- Persists durable `CompactionPart` request markers and optional local pruning metadata.
 
 Remaining parity gaps:
 
@@ -121,6 +127,7 @@ Remaining parity gaps:
 - BOM preservation and formatter hooks are not yet equivalent to upstream OpenCode.
 - Tool cards and parts are visible/durable enough for proof, but not full OpenCode lifecycle parity.
 - ReasoningPart is a safe public summary only, not provider/private reasoning capture.
+- CompactionPart is not full OpenCode compaction process parity yet.
 
 ## Features implemented
 
@@ -130,6 +137,7 @@ Remaining parity gaps:
 - Conversation create / list / get / delete.
 - Chat completion via REST API and WebUI streaming route.
 - Cancel / pause / resume API shape exists.
+- Snapshot and compaction request routes exist.
 - Message history with metadata.
 
 ### Agent & Tool Execution
@@ -152,7 +160,7 @@ Remaining parity gaps:
 - Live SSE events for run phases, text deltas, tool calls, tool results/errors, file-change events, and run finish.
 - Browser proof route and NIM vision review route.
 - Live WebUI Feature Sprint proves normal-prompt file creation and repository inspection with real screenshot artifacts.
-- Latest proof script now requires visible OpenCode `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `ToolPart`, and `PatchPart` markers.
+- Latest proof script now requires visible OpenCode `TextPart`, `ReasoningPart`, `SnapshotPart`, `CompactionPart`, `FilePart`, `ToolPart`, and `PatchPart` markers.
 
 ### CI/CD
 
@@ -169,12 +177,13 @@ Remaining parity gaps:
 | Engine | Watcher/file edited events and LSP diagnostics for patch changes | P1 |
 | Engine | BOM preservation and formatter hooks | P1 |
 | Router | Visible routing/fallback receipts and cooldown policy | P1 |
-| Engine | Context compaction parity | P2 |
+| Engine | Full OpenCode context compaction process parity | P1 |
 | Benchmark | Artifact-backed adapter contract | P2 |
 
 ## What not to do
 
 - Do not claim full OpenCode parity for `apply_patch` yet.
+- Do not claim full OpenCode compaction parity yet.
 - Do not add invented workflows when OpenCode has a source-defined behavior.
 - Do not remove or weaken the 500-line hard gate.
 - Do not expose private chain-of-thought through `ReasoningPart`; only public progress summaries are allowed.
