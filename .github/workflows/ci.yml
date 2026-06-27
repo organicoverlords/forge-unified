@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [master, main, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [master, main, dev]
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -30,18 +30,17 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
-          key: .
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
+
       - name: Check formatting
         run: cargo fmt --all -- --check
-      
+
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      
+
       - name: Check build
         run: cargo check --workspace --all-targets
-      
+
       - name: Build release
         run: cargo build --workspace --release
 
@@ -50,10 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -63,10 +62,10 @@ jobs:
             ~/.cargo/registry/cache/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
+
       - name: Run tests
         run: cargo test --workspace --all-targets
-      
+
       - name: Run doc tests
         run: cargo test --doc --workspace
 
@@ -75,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Check file sizes
         run: |
           MAX_LINES=500
@@ -93,29 +92,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Build binary
-        run: cargo build --release -p forge-app
-      
+
+      - name: Run MVP chat UI smoke
+        run: bash scripts/smoke/mvp-chat-ui-smoke.sh
+
       - name: Test help output
-        run: ./target/release/forge --help
-      
-      - name: Test config generation
-        run: |
-          ./target/release/forge --help 2>&1 | head -20
+        run: ./target/debug/forge --help
 
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install cargo-audit
         run: cargo install cargo-audit
-      
+
       - name: Run audit
         run: cargo audit
 
@@ -124,15 +119,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install cargo-deny
         run: cargo install cargo-deny
-      
+
       - name: Check licenses
         run: cargo deny check licenses
-      
+
       - name: Check bans
         run: cargo deny check bans
-      
+
       - name: Check sources
         run: cargo deny check sources
