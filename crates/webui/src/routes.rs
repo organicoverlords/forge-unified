@@ -77,6 +77,16 @@ pub async fn save_snapshot(State(s): State<AppState>, Path(id): Path<String>) ->
 }
 
 #[derive(Deserialize)]
+pub struct CompactRequest { keep_last: Option<usize>, auto: Option<bool>, overflow: Option<bool> }
+
+pub async fn compact_conversation(State(s): State<AppState>, Path(id): Path<String>, Json(req): Json<CompactRequest>) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let conv_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
+    let result = s.agent.compact_with_part(&conv_id, req.keep_last.unwrap_or(64), req.auto.unwrap_or(false), req.overflow.unwrap_or(false)).await
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
 pub struct BrowserProofApiRequest { pub url: String, pub width: Option<u32>, pub height: Option<u32>, pub capture_dom: Option<bool> }
 
 pub async fn browser_proof(State(s): State<AppState>, Json(req): Json<BrowserProofApiRequest>) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
