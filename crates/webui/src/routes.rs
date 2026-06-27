@@ -87,6 +87,42 @@ pub async fn compact_conversation(State(s): State<AppState>, Path(id): Path<Stri
 }
 
 #[derive(Deserialize)]
+pub struct ApproveEditRequest { approved: Option<bool> }
+
+pub async fn approve_edit(State(s): State<AppState>, Path((id, approval_id)): Path<(String, String)>, Json(req): Json<ApproveEditRequest>) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    if req.approved == Some(false) { return Err(axum::http::StatusCode::BAD_REQUEST); }
+    let conv_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
+    let conv = s.agent.get_conversation(&conv_id).await.ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let patch_text = find_pending_edit_patch_text(&conv, &approval_id).ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let req = ToolRequest {
+        id: ToolCallId(approval_id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?),
+        kind: ToolKind::ApplyPatch,
+        args: serde_json::json!({"patchText": patch_text, "approved": true, "approval_id": approval_id}),
+        parallel_group: None,
+    };
+    let mut result = s.agent.execute_tool(req).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    result.metadata.insert("approved_via_api".to_string(), serde_json::json!(true));
+    let summary = result.success.then(|| approved_edit_summary(&result));
+    s.agent.record_tool_results(&conv_id, vec![result.clone()]).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    if let Some(summary) = summary { s.agent.record_assistant_summary(&conv_id, summary).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?; }
+    Ok(Json(serde_json::json!({"approval_applied": result.success, "approval_id": approval_id, "result": result})))
+}
+
+fn find_pending_edit_patch_text(conv: &Conversation, approval_id: &str) -> Option<String> {
+    conv.messages.iter().rev().filter_map(|msg| msg.tool_results.as_ref()).flat_map(|results| results.iter()).find_map(|result| {
+        let pending = result.metadata.get("pending_edit_approval")?;
+        if pending.get("approval_id").and_then(serde_json::Value::as_str)? != approval_id { return None; }
+        if pending.get("status").and_then(serde_json::Value::as_str) != Some("pending") { return None; }
+        pending.get("patchText").and_then(serde_json::Value::as_str).map(str::to_string)
+    })
+}
+
+fn approved_edit_summary(result: &ToolResult) -> String {
+    let filepath = result.metadata.get("permission_request").and_then(|p| p.get("metadata")).and_then(|m| m.get("filepath")).and_then(serde_json::Value::as_str).unwrap_or("requested edit");
+    format!("Approved and applied edit `{filepath}`.\n\n{}", result.output)
+}
+
+#[derive(Deserialize)]
 pub struct BrowserProofApiRequest { pub url: String, pub width: Option<u32>, pub height: Option<u32>, pub capture_dom: Option<bool> }
 
 pub async fn browser_proof(State(s): State<AppState>, Json(req): Json<BrowserProofApiRequest>) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
@@ -113,9 +149,7 @@ pub async fn benchmark(State(_s): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({"score": adapter.score(), "capabilities": report}))
 }
 
-pub async fn graph_visualization(State(_s): State<AppState>) -> axum::response::Html<String> {
-    axum::response::Html(GRAPH_HTML.to_string())
-}
+pub async fn graph_visualization(State(_s): State<AppState>) -> axum::response::Html<String> { axum::response::Html(GRAPH_HTML.to_string()) }
 
 pub async fn graph_data(State(s): State<AppState>) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
     let graph_json = s.agent.clone().graph_build(None).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
