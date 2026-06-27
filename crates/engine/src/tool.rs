@@ -27,7 +27,8 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(workspace_root: String, timeout_ms: u64, max_parallel: usize) -> Self {
-        Self { workspace_root, timeout_ms, max_parallel, change_bus: ChangeBus::new() }
+        let change_bus = ChangeBus::new_with_workspace(Some(workspace_root.clone()));
+        Self { workspace_root, timeout_ms, max_parallel, change_bus }
     }
 
     pub fn change_bus(&self) -> ChangeBus { self.change_bus.clone() }
