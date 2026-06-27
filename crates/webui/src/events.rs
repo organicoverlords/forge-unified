@@ -26,104 +26,78 @@ pub async fn chat_stream(
     Json(req): Json<ChatStreamRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, axum::http::StatusCode> {
     let conversation_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
-    let stream = stream::unfold(
-        ChatEventState::Start { state, conversation_id, message: req.message },
-        |state| async move {
-            match state {
-                ChatEventState::Start { state, conversation_id, message } => Some((
-                    event("run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"})),
-                    ChatEventState::Run { state, conversation_id, message },
-                )),
-                ChatEventState::Run { state, conversation_id, message } => {
-                    let mut events = VecDeque::new();
-                    if should_run_natural_note_action(&message) {
-                        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
-                        append_natural_note_action(&state, &mut events, &conversation_id).await;
-                        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
-                            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
-                        }
-                        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "natural file creation", "provider": "local"})));
-                        return ChatEventState::emit_next(events);
-                    }
-                    if should_run_repo_inspection_action(&message) {
-                        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
-                        append_repo_inspection_action(&state, &mut events, &conversation_id).await;
-                        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
-                            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
-                        }
-                        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "repository inspection", "provider": "local"})));
-                        return ChatEventState::emit_next(events);
-                    }
+    let message = req.message;
+    let mut events = VecDeque::new();
+    events.push_back(event("run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"})));
 
-                    let result = state.agent.chat(&conversation_id, message.clone()).await;
-                    match result {
-                        Ok(record) => {
-                            let mut run_local_preflight = false;
-                            if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
-                                for msg in &conv.messages {
-                                    match &msg.role {
-                                        MessageRole::Assistant => {
-                                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
-                                                run_local_preflight = true;
-                                            }
-                                            if let Some(calls) = &msg.tool_calls {
-                                                for call in calls { append_tool_call_lifecycle(&mut events, call); }
-                                            }
-                                        }
-                                        MessageRole::Tool => {
-                                            if let Some(results) = &msg.tool_results {
-                                                for result in results {
-                                                    let event_name = if result.success { "tool-result" } else { "tool-error" };
-                                                    events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
-                                                    append_file_change_events(&mut events, result);
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-
-                                if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
-                                    stream_summary(&mut events, "assistant-final", &assistant.content);
-                                }
-                                if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
-                                    append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
-                                }
-                                let latest = state.agent.get_conversation(&conversation_id).await.unwrap_or(conv);
-                                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
-                            }
-                            events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
-                        }
-                        Err(err) => {
-                            events.push_back(event("provider-error", serde_json::json!({"message": err.to_string(), "retryable": true})));
-                            if should_run_local_preflight(&message) { append_repo_preflight(&state, &mut events, &conversation_id, &message).await; }
-                        }
-                    }
-
-                    ChatEventState::emit_next(events)
-                }
-                ChatEventState::Emit { events } => ChatEventState::emit_next(events),
-                ChatEventState::Done => None,
-            }
-        },
-    );
-
-    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
-}
-
-enum ChatEventState {
-    Start { state: AppState, conversation_id: ConversationId, message: String },
-    Run { state: AppState, conversation_id: ConversationId, message: String },
-    Emit { events: VecDeque<Result<Event, Infallible>> },
-    Done,
-}
-
-impl ChatEventState {
-    fn emit_next(mut events: VecDeque<Result<Event, Infallible>>) -> Option<(Result<Event, Infallible>, Self)> {
-        let next = events.pop_front()?;
-        let state = if events.is_empty() { Self::Done } else { Self::Emit { events } };
-        Some((next, state))
+    if should_run_natural_note_action(&message) {
+        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+        append_natural_note_action(&state, &mut events, &conversation_id).await;
+        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+        }
+        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "natural file creation", "provider": "local"})));
+        return Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()));
     }
+
+    if should_run_repo_inspection_action(&message) {
+        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+        append_repo_inspection_action(&state, &mut events, &conversation_id).await;
+        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+        }
+        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "repository inspection", "provider": "local"})));
+        return Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()));
+    }
+
+    match state.agent.chat(&conversation_id, message.clone()).await {
+        Ok(record) => {
+            let mut run_local_preflight = false;
+            if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+                for msg in &conv.messages {
+                    match &msg.role {
+                        MessageRole::Assistant => {
+                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
+                                run_local_preflight = true;
+                            }
+                            if let Some(calls) = &msg.tool_calls {
+                                for call in calls { append_tool_call_lifecycle(&mut events, call); }
+                            }
+                        }
+                        MessageRole::Tool => {
+                            if let Some(results) = &msg.tool_results {
+                                for result in results {
+                                    let event_name = if result.success { "tool-result" } else { "tool-error" };
+                                    events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
+                                    append_file_change_events(&mut events, result);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(assistant) = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::Assistant)) {
+                    stream_summary(&mut events, "assistant-final", &assistant.content);
+                }
+            }
+            if should_run_apply_patch_card_proof(&message) || (run_local_preflight && should_run_local_preflight(&message)) {
+                append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
+            }
+            if let Some(latest) = state.agent.get_conversation(&conversation_id).await {
+                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
+            }
+            events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
+        }
+        Err(err) => {
+            events.push_back(event("provider-error", serde_json::json!({"message": err.to_string(), "retryable": true})));
+            if should_run_local_preflight(&message) { append_repo_preflight(&state, &mut events, &conversation_id, &message).await; }
+            if let Some(latest) = state.agent.get_conversation(&conversation_id).await {
+                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
+            }
+        }
+    }
+
+    Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()))
 }
 
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
@@ -178,16 +152,13 @@ async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Ev
         ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
         ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
     ];
-
     if should_run_apply_patch_card_proof(message) {
         requests.push(("apply_patch", ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()),
-            kind: ToolKind::ApplyPatch,
+            id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch,
             args: serde_json::json!({"patchText": "*** Begin Patch\n*** Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt\n+apply_patch file-change card proof\n*** End Patch"}),
             parallel_group: None,
         }));
     }
-
     for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
 }
 
