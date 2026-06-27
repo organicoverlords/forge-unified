@@ -89,10 +89,10 @@ impl ConversationManager {
         let part = compaction_part(auto, Some(overflow), tail_start_id.clone());
         let metadata = HashMap::from([
             ("compaction_parts".to_string(), serde_json::json!([part.clone()])),
-            ("compaction_summary".to_string(), serde_json::json!(summary)),
-            ("compaction_recent".to_string(), serde_json::json!(recent)),
+            ("compaction_summary".to_string(), serde_json::json!(summary.clone())),
+            ("compaction_recent".to_string(), serde_json::json!(recent.clone())),
             ("compaction_template_sections".to_string(), serde_json::json!(COMPACTION_TEMPLATE_SECTIONS)),
-            ("compaction_selection".to_string(), serde_json::json!({"before": before, "head_messages": head_messages.len(), "recent_messages": recent_messages.len(), "keep_last": keep_last, "tail_start_id": tail_start_id})),
+            ("compaction_selection".to_string(), serde_json::json!({"before": before, "head_messages": head_messages.len(), "recent_messages": recent_messages.len(), "keep_last": keep_last, "tail_start_id": tail_start_id.clone()})),
             ("opencode_compaction_part_source".to_string(), crate::tool_parts::opencode_compaction_part_source()),
             ("opencode_compaction_runtime_source".to_string(), serde_json::json!({"path":"packages/core/src/session/compaction.ts","copied_behaviors":["select old head versus recent tail","serialize user/assistant/tool context","emit structured Markdown summary","preserve recent tail after compaction"]})),
         ]);
