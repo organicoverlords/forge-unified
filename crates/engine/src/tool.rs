@@ -10,6 +10,7 @@ pub mod browser;
 pub mod file_ops;
 pub mod graph;
 pub mod patch_apply;
+pub mod patch_events;
 pub mod patch_ops;
 pub mod shell_ops;
 pub mod task_ops;
@@ -229,81 +230,23 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "summary": { "type": "string", "description": "Summary of changes" },
-                    "diff": { "type": "string", "description": "Diff content" }
+                    "summary": { "type": "string" },
+                    "files": { "type": "array", "items": { "type": "string" } }
                 },
-                "required": ["summary", "diff"]
+                "required": ["summary"]
             }),
         },
         ToolConfig {
             name: "apply_patch".to_string(),
-            description: "OpenCode-compatible patch tool. Accepts patchText, validates paths, records edit-permission/diff metadata, and applies add/update/delete/move file mutations inside the workspace.".to_string(),
+            description: "Apply a patch to files in the workspace. Supports OpenCode-style patchText and edit approval metadata.",
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "patchText": { "type": "string", "description": "Full OpenCode apply_patch patch text with Begin/End markers" }
+                    "patchText": { "type": "string", "description": "OpenCode-style patch text with Begin/End markers" },
+                    "approved": { "type": "boolean", "description": "True only after the edit approval request is accepted" },
+                    "approval_id": { "type": "string", "description": "Pending approval id to apply" }
                 },
                 "required": ["patchText"]
-            }),
-        },
-        ToolConfig {
-            name: "switch_mode".to_string(),
-            description: "Switch the agent mode (chat, explore, plan, build)".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "mode": { "type": "string", "enum": ["chat", "explore", "plan", "build"], "description": "Mode to switch to" }
-                },
-                "required": ["mode"]
-            }),
-        },
-        ToolConfig {
-            name: "browser_proof".to_string(),
-            description: "Open a headless browser, take a screenshot, and optionally dump the DOM. Use this to debug UI issues, verify that pages load correctly, or inspect visual output.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "url": { "type": "string", "description": "URL to open in the browser" },
-                    "width": { "type": "integer", "description": "Viewport width in pixels (default 1280)" },
-                    "height": { "type": "integer", "description": "Viewport height in pixels (default 720)" },
-                    "capture_dom": { "type": "boolean", "description": "Whether to capture DOM snapshot (default true)" }
-                },
-                "required": ["url"]
-            }),
-        },
-        ToolConfig {
-            name: "vision_review".to_string(),
-            description: "Send a screenshot image to a vision-capable AI model for analysis. Use this to detect UI bugs, visual errors, or layout issues in screenshots.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "image_base64": { "type": "string", "description": "Base64-encoded PNG screenshot" },
-                    "prompt": { "type": "string", "description": "Custom analysis prompt (optional)" }
-                },
-                "required": ["image_base64"]
-            }),
-        },
-        ToolConfig {
-            name: "graph_build".to_string(),
-            description: "Build a knowledge graph from code files in the workspace. Extracts imports, dependencies, and file structure into a queryable graph.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "pattern": { "type": "string", "description": "Glob pattern for files to include (default **/crates/**/*.rs)", "default": "**/crates/**/*.rs" }
-                },
-                "required": []
-            }),
-        },
-        ToolConfig {
-            name: "graph_query".to_string(),
-            description: "Query a previously built knowledge graph. Search for files, functions, or dependencies by keyword.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "graph_json": { "type": "string", "description": "JSON output from a previous graph_build call" },
-                    "query": { "type": "string", "description": "Search query (file name, function, import, etc.)" }
-                },
-                "required": ["graph_json", "query"]
             }),
         },
     ]
