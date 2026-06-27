@@ -54,6 +54,11 @@ impl Agent {
         self.save_snapshot(id).await
     }
 
+    pub async fn record_assistant_tool_call(&self, id: &ConversationId, content: String, call: ToolRequest) -> Result<()> {
+        self.conversations.write().await.add_assistant_message_with_tools(id, content, Some(vec![call]));
+        self.save_snapshot(id).await
+    }
+
     pub async fn record_tool_results(&self, id: &ConversationId, results: Vec<ToolResult>) -> Result<()> {
         self.conversations.write().await.add_tool_results(id, results);
         self.save_snapshot(id).await
