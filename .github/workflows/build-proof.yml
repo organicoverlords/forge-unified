@@ -20,21 +20,23 @@ jobs:
       - name: Cargo check
         run: |
           set -o pipefail
+          mkdir -p forge-proof/build
           cargo check --workspace --all-targets > /tmp/forge-cargo-check.log 2>&1 || {
             echo "cargo check failed; tail follows"
-            tail -n 220 /tmp/forge-cargo-check.log
+            tail -n 220 /tmp/forge-cargo-check.log | tee forge-proof/build/cargo-check-tail.txt
             exit 1
           }
-          tail -n 40 /tmp/forge-cargo-check.log
+          tail -n 40 /tmp/forge-cargo-check.log | tee forge-proof/build/cargo-check-tail.txt
       - name: Cargo test
         run: |
           set -o pipefail
+          mkdir -p forge-proof/build
           cargo test --workspace --all-targets > /tmp/forge-cargo-test.log 2>&1 || {
             echo "cargo test failed; tail follows"
-            tail -n 220 /tmp/forge-cargo-test.log
+            tail -n 220 /tmp/forge-cargo-test.log | tee forge-proof/build/cargo-test-tail.txt
             exit 1
           }
-          tail -n 40 /tmp/forge-cargo-test.log
+          tail -n 40 /tmp/forge-cargo-test.log | tee forge-proof/build/cargo-test-tail.txt
       - name: WebUI smoke
         run: bash scripts/smoke/live-webui-feature-sprint.sh
       - name: Upload proof
