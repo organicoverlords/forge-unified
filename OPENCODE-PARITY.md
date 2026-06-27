@@ -13,9 +13,9 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | `packages/opencode/src/session/prompt/default.txt` | Concise, direct coding-agent answers; inspect code before editing; verify when completing work | Partially copied in natural WebUI proof style; orchestrator system prompt still needs a source-gated rewrite |
 | `packages/opencode/src/session/prompt.ts` | Prompt/session flow, title generation, subtask and shell message/part handling | Studied only; not fully copied |
 | `packages/opencode/src/session/system.ts` | Provider-specific prompt selection and environment context prompt | Studied only; not copied |
-| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, `ctx.ask` edit approval before mutation, file updates, watcher events, LSP diagnostics, `A/D/M` success summary | Forge now parses/validates patches, returns a pending edit approval before mutation, exposes approval API/UI, mutates add/update/delete/move only after approval, returns `Updated N file(s)` + `A/D/M` lines, and renders approval/file cards; watcher events, LSP diagnostics, BOM, and formatter hooks remain incomplete |
+| `packages/opencode/src/tool/apply_patch.ts` | `patchText` schema, hunk parse, empty patch rejection, path validation, `ctx.ask` edit approval before mutation, file updates, `FileSystem.Event.Edited`, `Watcher.Event.Updated`, LSP touch/diagnostics, `A/D/M` success summary | Forge parses/validates patches, returns pending edit approval before mutation, exposes approval API/UI, mutates add/update/delete/move only after approval, records OpenCode-shaped filesystem/watcher/LSP touch receipts, returns `Updated N file(s)` + `A/D/M` lines, and renders approval/file cards; live watcher bus, live LSP diagnostics, BOM, and formatter hooks remain incomplete |
+| `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, edit permission, `FileSystem.Event.Edited`, `Watcher.Event.Updated`, formatting hooks, LSP touch/diagnostics | Partially aligned through Forge `file_edit` and apply_patch event receipts; deeper file_edit parity still needed |
 | `packages/opencode/src/patch/index.ts` | Begin/end markers, add/delete/update/move hunk parsing, update chunks, EOF markers, multi-pass line matching, derive new contents from chunks | Parser and derive/apply replacement slice copied into Rust helpers; exact/rstrip/trim/Unicode matching implemented; BOM behavior is still not fully equivalent |
-| `packages/opencode/src/tool/edit.ts` | Exact edit semantics, path handling, diff metadata, formatting/diagnostics hooks | Partially aligned through Forge `file_edit`; needs deeper comparison |
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
 | `packages/core/src/session/runner/publish-llm-event.ts` | Tool lifecycle validation and ordering | Partially copied in WebUI SSE proof |
 | `packages/opencode/src/session/processor.ts` | Tool part lifecycle; completed tools expose `title`, `metadata`, `output`, optional attachments, and timing | Partially copied: Forge emits/persists tool results, uses `metadata.title`, preserves raw details in metadata, and presents compact output first; durable lifecycle parity remains incomplete |
@@ -25,11 +25,11 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 ## Current highest-priority parity gaps
 
-1. Watcher/file edited event bus for approved file mutations.
-2. LSP touch/diagnostics after patch mutations.
-3. BOM preservation and formatter hooks.
-4. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
-5. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
+1. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
+2. Real watcher/file edited event bus beyond metadata receipts.
+3. Live LSP diagnostics beyond touched-file receipts.
+4. BOM preservation and formatter hooks.
+5. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
 6. Full context compaction process: summary generation, replay, overflow handling, and auto-continue.
 7. Durable session/message/part persistence beyond current snapshots.
 8. Agent/subtask session part behavior.
@@ -71,8 +71,10 @@ Before claiming full `apply_patch` parity, Forge must prove these behaviors:
 - Collect per-file diff metadata. — implemented with a simple per-file diff summary.
 - Ask/record edit permission before applying changes. — implemented with pending approval metadata, WebUI card, approval API, and proof that files are not written before approval.
 - Write changes safely. — implemented with parent-directory creation for writes after approval.
-- Publish file change events. — implemented as tool metadata/SSE/WebUI file cards after approval; not yet a real watcher event bus.
-- Trigger diagnostics/touch equivalent where available. — not yet.
+- Publish file change cards/SSE metadata. — implemented after approval.
+- Record OpenCode-shaped `FileSystem.Event.Edited` receipts. — implemented as metadata receipts for non-delete approved patch targets.
+- Record OpenCode-shaped `Watcher.Event.Updated` receipts. — implemented as metadata receipts for add/change/unlink update sequences.
+- Record LSP touch targets and diagnostics receipt metadata. — implemented as `lsp_touches` and `diagnostics.touched_files`; live diagnostics service is not wired yet.
 - Preserve BOM and run formatter hooks where appropriate. — partially implemented at file write level; not fully equivalent to OpenCode's format/BOM sync flow.
 - Return a human-readable success summary listing changed files. — implemented with `Success. Updated the following files:`, `Updated N file(s)`, and `A/D/M` lines.
 
@@ -83,6 +85,7 @@ Implemented and proofed:
 - Natural prompt creates a pending edit approval first and does not write a file before approval.
 - WebUI shows `OpenCode edit permission request`, `Approve edit`, and `Edit approval metadata`.
 - Approval API applies the patch and then shows file-change cards, FilePart, and PatchPart.
+- Approval results now include OpenCode post-edit receipts: `opencode_watcher_updates`, `opencode_filesystem_edits`, `lsp_touches`, and diagnostics touch metadata.
 - Natural repo inspection runs real `repo_info` and `file_list` tool calls.
 - Tool cards show compact visible output first.
 - Raw JSON details are preserved under metadata (`raw_output`) instead of being the primary visible UI.
@@ -90,6 +93,7 @@ Implemented and proofed:
 - Live WebUI proof at `a0efdb6` also requires visible/persisted OpenCode `ReasoningPart` proof.
 - Live WebUI proof at `84e459e` also requires visible/persisted OpenCode `CompactionPart` proof.
 - Live WebUI proof at `a83ddac` requires real edit approval-before-write proof.
+- Live WebUI proof at `6a34928` verifies post-edit event and LSP touch receipts are persisted and browser-DOM visible.
 
 Not done:
 
@@ -97,6 +101,7 @@ Not done:
 - Attachments are not modeled like OpenCode tool parts.
 - Tool timing is not preserved in the same complete shape.
 - Compaction card does not yet mean full OpenCode summary/replay/autocontinue behavior.
+- File watcher and LSP receipts are not a live event bus or a live diagnostics service yet.
 
 ## File size rule
 
@@ -107,6 +112,7 @@ Latest source-size recoveries:
 - `crates/unifiedgraph/src/main.rs` exceeded the 500-line gate in the PR merge checkout; graphify CLI command/argument definitions were moved to `crates/unifiedgraph/src/cli.rs`.
 - `crates/engine/src/tool/task_ops.rs` briefly exceeded the gate while adding the `apply_patch` slice; patch behavior was split into `crates/engine/src/tool/patch_ops.rs` and the line gate passed again.
 - `crates/engine/src/tool/patch_apply.rs` was added for mutation helpers so `patch_ops.rs` stays focused and both files remain under the hard gate.
+- `crates/engine/src/tool/patch_events.rs` was added for post-edit event receipt helpers so `patch_ops.rs` remains under the hard gate.
 
 ## Documentation update rule
 
