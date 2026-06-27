@@ -140,14 +140,16 @@ fn diagnostic_reports_for_file(file: &serde_json::Value) -> Vec<serde_json::Valu
 pub(crate) fn diagnostics_metadata(files: &[serde_json::Value]) -> serde_json::Value {
     let reports = diagnostic_reports(files);
     let warmups = lsp_warmups(files);
+    let warmup_count = warmups.len();
+    let report_count = reports.len();
     serde_json::json!({
         "status": "event_envelope_emitted_with_warmup_containment",
         "reason": "Forge records OpenCode LSP touch targets, emits LSP diagnostic report envelopes, and records that optional LSP warm-up defects are contained instead of failing the edit path.",
         "touched_files": lsp_touches(files),
         "warmups": warmups,
         "reports": reports,
-        "warmup_count": warmups.len(),
-        "report_count": reports.len(),
+        "warmup_count": warmup_count,
+        "report_count": report_count,
         "opencode_source": [
             "packages/opencode/src/tool/apply_patch.ts:lsp.touchFile + lsp.diagnostics + LSP.Diagnostic.report",
             "packages/opencode/src/tool/read.ts:lsp.touchFile(...).pipe(Effect.ignoreCause, Effect.forkIn(scope))"
