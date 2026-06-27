@@ -7,253 +7,17 @@ pub const CHAT_HTML: &str = r##"<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Forge Unified</title>
 <style>
-:root{
-  color-scheme:dark;
-  --bg:#070708;
-  --bg-soft:#0d0d10;
-  --panel:rgba(24,24,27,.72);
-  --panel-strong:rgba(32,32,36,.82);
-  --panel-hover:rgba(42,42,47,.86);
-  --text:#f4f4f5;
-  --muted:#a1a1aa;
-  --quiet:#71717a;
-  --border:rgba(255,255,255,.10);
-  --border-strong:rgba(255,255,255,.16);
-  --accent:#d6a84f;
-  --accent-soft:rgba(214,168,79,.14);
-  --accent-ring:rgba(214,168,79,.42);
-  --ok:#8fd18f;
-  --danger:#f48a99;
-  --add:#8fd18f;
-  --edit:#a8c7ff;
-  --del:#f48a99;
-  --move:#e8c16f;
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;
-  min-height:100vh;
-  background:
-    radial-gradient(circle at 52% -12%,rgba(214,168,79,.16),transparent 34rem),
-    radial-gradient(circle at 12% 14%,rgba(255,255,255,.045),transparent 28rem),
-    linear-gradient(180deg,#0c0c0f 0%,var(--bg) 52%,#050506 100%);
-  color:var(--text);
-  font:15px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  letter-spacing:-.01em;
-}
-button,textarea{font:inherit}
-button{
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.045);
-  color:var(--text);
-  border-radius:14px;
-  padding:.64rem .85rem;
-  cursor:pointer;
-  transition:border-color .16s ease,background .16s ease,transform .16s ease;
-}
-button:hover{background:rgba(255,255,255,.075);border-color:var(--border-strong)}
-button:active{transform:translateY(1px)}
-button.primary{
-  background:linear-gradient(180deg,#e1bd64,#c49437);
-  color:#111;
-  border-color:transparent;
-  font-weight:750;
-  box-shadow:0 0 0 1px rgba(255,255,255,.14) inset,0 10px 28px rgba(214,168,79,.18);
-}
-button:disabled{opacity:.45;cursor:not-allowed}
-.app{
-  display:grid;
-  grid-template-columns:minmax(230px,300px) minmax(0,1fr);
-  height:100vh;
-  isolation:isolate;
-}
-aside{
-  border-right:1px solid var(--border);
-  background:linear-gradient(180deg,rgba(18,18,21,.78),rgba(8,8,10,.72));
-  backdrop-filter:blur(18px);
-  padding:1rem;
-  display:flex;
-  flex-direction:column;
-  gap:.9rem;
-  min-height:0;
-}
-main{
-  display:grid;
-  grid-template-rows:auto 1fr auto;
-  min-height:0;
-  position:relative;
-}
-main:before{
-  content:"";
-  position:absolute;
-  inset:4rem 7vw auto 7vw;
-  height:1px;
-  background:linear-gradient(90deg,transparent,var(--accent-ring),transparent);
-  pointer-events:none;
-}
-.brand{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
-h1{font-size:1rem;margin:0;font-weight:650;letter-spacing:-.02em}
-.muted,.subtitle{color:var(--muted);font-size:.82rem}
-.pill{
-  border:1px solid var(--border);
-  border-radius:999px;
-  padding:.2rem .52rem;
-  color:var(--accent);
-  background:var(--accent-soft);
-  font-size:.74rem;
-}
-.conv-list{display:flex;flex-direction:column;gap:.45rem;overflow:auto;padding-right:.12rem}
-.conv{text-align:left;border-radius:14px;padding:.72rem;background:rgba(255,255,255,.025)}
-.conv.active{border-color:var(--accent-ring);background:var(--accent-soft);box-shadow:0 0 0 1px rgba(214,168,79,.1) inset}
-.conv-title{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.topbar{
-  border-bottom:1px solid var(--border);
-  background:rgba(8,8,10,.58);
-  backdrop-filter:blur(18px);
-  padding:.9rem clamp(1rem,3vw,1.5rem);
-  display:flex;
-  justify-content:space-between;
-  gap:1rem;
-  align-items:center;
-}
-.topbar strong{font-weight:680}
-.topbar:before{
-  content:"Forge ✦";
-  position:absolute;
-  left:50%;
-  transform:translateX(-50%);
-  top:.9rem;
-  color:#f4f4f5;
-  font-weight:520;
-  letter-spacing:.01em;
-}
-.messages{
-  padding:1.15rem clamp(1rem,5vw,3rem) 1.5rem;
-  overflow:auto;
-  display:flex;
-  flex-direction:column;
-  gap:.95rem;
-  min-height:0;
-}
-.message{
-  width:min(940px,100%);
-  border:1px solid var(--border);
-  border-radius:22px;
-  padding:1rem 1.05rem;
-  background:var(--panel);
-  box-shadow:0 18px 50px rgba(0,0,0,.24),0 1px 0 rgba(255,255,255,.04) inset;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-}
-.message.user{
-  align-self:center;
-  background:rgba(255,255,255,.055);
-  border-color:var(--border-strong);
-}
-.message.assistant{align-self:center;border-color:rgba(214,168,79,.16)}
-.message.tool,.message.system{align-self:center;max-width:940px;background:rgba(18,18,21,.78)}
-.role{
-  display:flex;
-  justify-content:space-between;
-  color:var(--quiet);
-  font-size:.72rem;
-  margin-bottom:.45rem;
-  text-transform:uppercase;
-  letter-spacing:.08em;
-}
-.tool-card,.patch-card,.snapshot-card,.filepart-card,.reasoning-card,.compaction-card,.approval-card{
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:.8rem;
-  margin-top:.65rem;
-  background:rgba(0,0,0,.20);
-}
-.approval-card,.tool-card.running{border-color:var(--accent-ring);background:linear-gradient(180deg,rgba(214,168,79,.09),rgba(0,0,0,.18))}
-.tool-card.error,.tool-card.err{border-color:rgba(244,138,153,.5)}
-.patch-card{border-color:rgba(232,193,111,.42)}
-.snapshot-card,.reasoning-card,.compaction-card{border-color:rgba(168,199,255,.28)}
-.filepart-card{border-color:rgba(143,209,143,.38)}
-.tool-head,.patch-head,.snapshot-head,.filepart-head,.reasoning-head,.compaction-head,.approval-head{
-  display:flex;
-  justify-content:space-between;
-  gap:1rem;
-  font-weight:720;
-  color:var(--ok);
-}
-.patch-head{color:var(--move)}
-.snapshot-head,.reasoning-head,.compaction-head,.approval-head{color:var(--accent)}
-.filepart-head{color:var(--add)}
-.tool-card.running .tool-head{color:var(--accent)}
-.tool-card.error .tool-head,.tool-card.err .tool-head{color:var(--danger)}
-.tool-output,.patch-output,.snapshot-output,.filepart-output,.reasoning-output,.compaction-output,.approval-output{margin-top:.55rem;color:#e4e4e7}
-.tool-card details,.patch-card details,.snapshot-card details,.filepart-card details,.reasoning-card details,.compaction-card details,.approval-card details,.text-parts{margin-top:.6rem;color:var(--muted)}
-summary{cursor:pointer}
-pre{
-  margin:.5rem 0 0;
-  padding:.75rem;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:#050506;
-  overflow:auto;
-  max-height:12rem;
-  color:#dedee3;
-  font-family:var(--mono);
-  font-size:.8rem;
-}
-.file-events{display:grid;gap:.45rem;margin-top:.65rem}
-.file-card{
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:rgba(255,255,255,.035);
-  padding:.65rem;
-  display:grid;
-  gap:.35rem;
-}
-.file-card.add{border-color:rgba(143,209,143,.42)}
-.file-card.edit{border-color:rgba(168,199,255,.42)}
-.file-card.delete{border-color:rgba(244,138,153,.5)}
-.file-card.move{border-color:rgba(232,193,111,.5)}
-.file-title{display:flex;gap:.5rem;align-items:center;font-weight:700}
-.file-badge{border-radius:999px;padding:.1rem .45rem;background:rgba(255,255,255,.07);font-size:.72rem}
-.file-card.add .file-badge{color:var(--add)}
-.file-card.edit .file-badge{color:var(--edit)}
-.file-card.delete .file-badge{color:var(--del)}
-.file-card.move .file-badge{color:var(--move)}
-.file-path{font-family:var(--mono);overflow-wrap:anywhere}
-.file-meta{color:var(--muted);font-size:.78rem}
-.composer{
-  border-top:1px solid var(--border);
-  background:rgba(8,8,10,.72);
-  backdrop-filter:blur(18px);
-  padding:1rem clamp(1rem,5vw,3rem) 1.1rem;
-}
-.composer-inner{
-  width:min(940px,100%);
-  margin:0 auto;
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:.75rem;
-  align-items:end;
-}
-.composer>.subtitle{width:min(940px,100%);margin:.55rem auto 0;color:var(--quiet)}
-textarea{
-  width:100%;
-  min-height:4.25rem;
-  max-height:12rem;
-  resize:vertical;
-  border-radius:18px;
-  border:1px solid var(--border-strong);
-  color:var(--text);
-  background:rgba(255,255,255,.045);
-  padding:.9rem 1rem;
-  outline:none;
-}
-textarea:focus{border-color:var(--accent-ring);box-shadow:0 0 0 3px rgba(214,168,79,.10)}
-.toast{position:fixed;right:1rem;bottom:1rem;display:none;background:#101013;border:1px solid var(--border);border-radius:16px;padding:.8rem .9rem;box-shadow:0 18px 45px rgba(0,0,0,.35)}
-.toast.show{display:block}
-@media(max-width:860px){.app{grid-template-columns:1fr}aside{max-height:34vh;border-right:0;border-bottom:1px solid var(--border)}.topbar:before{display:none}.composer-inner{grid-template-columns:1fr}.messages{padding-inline:1rem}}
+:root{color-scheme:dark;--bg:#070708;--bg-soft:#0d0d10;--panel:rgba(24,24,27,.72);--panel-strong:rgba(32,32,36,.82);--text:#f4f4f5;--muted:#a1a1aa;--quiet:#71717a;--border:rgba(255,255,255,.10);--border-strong:rgba(255,255,255,.16);--accent:#d6a84f;--accent-soft:rgba(214,168,79,.14);--accent-ring:rgba(214,168,79,.42);--ok:#8fd18f;--danger:#f48a99;--add:#8fd18f;--edit:#a8c7ff;--del:#f48a99;--move:#e8c16f;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;min-height:100vh;background:radial-gradient(circle at 52% -12%,rgba(214,168,79,.16),transparent 34rem),radial-gradient(circle at 12% 14%,rgba(255,255,255,.045),transparent 28rem),linear-gradient(180deg,#0c0c0f 0%,var(--bg) 52%,#050506 100%);color:var(--text);font:15px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.01em}
+button,textarea{font:inherit}button{border:1px solid var(--border);background:rgba(255,255,255,.045);color:var(--text);border-radius:14px;padding:.64rem .85rem;cursor:pointer;transition:border-color .16s ease,background .16s ease,transform .16s ease}button:hover{background:rgba(255,255,255,.075);border-color:var(--border-strong)}button:active{transform:translateY(1px)}button.primary{background:linear-gradient(180deg,#e1bd64,#c49437);color:#111;border-color:transparent;font-weight:750;box-shadow:0 0 0 1px rgba(255,255,255,.14) inset,0 10px 28px rgba(214,168,79,.18)}button:disabled{opacity:.45;cursor:not-allowed}
+.app{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr) minmax(250px,320px);height:100vh;isolation:isolate}aside,.activity{border-right:1px solid var(--border);background:linear-gradient(180deg,rgba(18,18,21,.78),rgba(8,8,10,.72));backdrop-filter:blur(18px);padding:1rem;display:flex;flex-direction:column;gap:.9rem;min-height:0}.activity{border-right:0;border-left:1px solid var(--border)}
+main{display:grid;grid-template-rows:auto 1fr auto;min-height:0;position:relative}main:before{content:"";position:absolute;inset:4rem 7vw auto 7vw;height:1px;background:linear-gradient(90deg,transparent,var(--accent-ring),transparent);pointer-events:none}.brand{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}h1{font-size:1rem;margin:0;font-weight:650;letter-spacing:-.02em}.muted,.subtitle{color:var(--muted);font-size:.82rem}.pill{border:1px solid var(--border);border-radius:999px;padding:.2rem .52rem;color:var(--accent);background:var(--accent-soft);font-size:.74rem}.conv-list,.activity-list{display:flex;flex-direction:column;gap:.45rem;overflow:auto;padding-right:.12rem}.conv{text-align:left;border-radius:14px;padding:.72rem;background:rgba(255,255,255,.025)}.conv.active{border-color:var(--accent-ring);background:var(--accent-soft);box-shadow:0 0 0 1px rgba(214,168,79,.1) inset}.conv-title{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar{border-bottom:1px solid var(--border);background:rgba(8,8,10,.58);backdrop-filter:blur(18px);padding:.9rem clamp(1rem,3vw,1.5rem);display:flex;justify-content:space-between;gap:1rem;align-items:center}.topbar strong{font-weight:680}.topbar:before{content:"Forge ✦";position:absolute;left:50%;transform:translateX(-50%);top:.9rem;color:#f4f4f5;font-weight:520;letter-spacing:.01em}
+.messages{padding:1.15rem clamp(1rem,5vw,3rem) 1.5rem;overflow:auto;display:flex;flex-direction:column;gap:.95rem;min-height:0}.message{width:min(940px,100%);border:1px solid var(--border);border-radius:22px;padding:1rem 1.05rem;background:var(--panel);box-shadow:0 18px 50px rgba(0,0,0,.24),0 1px 0 rgba(255,255,255,.04) inset;white-space:pre-wrap;overflow-wrap:anywhere}.message.user{align-self:center;background:rgba(255,255,255,.055);border-color:var(--border-strong)}.message.assistant{align-self:center;border-color:rgba(214,168,79,.16)}.message.tool,.message.system{align-self:center;max-width:940px;background:rgba(18,18,21,.78)}.role{display:flex;justify-content:space-between;color:var(--quiet);font-size:.72rem;margin-bottom:.45rem;text-transform:uppercase;letter-spacing:.08em}
+.tool-card,.patch-card,.snapshot-card,.filepart-card,.reasoning-card,.compaction-card,.approval-card{border:1px solid var(--border);border-radius:18px;padding:.8rem;margin-top:.65rem;background:rgba(0,0,0,.20)}.approval-card,.tool-card.running{border-color:var(--accent-ring);background:linear-gradient(180deg,rgba(214,168,79,.09),rgba(0,0,0,.18))}.tool-card.error,.tool-card.err{border-color:rgba(244,138,153,.5)}.patch-card{border-color:rgba(232,193,111,.42)}.snapshot-card,.reasoning-card,.compaction-card{border-color:rgba(168,199,255,.28)}.filepart-card{border-color:rgba(143,209,143,.38)}.tool-head,.patch-head,.snapshot-head,.filepart-head,.reasoning-head,.compaction-head,.approval-head{display:flex;justify-content:space-between;gap:1rem;font-weight:720;color:var(--ok)}.patch-head{color:var(--move)}.snapshot-head,.reasoning-head,.compaction-head,.approval-head{color:var(--accent)}.filepart-head{color:var(--add)}.tool-card.running .tool-head{color:var(--accent)}.tool-card.error .tool-head,.tool-card.err .tool-head{color:var(--danger)}.tool-output,.patch-output,.snapshot-output,.filepart-output,.reasoning-output,.compaction-output,.approval-output{margin-top:.55rem;color:#e4e4e7}.tool-card details,.patch-card details,.snapshot-card details,.filepart-card details,.reasoning-card details,.compaction-card details,.approval-card details,.text-parts{margin-top:.6rem;color:var(--muted)}summary{cursor:pointer}
+pre{margin:.5rem 0 0;padding:.75rem;border-radius:14px;border:1px solid var(--border);background:#050506;overflow:auto;max-height:12rem;color:#dedee3;font-family:var(--mono);font-size:.8rem}.file-events{display:grid;gap:.45rem;margin-top:.65rem}.file-card,.activity-card{border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.035);padding:.65rem;display:grid;gap:.35rem}.file-card.add,.activity-card.filesystem{border-color:rgba(143,209,143,.42)}.file-card.edit,.activity-card.watcher{border-color:rgba(168,199,255,.42)}.file-card.delete{border-color:rgba(244,138,153,.5)}.file-card.move{border-color:rgba(232,193,111,.5)}.file-title,.activity-title{display:flex;gap:.5rem;align-items:center;font-weight:700}.file-badge,.activity-badge{border-radius:999px;padding:.1rem .45rem;background:rgba(255,255,255,.07);font-size:.72rem}.file-path,.activity-path{font-family:var(--mono);overflow-wrap:anywhere}.file-meta,.activity-meta{color:var(--muted);font-size:.78rem}.activity-source{font-size:.75rem;color:var(--quiet)}
+.composer{border-top:1px solid var(--border);background:rgba(8,8,10,.72);backdrop-filter:blur(18px);padding:1rem clamp(1rem,5vw,3rem) 1.1rem}.composer-inner{width:min(940px,100%);margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:end}.composer>.subtitle{width:min(940px,100%);margin:.55rem auto 0;color:var(--quiet)}textarea{width:100%;min-height:4.25rem;max-height:12rem;resize:vertical;border-radius:18px;border:1px solid var(--border-strong);color:var(--text);background:rgba(255,255,255,.045);padding:.9rem 1rem;outline:none}textarea:focus{border-color:var(--accent-ring);box-shadow:0 0 0 3px rgba(214,168,79,.10)}.toast{position:fixed;right:1rem;bottom:1rem;display:none;background:#101013;border:1px solid var(--border);border-radius:16px;padding:.8rem .9rem;box-shadow:0 18px 45px rgba(0,0,0,.35)}.toast.show{display:block}
+@media(max-width:1120px){.app{grid-template-columns:minmax(230px,300px) minmax(0,1fr)}.activity{display:none}}@media(max-width:860px){.app{grid-template-columns:1fr}aside{max-height:34vh;border-right:0;border-bottom:1px solid var(--border)}.topbar:before{display:none}.composer-inner{grid-template-columns:1fr}.messages{padding-inline:1rem}}
 </style>
 </head>
 <body data-theme="opencode-codex-dark" data-proof="modern-dark-ui-pass">
@@ -269,6 +33,13 @@ textarea:focus{border-color:var(--accent-ring);box-shadow:0 0 0 3px rgba(214,168
   <section class="messages" id="messages" aria-live="polite"></section>
   <div class="composer"><div class="composer-inner"><label><span class="subtitle">Message</span><textarea id="message-input" placeholder="Ask Forge to inspect files, edit code, or create a proof note." disabled></textarea></label><button id="send" class="primary" disabled>Send</button></div><div class="subtitle">OpenCode TextPart · ReasoningPart · SnapshotPart · CompactionPart · FilePart · ToolPart · PatchPart cards · edit approvals · opencode-codex-dark-ui</div></div>
 </main>
+<section class="activity" data-proof="main-chat-event-rail">
+  <div class="brand"><div><h1>OpenCode Activity</h1><div class="subtitle">EventV2Bridge-style recent filesystem and watcher activity.</div></div><span class="pill" id="activity-pill">idle</span></div>
+  <button id="activity-open">Open live rail</button>
+  <button id="activity-refresh">Refresh activity</button>
+  <div class="activity-source">Sources: event-v2-bridge.ts · event.ts · apply_patch.ts</div>
+  <div class="activity-list" id="activity-list"><div class="muted">No events yet.</div></div>
+</section>
 </div><div class="toast" id="toast"></div>
 <script>
 const state={conversations:[],activeId:null,activeConversation:null,busy:false,streamAssistant:null};const $=id=>document.getElementById(id);
@@ -278,7 +49,7 @@ async function checkHealth(){try{const h=await api('/api/health');$('health-pill
 async function loadConversations(selectFirst=false){state.conversations=await api('/api/conversations');$('conversation-count').textContent=String(state.conversations.length);renderConversationList();if(!state.activeId&&selectFirst&&state.conversations.length)await selectConversation(state.conversations[0].id)}
 function renderConversationList(){const list=$('conversation-list');list.innerHTML='';for(const conv of state.conversations){const b=document.createElement('button');b.className='conv'+(conv.id===state.activeId?' active':'');b.innerHTML='<div class="conv-title"></div><div class="muted"></div>';b.querySelector('.conv-title').textContent=conv.title||'Untitled';b.querySelector('.muted').textContent=`${conv.message_count} messages · ${conv.mode}`;b.onclick=()=>selectConversation(conv.id);list.appendChild(b)}}
 async function createConversation(){const c=await api('/api/conversations',{method:'POST',body:JSON.stringify({title:`Forge run ${new Date().toLocaleString()}`})});state.activeId=c.id;await loadConversations(false);await selectConversation(c.id);toast('Conversation created')}
-async function selectConversation(id){state.activeId=id;state.activeConversation=await api(`/api/conversations/${encodeURIComponent(id)}`);$('chat-title').textContent=state.activeConversation.title||'Untitled';$('chat-subtitle').textContent=id;$('message-input').disabled=false;$('send').disabled=state.busy;$('snapshot').disabled=false;$('compact').disabled=false;$('message-count').textContent=String((state.activeConversation.messages||[]).length);renderConversationList();renderMessages()}
+async function selectConversation(id){state.activeId=id;state.activeConversation=await api(`/api/conversations/${encodeURIComponent(id)}`);$('chat-title').textContent=state.activeConversation.title||'Untitled';$('chat-subtitle').textContent=id;$('message-input').disabled=false;$('send').disabled=state.busy;$('snapshot').disabled=false;$('compact').disabled=false;$('message-count').textContent=String((state.activeConversation.messages||[]).length);renderConversationList();renderMessages();loadActivity().catch(()=>{})}
 function renderMessages(){const c=$('messages');c.innerHTML='';const messages=state.activeConversation?.messages||[];if(!messages.length){c.innerHTML='<div class="message assistant"><strong>Ready to build</strong><br>Ask Forge to inspect files, edit code, or create a proof note.</div>';return}for(const msg of messages)c.appendChild(renderMessage(msg));c.scrollTop=c.scrollHeight}
 function renderMessage(msg){const a=document.createElement('article');const role=(msg.role||'unknown').toLowerCase();a.className=`message ${role}`;a.innerHTML='<div class="role"><span></span><span></span></div>';a.querySelector('.role span').textContent=role;if(msg.content){const body=document.createElement('div');body.textContent=msg.content;a.appendChild(body)}const texts=msg?.metadata?.text_parts||[];if(texts.length)a.appendChild(textPartsMeta(texts));const reasonings=msg?.metadata?.reasoning_parts||[];for(const part of reasonings)a.appendChild(reasoningPartCard(part));const compactions=msg?.metadata?.compaction_parts||[];for(const part of compactions)a.appendChild(compactionPartCard(part));const snapshots=msg?.metadata?.snapshot_parts||[];for(const snap of snapshots)a.appendChild(snapshotPartCard(snap));const files=msg?.metadata?.file_parts||[];for(const file of files)a.appendChild(filePartCard(file));const patches=msg?.metadata?.patch_parts||[];for(const patch of patches)a.appendChild(patchPartCard(patch));const parts=msg?.metadata?.tool_parts||[];for(const part of parts)a.appendChild(toolPartCard(part));if(reasonings.length||compactions.length||snapshots.length||files.length||patches.length||parts.length)return a;const all=[];for(const res of msg.tool_results||[])for(const ev of res?.metadata?.file_events||[])all.push(ev);if(all.length)a.appendChild(fileEventsBlock(all));for(const res of msg.tool_results||[])a.appendChild(toolCard(res));return a}
 function metadataDetails(label,obj){const details=document.createElement('details');details.innerHTML=`<summary>${label}</summary>`;const pre=document.createElement('pre');pre.textContent=JSON.stringify(obj,null,2);details.appendChild(pre);return details}
@@ -295,15 +66,17 @@ function title(payload){return String(payload?.metadata?.title||payload?.kind||p
 function compact(text){const value=String(text);return value.length>260?value.slice(0,260)+'…':value}
 function fileEventsBlock(events){const wrap=document.createElement('div');wrap.className='file-events';for(const ev of events)wrap.appendChild(fileEventCard(ev));return wrap}
 function fileEventCard(ev){const short=String(ev.type||'file.edited').replace('file.','');const cls=short==='added'?'add':short==='deleted'?'delete':short==='moved'?'move':'edit';const card=document.createElement('div');card.className='file-card '+cls;card.innerHTML='<div class="file-title"><span class="file-badge"></span><span class="file-path"></span></div><div class="file-meta"></div>';card.querySelector('.file-badge').textContent=short.toUpperCase();card.querySelector('.file-path').textContent=ev.previousPath&&ev.path?`${ev.previousPath} → ${ev.path}`:(ev.path||'unknown file');card.querySelector('.file-meta').textContent=`+${ev.additions||0} / -${ev.deletions||0}${ev.bom?' · BOM':''}${ev.source?' · '+ev.source:''}`;return card}
+async function loadActivity(){const panel=$('activity-list');if(!panel)return;const data=await api('/api/events/recent');$('activity-pill').textContent=`${data.count||0} events`;panel.innerHTML='';const events=(data.events||[]).slice(-24).reverse();if(!events.length){panel.innerHTML='<div class="muted">No filesystem or watcher events yet.</div>';return}for(const ev of events)panel.appendChild(activityCard(ev))}
+function activityCard(ev){const payload=ev.payload||{};const kind=String(ev.event_type||'event');const card=document.createElement('div');card.className='activity-card '+(kind.includes('filesystem')?'filesystem':kind.includes('watcher')?'watcher':'');card.innerHTML='<div class="activity-title"><span class="activity-badge"></span><span></span></div><div class="activity-path"></div><div class="activity-meta"></div>';card.querySelector('.activity-badge').textContent=kind.includes('watcher')?'WATCH':'FILE';card.querySelector('.activity-title span:last-child').textContent=kind;card.querySelector('.activity-path').textContent=payload.file||payload.path||'workspace';card.querySelector('.activity-meta').textContent=`#${ev.seq} · ${payload.event||payload.type||payload.action||'updated'} · ${ev.source||'change_bus'}`;return card}
 function appendUser(text){const a=document.createElement('article');a.className='message user';a.innerHTML='<div class="role"><span>user</span><span>stream</span></div>';const b=document.createElement('div');b.textContent=text;a.appendChild(b);$('messages').appendChild(a)}
 function ensureAssistant(){if(state.streamAssistant)return state.streamAssistant;const a=document.createElement('article');a.className='message assistant';a.innerHTML='<div class="role"><span>assistant</span><span>SSE</span></div><div class="stream-text"></div>';$('messages').appendChild(a);state.streamAssistant=a.querySelector('.stream-text');return state.streamAssistant}
-function handleEvent(name,data){if(name==='run-start')toast('Run started');else if(name==='text-delta')ensureAssistant().textContent+=data.text||'';else if(name==='tool-result'||name==='tool-error')$('messages').appendChild(toolCard(data));else if(name==='file-change')$('messages').appendChild(fileEventCard(data));else if(name==='provider-error')toast(data.message||'provider error','error');else if(name==='conversation'){state.activeConversation=data;$('message-count').textContent=String((data.messages||[]).length)}else if(name==='run-finish')toast('Run finished');$('messages').scrollTop=$('messages').scrollHeight}
+function handleEvent(name,data){if(name==='run-start')toast('Run started');else if(name==='text-delta')ensureAssistant().textContent+=data.text||'';else if(name==='tool-result'||name==='tool-error')$('messages').appendChild(toolCard(data));else if(name==='file-change')$('messages').appendChild(fileEventCard(data));else if(name==='provider-error')toast(data.message||'provider error','error');else if(name==='conversation'){state.activeConversation=data;$('message-count').textContent=String((data.messages||[]).length)}else if(name==='run-finish')toast('Run finished');$('messages').scrollTop=$('messages').scrollHeight;loadActivity().catch(()=>{})}
 async function readSse(response){const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let parts=buffer.split('\n\n');buffer=parts.pop();for(const part of parts){let event='message',data='';for(const line of part.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data+=line.slice(5).trim()}try{handleEvent(event,data?JSON.parse(data):{})}catch(e){toast(e.message,'error')}}}}
-async function sendMessage(){const input=$('message-input');const message=input.value.trim();if(!state.activeId||!message||state.busy)return;state.busy=true;state.streamAssistant=null;input.value='';$('send').disabled=true;input.disabled=true;if(!$('messages').children.length)$('messages').innerHTML='';appendUser(message);try{const r=await fetch(`/api/conversations/${encodeURIComponent(state.activeId)}/chat/stream`,{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({message,max_rounds:10})});if(!r.ok)throw new Error(`stream failed ${r.status}`);await readSse(r);await selectConversation(state.activeId);await loadConversations(false)}catch(err){toast(err.message,'error')}finally{state.busy=false;input.disabled=!state.activeId;$('send').disabled=!state.activeId}}
+async function sendMessage(){const input=$('message-input');const message=input.value.trim();if(!state.activeId||!message||state.busy)return;state.busy=true;state.streamAssistant=null;input.value='';$('send').disabled=true;input.disabled=true;if(!$('messages').children.length)$('messages').innerHTML='';appendUser(message);try{const r=await fetch(`/api/conversations/${encodeURIComponent(state.activeId)}/chat/stream`,{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({message,max_rounds:10})});if(!r.ok)throw new Error(`stream failed ${r.status}`);await readSse(r);await selectConversation(state.activeId);await loadConversations(false);await loadActivity()}catch(err){toast(err.message,'error')}finally{state.busy=false;input.disabled=!state.activeId;$('send').disabled=!state.activeId}}
 async function saveSnapshot(){if(!state.activeId)return;const saved=await api(`/api/conversations/${encodeURIComponent(state.activeId)}/snapshot`,{method:'POST',body:'{}'});toast(saved.snapshot||'Snapshot saved');await selectConversation(state.activeId);await loadConversations(false)}
 async function compactConversation(){if(!state.activeId)return;const saved=await api(`/api/conversations/${encodeURIComponent(state.activeId)}/compact`,{method:'POST',body:JSON.stringify({keep_last:64,auto:false,overflow:false})});toast(saved.message||'Compaction requested');await selectConversation(state.activeId);await loadConversations(false)}
-async function approveEdit(approvalId){if(!state.activeId||!approvalId)return;const saved=await api(`/api/conversations/${encodeURIComponent(state.activeId)}/approvals/${encodeURIComponent(approvalId)}/approve`,{method:'POST',body:JSON.stringify({approved:true})});toast(saved.approval_applied?'Edit approved and applied':'Edit approval failed');await selectConversation(state.activeId);await loadConversations(false)}
-$('new-conversation').onclick=()=>createConversation().catch(e=>toast(e.message,'error'));$('refresh').onclick=()=>Promise.all([loadConversations(false),state.activeId?selectConversation(state.activeId):null]).catch(e=>toast(e.message,'error'));$('snapshot').onclick=()=>saveSnapshot().catch(e=>toast(e.message,'error'));$('compact').onclick=()=>compactConversation().catch(e=>toast(e.message,'error'));$('graph').onclick=()=>{window.location.href='/api/graph'};$('send').onclick=()=>sendMessage();$('message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});checkHealth();loadConversations(true).catch(e=>toast(e.message,'error'));
+async function approveEdit(approvalId){if(!state.activeId||!approvalId)return;const saved=await api(`/api/conversations/${encodeURIComponent(state.activeId)}/approvals/${encodeURIComponent(approvalId)}/approve`,{method:'POST',body:JSON.stringify({approved:true})});toast(saved.approval_applied?'Edit approved and applied':'Edit approval failed');await selectConversation(state.activeId);await loadConversations(false);await loadActivity()}
+$('new-conversation').onclick=()=>createConversation().catch(e=>toast(e.message,'error'));$('refresh').onclick=()=>Promise.all([loadConversations(false),state.activeId?selectConversation(state.activeId):null,loadActivity()]).catch(e=>toast(e.message,'error'));$('snapshot').onclick=()=>saveSnapshot().catch(e=>toast(e.message,'error'));$('compact').onclick=()=>compactConversation().catch(e=>toast(e.message,'error'));$('graph').onclick=()=>{window.location.href='/api/graph'};$('activity-open').onclick=()=>{window.location.href='/events'};$('activity-refresh').onclick=()=>loadActivity().catch(e=>toast(e.message,'error'));$('send').onclick=()=>sendMessage();$('message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});checkHealth();loadConversations(true).catch(e=>toast(e.message,'error'));loadActivity().catch(()=>{});setInterval(()=>loadActivity().catch(()=>{}),8000);
 </script>
 </body>
 </html>"##;
