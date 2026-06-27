@@ -14,14 +14,34 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
-- Latest pre-slice green head checked before this work: `3e609c24db429c6698f9a4c0e2c94e979945470b`.
-- Pre-slice workflow proof on that head: CI `28278250979`, Build Proof `28278250967`, Live WebUI Feature Sprint `28278250966`.
-- Pre-slice proof artifact: `live-webui-feature-sprint-proof`, artifact id `7920949901`.
-- Current slice HEAD after LSP event work: `da6058ab0fd714464b70573b5609ed2fe383ac63`; wait for Actions before calling this head green.
+- Latest fully green pre-slice head checked before this work: `f71fcbc8627958979ee36a7ace6d9f0127a2b2c5`.
+- Pre-slice workflow proof on that head: CI `28278959786`, Build Proof `28278959788`, Live WebUI Feature Sprint `28278959801`.
+- Pre-slice proof artifact: `live-webui-feature-sprint-proof`, artifact id `7921179714`.
+- Current slice HEAD after compaction work: `34a610ac16d927f3177765a586e908fa6dab3e86`; wait for Actions before calling this head green.
 
 ## Latest OpenCode-source slice
 
-Forge now extends the approved `apply_patch` post-edit activity path with OpenCode-shaped LSP diagnostic report envelopes and visible WebUI activity rail support:
+Forge now extends context compaction from a request marker into an OpenCode-shaped deterministic compaction summary path:
+
+- Upstream source path:
+  - `packages/core/src/session/compaction.ts`
+- OpenCode behaviors copied:
+  - split older conversation head from preserved recent tail;
+  - serialize user, assistant, tool, and system context;
+  - produce the same structured Markdown summary sections (`Goal`, `Constraints & Preferences`, `Progress`, `Key Decisions`, `Next Steps`, `Critical Context`, `Relevant Files`);
+  - store recent tail context separately as `compaction_recent`;
+  - keep a recent tail after compaction so the next turn can continue without replaying stale context.
+- Forge files touched:
+  - `crates/engine/src/conversation.rs`
+  - `scripts/smoke/live-webui-feature-sprint.sh`
+  - `OPENCODE-PARITY.md`
+  - `CONTINUE_HERE.md`
+
+This is a meaningful parity slice, but it is **not full compaction parity**. Forge still does not stream the summary through the selected model, and it does not yet publish OpenCode-equivalent compaction start/end events.
+
+## Previous proven slice
+
+Forge extends the approved `apply_patch` post-edit activity path with OpenCode-shaped LSP diagnostic report envelopes and visible WebUI activity rail support:
 
 - Event metadata source paths:
   - `packages/opencode/src/tool/apply_patch.ts`
@@ -35,11 +55,11 @@ Forge now extends the approved `apply_patch` post-edit activity path with OpenCo
 - Behavior added:
   - approved patch metadata now contains `opencode_lsp_diagnostics` report envelopes;
   - the event rail explicitly recognizes `lsp.diagnostics` events and displays diagnostic count/status;
-  - docs now distinguish diagnostic event-envelope parity from a real language-server backend.
+  - docs distinguish diagnostic event-envelope parity from a real language-server backend.
 
-This is a meaningful parity slice, but it is **not full LSP parity**. Forge still does not run a language server; it emits the OpenCode-shaped diagnostic event envelope after edits so the UI/event stream has the correct durable shape for the next backend step.
+This is **not full LSP parity**. Forge still does not run a language server; it emits the OpenCode-shaped diagnostic event envelope after edits so the UI/event stream has the correct durable shape for the next backend step.
 
-## Previous proven slice
+## Older proven slice
 
 Forge persists OpenCode-shaped ToolPart lifecycle receipts:
 
@@ -56,9 +76,10 @@ This is still not perfect OpenCode storage semantics; Forge records lifecycle re
 
 ## Next source-backed targets
 
-1. Wire `opencode_lsp_diagnostics` into `apply_patch` result metadata if not already present in the final checked head.
-2. Attach a real LSP diagnostics backend to replace `pending_service` envelopes.
-3. Continue real watcher/file edited event bus behavior beyond in-memory history.
-4. Full OpenCode compaction process parity beyond the request marker.
-5. `AgentPart` / subtask behavior only if backed by a real Forge path.
-6. `RetryPart` receipts if a deterministic retry path exists.
+1. Check Actions for current compaction slice HEAD.
+2. Add OpenCode-style compaction start/end events.
+3. Make compaction LLM-backed through NVIDIA NIM only.
+4. Attach a real LSP diagnostics backend to replace `pending_service` envelopes.
+5. Continue real watcher/file edited event bus behavior beyond in-memory history.
+6. `AgentPart` / subtask behavior only if backed by a real Forge path.
+7. `RetryPart` receipts if a deterministic retry path exists.
