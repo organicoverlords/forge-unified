@@ -97,7 +97,7 @@ pub async fn approve_edit(State(s): State<AppState>, Path((id, approval_id)): Pa
     let req = ToolRequest {
         id: ToolCallId(approval_id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?),
         kind: ToolKind::ApplyPatch,
-        args: serde_json::json!({"patchText": patch_text, "approved": true, "approval_id": approval_id}),
+        args: serde_json::json!({"patchText": patch_text, "approved": true, "approval_id": approval_id.clone()}),
         parallel_group: None,
     };
     let mut result = s.agent.execute_tool(req).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
