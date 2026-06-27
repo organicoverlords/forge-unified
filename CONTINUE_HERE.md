@@ -14,34 +14,33 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
-- Latest fully green baseline: `6a34928048b86e6d7b91468789eeef4489744ae8`.
-- Latest proof artifact: `live-webui-feature-sprint-proof-6a34928.zip`.
+- Latest fully green baseline: `71a0ad32b979c656ea18e92eaf460b63b91425a6`.
+- Latest proof artifact: `live-webui-feature-sprint-proof-71a0ad3.zip`.
 - Current docs-updated HEAD still needs Actions before a fresh green claim.
 
 ## Latest OpenCode-source slice
 
-Forge now records source-shaped receipts after approved `apply_patch` mutations:
+Forge now persists OpenCode-shaped ToolPart lifecycle receipts:
 
-- `opencode_event_source`
-- `opencode_watcher_updates`
-- `opencode_filesystem_edits`
-- `lsp_touches`
-- `diagnostics.touched_files`
+- `tool_lifecycle_parts`
+- pending ToolState
+- running ToolState
+- completed/error ToolState
+- schema source: `packages/schema/src/v1/session.ts`
+- processor source: `packages/opencode/src/session/processor.ts`
 
-Upstream sources studied:
+Live proof at `71a0ad3` confirms lifecycle receipts in stream proof, persisted conversation JSON, and browser DOM proof.
 
-- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
-- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/edit.ts`
+This is still not perfect OpenCode storage semantics; Forge records lifecycle receipts, not a single mutable part row updated in place.
 
-Live proof at `6a34928` confirms these receipts in approval response, persisted conversation JSON, and browser DOM proof.
+## Previous proven slice
 
-This is not yet a real live watcher bus or live LSP diagnostics implementation; it is the receipt/proof slice.
+Approved `apply_patch` results persist OpenCode-shaped post-edit receipts for filesystem edits, watcher updates, LSP touch targets, and diagnostics touch metadata.
 
 ## Next source-backed targets
 
-1. Full durable OpenCode `ToolPart` lifecycle parity.
-2. Real watcher/file edited event bus beyond metadata receipts.
-3. Live LSP diagnostics beyond touched-file receipts.
-4. Full OpenCode compaction process parity beyond the request marker.
-5. `AgentPart` / subtask behavior only if backed by a real Forge path.
-6. `RetryPart` receipts if a deterministic retry path exists.
+1. Real watcher/file edited event bus beyond metadata receipts.
+2. Live LSP diagnostics beyond touched-file receipts.
+3. Full OpenCode compaction process parity beyond the request marker.
+4. `AgentPart` / subtask behavior only if backed by a real Forge path.
+5. `RetryPart` receipts if a deterministic retry path exists.
