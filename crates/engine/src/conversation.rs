@@ -1,22 +1,11 @@
 //! Conversation manager — CRUD for conversations with messages.
 
-use crate::tool_parts::{
-    compaction_part, file_parts, finished_tool_lifecycle_parts, finished_tool_part, patch_parts,
-    reasoning_parts, running_tool_part, snapshot_part, started_tool_lifecycle_parts, text_parts,
-};
+use crate::tool_parts::{compaction_part, file_parts, finished_tool_lifecycle_parts, finished_tool_part, patch_parts, reasoning_parts, running_tool_part, snapshot_part, started_tool_lifecycle_parts, text_parts};
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-const COMPACTION_TEMPLATE_SECTIONS: &[&str] = &[
-    "Goal",
-    "Constraints & Preferences",
-    "Progress",
-    "Key Decisions",
-    "Next Steps",
-    "Critical Context",
-    "Relevant Files",
-];
+const COMPACTION_TEMPLATE_SECTIONS: &[&str] = &["Goal", "Constraints & Preferences", "Progress", "Key Decisions", "Next Steps", "Critical Context", "Relevant Files"];
 
 pub struct ConversationManager { conversations: HashMap<ConversationId, Conversation> }
 
@@ -26,10 +15,7 @@ impl ConversationManager {
     pub fn create(&mut self, title: String) -> ConversationId {
         let id = ConversationId(Uuid::new_v4());
         let now = chrono::Utc::now();
-        self.conversations.insert(id.clone(), Conversation {
-            id: id.clone(), title, messages: Vec::new(), provider: None, model: None,
-            mode: crate::types::AgentMode::Chat, created_at: now, updated_at: now,
-        });
+        self.conversations.insert(id.clone(), Conversation { id: id.clone(), title, messages: Vec::new(), provider: None, model: None, mode: crate::types::AgentMode::Chat, created_at: now, updated_at: now });
         id
     }
 
@@ -68,10 +54,7 @@ impl ConversationManager {
     pub fn add_snapshot_part(&mut self, id: &ConversationId, snapshot: String) {
         if let Some(conv) = self.conversations.get_mut(id) {
             let part = snapshot_part(&snapshot);
-            conv.messages.push(Message { role: MessageRole::System, content: snapshot, tool_calls: None, tool_results: None, metadata: HashMap::from([
-                ("snapshot_parts".to_string(), serde_json::json!([part])),
-                ("opencode_snapshot_part_source".to_string(), crate::tool_parts::opencode_snapshot_part_source()),
-            ])});
+            conv.messages.push(Message { role: MessageRole::System, content: snapshot, tool_calls: None, tool_results: None, metadata: HashMap::from([("snapshot_parts".to_string(), serde_json::json!([part])), ("opencode_snapshot_part_source".to_string(), crate::tool_parts::opencode_snapshot_part_source())]) });
             conv.updated_at = chrono::Utc::now();
         }
     }
@@ -111,28 +94,22 @@ impl ConversationManager {
         if let Some(conv) = self.conversations.get_mut(id) {
             let file_parts = file_parts(&results);
             let tool_parts = results.iter().map(finished_tool_part).collect::<Vec<_>>();
+            let mutable_updates = update_mutable_tool_parts(conv, &tool_parts);
             let lifecycle_parts = results.iter().flat_map(finished_tool_lifecycle_parts).collect::<Vec<_>>();
             let patch_parts = patch_parts(&results);
-            let mut metadata = HashMap::from([
-                ("tool_parts".to_string(), serde_json::json!(tool_parts)),
-                ("tool_lifecycle_parts".to_string(), serde_json::json!(lifecycle_parts)),
-                ("opencode_tool_part_source".to_string(), crate::tool_parts::opencode_tool_part_source()),
-            ]);
-            if !file_parts.is_empty() {
-                metadata.insert("file_parts".to_string(), serde_json::json!(file_parts));
-                metadata.insert("opencode_file_part_source".to_string(), crate::tool_parts::opencode_file_part_source());
+            let mut metadata = HashMap::from([("tool_parts".to_string(), serde_json::json!(tool_parts)), ("tool_lifecycle_parts".to_string(), serde_json::json!(lifecycle_parts)), ("opencode_tool_part_source".to_string(), crate::tool_parts::opencode_tool_part_source())]);
+            if !mutable_updates.is_empty() {
+                metadata.insert("mutable_tool_part_updates".to_string(), serde_json::json!(mutable_updates));
+                metadata.insert("opencode_mutable_tool_part_source".to_string(), opencode_mutable_tool_part_source());
             }
-            if !patch_parts.is_empty() {
-                metadata.insert("patch_parts".to_string(), serde_json::json!(patch_parts));
-                metadata.insert("opencode_patch_part_source".to_string(), crate::tool_parts::opencode_patch_part_source());
-            }
+            if !file_parts.is_empty() { metadata.insert("file_parts".to_string(), serde_json::json!(file_parts)); metadata.insert("opencode_file_part_source".to_string(), crate::tool_parts::opencode_file_part_source()); }
+            if !patch_parts.is_empty() { metadata.insert("patch_parts".to_string(), serde_json::json!(patch_parts)); metadata.insert("opencode_patch_part_source".to_string(), crate::tool_parts::opencode_patch_part_source()); }
             conv.messages.push(Message { role: MessageRole::Tool, content: String::new(), tool_calls: None, tool_results: Some(results), metadata });
             conv.updated_at = chrono::Utc::now();
         }
     }
 
     pub fn message_count(&self, id: &ConversationId) -> usize { self.conversations.get(id).map(|c| c.messages.len()).unwrap_or(0) }
-
     pub fn compact(&mut self, id: &ConversationId, keep_last: usize) {
         if let Some(conv) = self.conversations.get_mut(id) {
             if conv.messages.len() > keep_last {
@@ -144,18 +121,39 @@ impl ConversationManager {
     }
 }
 
+fn update_mutable_tool_parts(conv: &mut Conversation, final_parts: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let mut receipts = Vec::new();
+    for final_part in final_parts {
+        let Some(call_id) = final_part.get("callID").and_then(serde_json::Value::as_str).map(str::to_string) else { continue; };
+        let after_status = final_part.get("state").and_then(|s| s.get("status")).and_then(serde_json::Value::as_str).unwrap_or("unknown").to_string();
+        for message in conv.messages.iter_mut().rev() {
+            if !matches!(&message.role, MessageRole::Assistant) { continue; }
+            let receipt = {
+                let Some(parts) = message.metadata.get_mut("tool_parts").and_then(serde_json::Value::as_array_mut) else { continue; };
+                let Some(index) = parts.iter().position(|part| part.get("callID").and_then(serde_json::Value::as_str) == Some(call_id.as_str())) else { continue; };
+                let before_status = parts[index].get("state").and_then(|s| s.get("status")).and_then(serde_json::Value::as_str).unwrap_or("unknown").to_string();
+                parts[index] = final_part.clone();
+                serde_json::json!({"callID": call_id, "before_status": before_status, "after_status": after_status, "message_role": "assistant", "copied_behavior": "same ToolPart row updated by callID, mirroring SessionProcessor.updatePart before completeToolCall/failToolCall settles the tool", "opencode_source": opencode_mutable_tool_part_source()})
+            };
+            message.metadata.insert("opencode_mutable_tool_part_source".to_string(), opencode_mutable_tool_part_source());
+            message.metadata.insert("mutable_tool_part_updates".to_string(), serde_json::json!([receipt.clone()]));
+            receipts.push(receipt);
+            break;
+        }
+    }
+    receipts
+}
+
+fn opencode_mutable_tool_part_source() -> serde_json::Value {
+    serde_json::json!({"path":"packages/opencode/src/session/processor.ts","schema_path":"packages/schema/src/v1/session.ts","copied_functions":["readToolCall","updateToolCall","completeToolCall","failToolCall"],"behavior":"OpenCode reads an existing ToolPart and updates that same part row as it moves from pending/running to completed/error."})
+}
+
 fn build_compaction_summary(messages: &[Message]) -> String {
     let goal = messages.iter().find(|m| matches!(&m.role, MessageRole::User)).map(|m| one_line(&m.content, 180)).filter(|s| !s.is_empty()).unwrap_or_else(|| "(none)".to_string());
     let done = messages.iter().filter(|m| matches!(&m.role, MessageRole::Assistant | MessageRole::Tool)).filter_map(done_bullet).take(6).collect::<Vec<_>>();
     let blocked = messages.iter().filter_map(blocker_bullet).take(4).collect::<Vec<_>>();
     let files = messages.iter().flat_map(relevant_files).take(8).collect::<Vec<_>>();
-    format!(
-        "## Goal\n- {}\n\n## Constraints & Preferences\n- Preserve exact paths, commands, errors, and user constraints when known.\n- Keep recent conversation tail outside the summary so the next turn can continue without stale replay.\n\n## Progress\n### Done\n{}\n\n### In Progress\n- Continue from the preserved recent tail.\n\n### Blocked\n{}\n\n## Key Decisions\n- Compaction follows OpenCode's head/recent split and structured Markdown summary shape from `packages/core/src/session/compaction.ts`.\n\n## Next Steps\n- Use `compaction_recent` as the immediate tail and this summary as the anchored context.\n\n## Critical Context\n- Compaction is deterministic in Forge for now; an LLM-backed summary stream remains a future parity step.\n\n## Relevant Files\n{}",
-        goal,
-        bullet_list(done),
-        bullet_list(blocked),
-        bullet_list(files),
-    )
+    format!("## Goal\n- {}\n\n## Constraints & Preferences\n- Preserve exact paths, commands, errors, and user constraints when known.\n- Keep recent conversation tail outside the summary so the next turn can continue without stale replay.\n\n## Progress\n### Done\n{}\n\n### In Progress\n- Continue from the preserved recent tail.\n\n### Blocked\n{}\n\n## Key Decisions\n- Compaction follows OpenCode's head/recent split and structured Markdown summary shape from `packages/core/src/session/compaction.ts`.\n\n## Next Steps\n- Use `compaction_recent` as the immediate tail and this summary as the anchored context.\n\n## Critical Context\n- Compaction is deterministic in Forge for now; an LLM-backed summary stream remains a future parity step.\n\n## Relevant Files\n{}", goal, bullet_list(done), bullet_list(blocked), bullet_list(files))
 }
 
 fn serialize_message_for_compaction(message: &Message) -> String {
@@ -163,11 +161,7 @@ fn serialize_message_for_compaction(message: &Message) -> String {
     if message.content.trim().is_empty() && message.tool_results.is_none() { return String::new(); }
     let mut parts = Vec::new();
     if !message.content.trim().is_empty() { parts.push(format!("{}: {}", label, one_line(&message.content, 900))); }
-    if let Some(results) = &message.tool_results {
-        for result in results.iter().take(6) {
-            parts.push(format!("[Tool result]: {:?} success={} {}", &result.kind, result.success, one_line(&result.output, 500)));
-        }
-    }
+    if let Some(results) = &message.tool_results { for result in results.iter().take(6) { parts.push(format!("[Tool result]: {:?} success={} {}", &result.kind, result.success, one_line(&result.output, 500))); } }
     parts.join("\n")
 }
 
@@ -189,53 +183,24 @@ fn relevant_files(message: &Message) -> Vec<String> {
     for key in ["file_parts", "patch_parts"] {
         if let Some(values) = message.metadata.get(key).and_then(serde_json::Value::as_array) {
             for value in values {
-                if let Some(path) = value.get("filename").or_else(|| value.get("path")).and_then(serde_json::Value::as_str) {
-                    out.push(format!("- `{}`: referenced by {}", path, key));
-                }
-                if let Some(files) = value.get("files").and_then(serde_json::Value::as_array) {
-                    for file in files { if let Some(path) = file.as_str() { out.push(format!("- `{}`: patch target", path)); } }
-                }
+                if let Some(path) = value.get("filename").or_else(|| value.get("path")).and_then(serde_json::Value::as_str) { out.push(format!("- `{}`: referenced by {}", path, key)); }
+                if let Some(files) = value.get("files").and_then(serde_json::Value::as_array) { for file in files { if let Some(path) = file.as_str() { out.push(format!("- `{}`: patch target", path)); } } }
             }
         }
     }
     out.sort(); out.dedup(); out
 }
 
-fn bullet_list(items: Vec<String>) -> String {
-    if items.is_empty() { "- (none)".to_string() } else { items.join("\n") }
-}
-
-fn one_line(value: &str, limit: usize) -> String {
-    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if compact.chars().count() <= limit { return compact; }
-    format!("{}…", compact.chars().take(limit.saturating_sub(1)).collect::<String>())
-}
-
-fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serde_json::Value> {
-    let parts = text_parts(content, synthetic);
-    if parts.is_empty() { return HashMap::new(); }
-    HashMap::from([("text_parts".to_string(), serde_json::json!(parts)), ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source())])
-}
-
-fn message_reasoning_metadata(content: &str) -> HashMap<String, serde_json::Value> {
-    let parts = reasoning_parts(content);
-    if parts.is_empty() { return HashMap::new(); }
-    HashMap::from([("reasoning_parts".to_string(), serde_json::json!(parts)), ("opencode_reasoning_part_source".to_string(), crate::tool_parts::opencode_reasoning_part_source())])
-}
+fn bullet_list(items: Vec<String>) -> String { if items.is_empty() { "- (none)".to_string() } else { items.join("\n") } }
+fn one_line(value: &str, limit: usize) -> String { let compact = value.split_whitespace().collect::<Vec<_>>().join(" "); if compact.chars().count() <= limit { compact } else { format!("{}…", compact.chars().take(limit.saturating_sub(1)).collect::<String>()) } }
+fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serde_json::Value> { let parts = text_parts(content, synthetic); if parts.is_empty() { HashMap::new() } else { HashMap::from([("text_parts".to_string(), serde_json::json!(parts)), ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source())]) } }
+fn message_reasoning_metadata(content: &str) -> HashMap<String, serde_json::Value> { let parts = reasoning_parts(content); if parts.is_empty() { HashMap::new() } else { HashMap::from([("reasoning_parts".to_string(), serde_json::json!(parts)), ("opencode_reasoning_part_source".to_string(), crate::tool_parts::opencode_reasoning_part_source())]) } }
 
 fn normalize_assistant_content(content: String) -> (String, HashMap<String, serde_json::Value>) {
     if !content.starts_with("[Provider error:") { return (content, HashMap::new()); }
     let lower = content.to_ascii_lowercase();
-    let classification = if lower.contains("busy") || lower.contains("exhausted") || lower.contains("capacity") { "model_busy_capacity" }
-    else if lower.contains("429") || lower.contains("rate") { "rate_limited" }
-    else if lower.contains("missing") { "missing_key" }
-    else { "provider_error" };
-    let message = match classification {
-        "model_busy_capacity" => "Provider error: model is temporarily busy; retrying another model is safe.",
-        "rate_limited" => "Provider error: model-level throttle; this is not a provider-wide outage.",
-        "missing_key" => "Provider error: runtime is missing a usable model credential.",
-        _ => "Provider error: model route could not complete this turn.",
-    };
+    let classification = if lower.contains("busy") || lower.contains("exhausted") || lower.contains("capacity") { "model_busy_capacity" } else if lower.contains("429") || lower.contains("rate") { "rate_limited" } else if lower.contains("missing") { "missing_key" } else { "provider_error" };
+    let message = match classification { "model_busy_capacity" => "Provider error: model is temporarily busy; retrying another model is safe.", "rate_limited" => "Provider error: model-level throttle; this is not a provider-wide outage.", "missing_key" => "Provider error: runtime is missing a usable model credential.", _ => "Provider error: model route could not complete this turn." };
     let metadata = HashMap::from([("type".to_string(), serde_json::json!("provider-error")), ("classification".to_string(), serde_json::json!(classification)), ("retryable".to_string(), serde_json::json!(classification != "missing_key"))]);
     (message.to_string(), metadata)
 }
