@@ -44,7 +44,7 @@ impl ToolExecutor {
         if hunks.is_empty() {
             let normalized = patch_text.replace("\r\n", "\n").replace('\r', "\n");
             let empty_doc = [patch_marker("Begin Patch"), patch_marker("End Patch")].join("\n");
-            let error = if normalized.trim() == empty_doc { "patch rejected: empty patch" } else { "apply_patch verification failed: no hunks found" };
+            let error = if normalized.trim() == empty_doc.as_str() { "patch rejected: empty patch" } else { "apply_patch verification failed: no hunks found" };
             return Ok(apply_patch_failure(request.id, patch_len, error));
         }
 
@@ -182,8 +182,8 @@ fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
     let lines: Vec<&str> = cleaned.lines().collect();
     let begin_marker = patch_marker("Begin Patch");
     let end_marker = patch_marker("End Patch");
-    let begin_idx = lines.iter().position(|line| line.trim() == begin_marker);
-    let end_idx = lines.iter().position(|line| line.trim() == end_marker);
+    let begin_idx = lines.iter().position(|line| line.trim() == begin_marker.as_str());
+    let end_idx = lines.iter().position(|line| line.trim() == end_marker.as_str());
     let (Some(begin), Some(end)) = (begin_idx, end_idx) else { return Err(anyhow!("Invalid patch format: missing Begin/End markers")); };
     if begin >= end { return Err(anyhow!("Invalid patch format: missing Begin/End markers")); }
 
