@@ -67,14 +67,16 @@ impl Orchestrator {
                 for req in allowed_requests {
                     total_tool_calls += 1;
                     match self.tool_executor.execute(req.clone()).await {
-                        Ok(r) => { if !r.success { total_tool_failures += 1; } results.push(r); }
-                        Err(error) => { total_tool_failures += 1; results.push(tool_error_result(req, error.to_string())); }
+                        Ok(mut r) => { annotate_provider_executed_result(&req, &mut r); if !r.success { total_tool_failures += 1; } results.push(r); }
+                        Err(error) => { total_tool_failures += 1; let mut result = tool_error_result(req.clone(), error.to_string()); annotate_provider_executed_result(&req, &mut result); results.push(result); }
                     }
                 }
                 results
             } else {
                 let call_count = allowed_requests.len() as u32;
-                let results = self.tool_executor.execute_batch(allowed_requests).await;
+                let provider_call_inputs: HashMap<String, serde_json::Value> = allowed_requests.iter().map(|req| (req.id.0.to_string(), req.args.clone())).collect();
+                let mut results = self.tool_executor.execute_batch(allowed_requests).await;
+                for result in &mut results { annotate_provider_executed_metadata(result, provider_call_inputs.get(&result.id.0.to_string()).cloned()); }
                 total_tool_calls += call_count;
                 total_tool_failures += results.iter().filter(|r| !r.success).count() as u32;
                 results
@@ -152,6 +154,19 @@ fn looks_like_final_report(value: &str) -> bool {
 
 fn fallback_final_report(provider: &ProviderId, model: &ModelId, prior_output: &str, evidence: &str) -> String {
     format!("Founder report\nThe live model-backed tool loop completed, but the final model text was not a usable report, so Forge produced a conservative fallback report from recorded evidence. Provider: {}; model: {}.\n\nTechnical report\nEvidence digest:\n{}\n\nFiles changed\nSee tool results above; exact final classification is incomplete.\n\nValidation commands run\nSee shell/tool evidence above; exact final classification is incomplete.\n\nRemaining risks\nThe final report used fallback formatting because the final model text was: {}\n\nConfidence score\n62/100", provider.0, model.0, evidence, trim_chars(prior_output, 500))
+}
+
+fn annotate_provider_executed_result(req: &ToolRequest, result: &mut ToolResult) {
+    annotate_provider_executed_metadata(result, Some(req.args.clone()));
+}
+
+fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<serde_json::Value>) {
+    result.metadata.insert("providerExecuted".to_string(), serde_json::json!(true));
+    result.metadata.insert("provider_executed".to_string(), serde_json::json!(true));
+    result.metadata.insert("opencode_provider_executed_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall"));
+    if let Some(input) = input {
+        result.metadata.entry("opencode_tool_input".to_string()).or_insert(input);
+    }
 }
 
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
