@@ -1,6 +1,13 @@
 Use the available app tools for filesystem, shell, git, web/search, and read/write/remove operations inside the repo workspace.
 
-Do the following exactly and complete all steps before reporting. Do not claim any phase is complete unless it is backed by tool results.
+Do the following exactly and complete all steps before reporting. Each phase must be backed by tool results.
+
+Mandatory benchmark checkpoint:
+
+- Do only minimal repo inspection before the file-operation phase.
+- Before extended searching, write, read back, and remove the required `.agent_test` files using the app file tools.
+- After that, perform the temporary `PROJECT_STATE.md` repo-file edit with a file tool, inspect `git diff` or `git status`, and decide keep or revert.
+- Only then write the final Founder report and Technical report.
 
 # Phase 1 — Environment + repo inspection
 
@@ -26,15 +33,15 @@ During the investigation, inspect relevant code, config, tests/scripts, usages/c
 
 Use app file tools, not shell-only shortcuts, for this phase.
 
-Create `.agent_test/` by writing these exact files with the file_write tool:
+Create `.agent_test/` by writing these exact files with the file write tool:
 
 * `.agent_test/repo_summary.md`
 * `.agent_test/investigation.md`
 * `.agent_test/action_plan.json`
 
-Then use the file_read tool to read back all three files. Verify their contents in prose from the tool results.
+Then use the file read tool to read back all three files. Verify their contents in prose from the tool results.
 
-Then remove only `.agent_test/investigation.md` with the file_delete tool.
+Then remove only `.agent_test/investigation.md` with the app file removal tool.
 
 Then verify `.agent_test/repo_summary.md` and `.agent_test/action_plan.json` still exist, and verify `.agent_test/investigation.md` is gone. You may use file_list or a bounded shell_command for this verification, but the write/read/remove operations themselves must be file tools.
 
@@ -44,7 +51,7 @@ Then verify `.agent_test/repo_summary.md` and `.agent_test/action_plan.json` sti
 
 Before editing real repo files, explain blast radius, difficulty, rollback plan, and why the change is low-risk.
 
-Then implement ONE low-risk improvement based on the investigation. For this benchmark proof, make the improvement as a temporary documentation edit to `PROJECT_STATE.md` using file_edit or file_write, then inspect `git diff`. After validation, decide whether to keep or revert. If you revert, use file_edit or file_write so the repo ends clean.
+Then implement ONE low-risk improvement based on the investigation. For this benchmark proof, make the improvement as a temporary documentation edit to `PROJECT_STATE.md` using a file edit or file write tool, then inspect `git diff`. After validation, decide whether to keep or revert. If you revert, use a file edit or file write tool so the repo ends clean.
 
 After the edit, run the most relevant validation command available, inspect the diff, and decide whether to keep or revert the edit.
 
@@ -58,4 +65,4 @@ Write two reports: a founder report of 180 words or less, and a technical report
 
 # Phase 6 — Cleanup and safety
 
-Before final answer, verify no secrets were printed, no unrelated files changed, and no giant logs/artifacts were left in the repo. Report files created/removed/modified, validation commands run, remaining risks, and confidence score 0-100.
+Before final answer, verify no private credentials were printed, no unrelated files changed, and no giant logs/artifacts were left in the repo. Report files created/removed/modified, validation commands run, remaining risks, and confidence score 0-100.
