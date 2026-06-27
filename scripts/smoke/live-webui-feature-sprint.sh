@@ -22,8 +22,8 @@ STEP_LOG="$PROOF_DIR/live-proof-steps.log"
 
 step() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$STEP_LOG"; }
 
-step "cargo build"
-timeout 240s cargo build --workspace
+step "cargo build forge-app"
+timeout 480s cargo build -p forge-app
 step "start webui"
 RUST_BACKTRACE=1 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 PID=$!
