@@ -18,9 +18,23 @@ jobs:
       - name: File line gate
         run: bash scripts/ci/check-file-lines.sh
       - name: Cargo check
-        run: cargo check --workspace --all-targets
+        run: |
+          set -o pipefail
+          cargo check --workspace --all-targets > /tmp/forge-cargo-check.log 2>&1 || {
+            echo "cargo check failed; tail follows"
+            tail -n 220 /tmp/forge-cargo-check.log
+            exit 1
+          }
+          tail -n 40 /tmp/forge-cargo-check.log
       - name: Cargo test
-        run: cargo test --workspace --all-targets
+        run: |
+          set -o pipefail
+          cargo test --workspace --all-targets > /tmp/forge-cargo-test.log 2>&1 || {
+            echo "cargo test failed; tail follows"
+            tail -n 220 /tmp/forge-cargo-test.log
+            exit 1
+          }
+          tail -n 40 /tmp/forge-cargo-test.log
       - name: WebUI smoke
         run: bash scripts/smoke/live-webui-feature-sprint.sh
       - name: Upload proof
