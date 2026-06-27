@@ -31,7 +31,7 @@ trap cleanup EXIT
 
 for _ in $(seq 1 60); do curl -fsS "$BASE/api/health" >/dev/null && break; sleep 0.5; done
 curl -fsS "$BASE/" | grep -q "Forge Unified"
-curl -fsS "$BASE/events" | grep -q "Forge Activity"
+curl -fsS "$BASE/events?static=1" | grep -q "Forge Activity"
 curl -fsS "$BASE/api/events/recent" | grep -q '"event_bus":"change_bus"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural event bus proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -69,10 +69,10 @@ jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
 for marker in "natural event bus proof" "event_bus_receipts" "filesystem.edited" "watcher.updated" "OpenCode ToolPart metadata" "OpenCode PatchPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
-curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
+curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "natural-proof-note.txt" "opencode-event-rail"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
 echo "LIVE WebUI event rail proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
