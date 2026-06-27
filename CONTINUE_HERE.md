@@ -15,35 +15,42 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this slice: `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed`.
-- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28299351117`, artifact `7927453969`.
+- Latest fully green baseline before this run: `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed`.
+- Latest proven browser proof before this run: Live WebUI Feature Sprint run `28299351117`, artifact `7927453969`.
 - Current branch HEAD after this slice needs Actions before calling it green.
 
 ## Latest source-backed slice
 
-Forge now renders OpenCode-style live ToolPart lifecycle cards while a natural WebUI tool prompt is streaming, instead of only showing final tool result cards after completion.
+Forge now exposes and renders the provider-visible OpenCode-style tool catalog so the model/tool stream can see the real tool surface and browser proof can verify it in the UI.
 
 Upstream source paths:
 
+- `packages/opencode/src/tool/apply_patch.ts`
 - `packages/opencode/src/session/processor.ts`
 - `packages/schema/src/v1/session.ts`
-- `packages/opencode/src/event-v2-bridge.ts`
+- `packages/opencode/src/tool/write.ts`
+- `packages/opencode/src/tool/edit.ts`
+- `packages/opencode/src/tool/read.ts`
+- `packages/opencode/src/tool/bash.ts`
+- `packages/opencode/src/tool/glob.ts`
+- `packages/opencode/src/tool/grep.ts`
+- `packages/opencode/src/tool/ls.ts`
+- `packages/opencode/src/tool/webfetch.ts`
 
-Copied behavior:
+Copied / improved behavior:
 
-- OpenCode `ensureToolCall` creates or finds the same ToolPart row by tool call ID.
-- OpenCode `updateToolCall` moves the same ToolPart into running state with input.
-- OpenCode `completeToolCall` / `failToolCall` update the same ToolPart row to completed/error.
-- OpenCode preserves `providerExecuted` metadata when provider/tool stream deltas mark it true.
-- Forge-owned local tool execution now marks `providerExecuted: false` explicitly while carrying the same metadata/delta shape.
-- Forge SSE emits `providerExecuted`, `providerExecuted_delta`, and `doom_loop_threshold` metadata from the OpenCode SessionProcessor shape.
-- The WebUI renders live cards for `tool-lifecycle`, `tool-input-*`, and `tool-call` events.
-- The WebUI renders `file-change` and `event-bus` SSE events as an in-chat EventV2Bridge receipt rail.
-- Live WebUI smoke first proves a real NVIDIA NIM model route, then runs a natural-language tool-lifecycle prompt and requires screenshot DOM markers for the visible prompt, ToolPart cards, `providerExecuted`, EventV2Bridge receipts, and final summary.
+- `tool_definitions()` now advertises the full Forge executor surface instead of only a minimal repo/file/shell subset.
+- `apply_patch` is provider-visible with `patchText` schema and OpenCode source metadata.
+- `task`, `batch_parallel`, `web_fetch`, `web_search`, `browser_proof`, `vision_review`, `graph_build`, `graph_query`, `terminal_run`, and `switch_mode` are provider-visible.
+- `/api/tools` exposes `opencode_provider_tool_catalog`, names, count, required tools, source paths, and full schemas.
+- The WebUI renders an `OpenCode Tool Catalog` panel with visible `apply_patch`.
+- Live WebUI smoke requires the catalog API and browser DOM to show the provider-visible catalog and `apply_patch` during natural prompt proof.
 
 Forge files touched:
 
-- `crates/webui/src/events.rs`
+- `crates/engine/src/tool.rs`
+- `crates/webui/src/routes.rs`
+- `crates/webui/src/lib.rs`
 - `crates/webui/src/chat_ui.rs`
 - `scripts/smoke/live-webui-feature-sprint.sh`
 - `OPENCODE-PARITY.md`
@@ -53,10 +60,10 @@ Forge files touched:
 Still incomplete / do not overclaim:
 
 - Current HEAD is not yet workflow/browser-proof green.
-- Full provider-side/providerExecuted tool execution is still incomplete; current Forge-owned tools mark false explicitly while preserving the OpenCode metadata shape.
+- Provider-visible catalog is now exposed, but true providerExecuted tool calls from the NIM/provider stream still need deeper implementation.
 - OpenCode database-backed part IDs are not fully copied.
-- Live LSP server/client diagnostics are not implemented yet; current LSP slice improves source-backed visibility of the copied diagnostic envelope.
-- Full OpenCode formatter catalog/config/runtime remains partial; only rustfmt `.rs` path is wired.
+- Live LSP server/client diagnostics are not implemented yet.
+- Full OpenCode formatter catalog/config/runtime remains partial.
 - Full NIM-backed streamed compaction remains incomplete.
 
 ## Previous proven slices
@@ -65,10 +72,10 @@ Still incomplete / do not overclaim:
 - `04d35a5085a89658b158b7ee23f40510d9a949cd` — six-phase natural WebUI repo benchmark path; CI `28297659041`, Build Proof `28297659050`, and Live WebUI Feature Sprint `28297659029` were green with proof artifact `7926961624`.
 - `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; CI `28295482729`, Build Proof `28295482721`, and Live WebUI Feature Sprint `28295482726` were green with proof artifact `7926326967`.
 - `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; CI `28293770704`, Build Proof `28293770703`, and Live WebUI Feature Sprint `28293770706` were green with proof artifact `7925827340`.
-- `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation; CI `28293331161`, Build Proof `28293331148`, and Live WebUI Feature Sprint `28293331147` were green.
-- `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape; CI `28292308520`, Build Proof `28292308511`, and Live WebUI Feature Sprint `28292308525` were green with proof artifact `7925391830`.
-- `c3b826d7136298c7bb7d62ba30e11fd12cfeff70` — watcher status + local mutable ToolPart proof path; CI `28291374005`, Build Proof `28291373988`, and Live WebUI Feature Sprint `28291373990` were green with proof artifact `7925108696`.
-- `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity; CI, Build Proof, and Live WebUI Feature Sprint were green with proof artifact `7924965603`.
+- `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation.
+- `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape.
+- `c3b826d7136298c7bb7d62ba30e11fd12cfeff70` — watcher status + local mutable ToolPart proof path.
+- `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity.
 - `98b408b0f8f8a132ba7df18617d103ea63d43ce1` — ToolStateCompleted FilePart attachment parity.
 - `d24d8e7183216aa8a50627b1bc280251d9171ee4` — OpenCode session compaction event-type parity.
 - `1734ae285237bee4c4bd06a418ecd719a1ccf87a` — durable OpenCode EventV2Bridge-style change bus replay.
@@ -77,8 +84,8 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current visible lifecycle rail HEAD.
+1. Check Actions for the current provider tool catalog HEAD.
 2. If Rust compile/test fails, inspect exact logs; do not rerun deterministic failures blindly.
-3. If WebUI smoke fails, inspect proof artifact, browser-proof DOM markers, `tool-lifecycle-stream.sse`, and `server.log` first.
+3. If WebUI smoke fails, inspect `tool-catalog.json`, browser-proof DOM markers, `tool-lifecycle-stream.sse`, and `server.log` first.
 4. Inspect proof artifact screenshots after green.
-5. Continue toward full provider-side tool execution, live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
+5. Continue toward true providerExecuted tool calls from NIM/provider stream, live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
