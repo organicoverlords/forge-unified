@@ -19,18 +19,9 @@ Updated: 2026-06-27
 - WebUI uses the newer dark Codex/OpenCode-like theme.
 - Natural proof note prompt creates a pending edit approval before writing.
 - Approval route applies the patch and records FilePart/PatchPart only after approval.
-- Approved `apply_patch` results now persist OpenCode-shaped post-edit receipts for filesystem edits, watcher updates, LSP touch targets, and diagnostics touch metadata.
+- Approved `apply_patch` results persist source-shaped post-edit receipts for filesystem edits, watcher updates, LSP touch targets, and diagnostics touch metadata.
 - Repo inspection still runs real `repo_info` and `file_list` tools with compact visible output and raw metadata preserved.
 - Existing session part cards remain: TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, PatchPart.
-
-## OpenCode sources used
-
-- `packages/opencode/src/tool/apply_patch.ts`
-- `packages/opencode/src/tool/edit.ts`
-- `packages/opencode/src/patch/index.ts`
-- `packages/opencode/src/session/processor.ts`
-- `packages/schema/src/v1/session.ts`
-- `packages/opencode/src/session/compaction.ts`
 
 ## Current gaps
 
