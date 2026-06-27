@@ -13,6 +13,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+const OPENCODE_COMPACTION_RUNTIME_SOURCE: &str = "packages/core/src/session/compaction.ts";
+const OPENCODE_COMPACTION_SCHEMA_SOURCE: &str = "packages/schema/src/session-event.ts";
+const OPENCODE_COMPACTION_STARTED: &str = "session.next.compaction.started";
+const OPENCODE_COMPACTION_ENDED: &str = "session.next.compaction.ended";
+
 pub struct Agent {
     orchestrator: Arc<Orchestrator>,
     conversations: Arc<RwLock<ConversationManager>>,
@@ -90,30 +95,42 @@ impl Agent {
     }
 
     pub async fn compact_with_part(&self, id: &ConversationId, keep_last: usize, auto: bool, overflow: bool) -> Result<Value> {
-        let started = self.orchestrator.publish_change_event("session.compaction.started", "opencode.compaction", serde_json::json!({
+        let started = self.orchestrator.publish_change_event(OPENCODE_COMPACTION_STARTED, "opencode.session.compaction", serde_json::json!({
+            "sessionID": id.0.to_string(),
             "conversation_id": id.0.to_string(),
+            "messageID": format!("compaction-{}", id.0),
+            "reason": if auto { "auto" } else { "manual" },
             "keep_last": keep_last,
             "auto": auto,
             "overflow": overflow,
-            "opencode_source": "packages/core/src/session/compaction.ts",
-            "copied_behavior": "begin compaction lifecycle before summarizing old context"
+            "durable": true,
+            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE,
+            "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
+            "copied_behavior": "publish SessionEvent.Compaction.Started before summarizing old context"
         }));
         let mut result = self.conversations.write().await.add_compaction_part(id, keep_last, auto, overflow).ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
         self.save_snapshot(id).await?;
-        let finished = self.orchestrator.publish_change_event("session.compaction.finished", "opencode.compaction", serde_json::json!({
+        let finished = self.orchestrator.publish_change_event(OPENCODE_COMPACTION_ENDED, "opencode.session.compaction", serde_json::json!({
+            "sessionID": id.0.to_string(),
             "conversation_id": id.0.to_string(),
+            "messageID": format!("compaction-{}", id.0),
+            "reason": if auto { "auto" } else { "manual" },
+            "text": result.get("summary").cloned().unwrap_or(Value::String(String::new())),
+            "recent": result.get("recent").cloned().unwrap_or(Value::String(String::new())),
             "compacted": result.get("compacted").and_then(Value::as_bool).unwrap_or(false),
             "before": result.get("before").and_then(Value::as_u64),
             "after": result.get("after").and_then(Value::as_u64),
             "tail_start_id": result.get("tail_start_id").cloned().unwrap_or(Value::Null),
             "started_seq": started.seq,
-            "opencode_source": "packages/core/src/session/compaction.ts",
-            "copied_behavior": "finish compaction lifecycle after structured summary and recent tail are stored"
+            "durable": true,
+            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE,
+            "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
+            "copied_behavior": "publish SessionEvent.Compaction.Ended with summary text and recent tail after compaction"
         }));
         if let Some(object) = result.as_object_mut() {
             object.insert("event_bus_receipts".to_string(), serde_json::json!([started, finished]));
             object.insert("event_bus_status".to_string(), serde_json::json!(self.change_bus_status()));
-            object.insert("opencode_compaction_event_source".to_string(), serde_json::json!({"path":"packages/core/src/session/compaction.ts","behavior":"compaction lifecycle start/end events around summary creation"}));
+            object.insert("opencode_compaction_event_source".to_string(), serde_json::json!({"schema_path":OPENCODE_COMPACTION_SCHEMA_SOURCE,"runtime_path":OPENCODE_COMPACTION_RUNTIME_SOURCE,"events":[OPENCODE_COMPACTION_STARTED,OPENCODE_COMPACTION_ENDED]}));
         }
         Ok(result)
     }
