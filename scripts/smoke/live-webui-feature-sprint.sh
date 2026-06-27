@@ -109,6 +109,8 @@ jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$FILE_TOOL_STREAM"
 for marker in "event: run-start" "event: run-finish" "file_write" "file_edit" "file_delete" "file-tool-event-proof.txt" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
 if test -e "$FILE_TOOL_PATH"; then echo "::error::file tool proof file remained after delete"; exit 5; fi
+curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
+for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"metadata":{"opencode_source":{"path":"packages/schema/src/v1/session.ts","identifier":"FilePart"' '"tool":"file_write"'; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
