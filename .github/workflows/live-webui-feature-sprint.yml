@@ -26,6 +26,23 @@ jobs:
       - name: Run live WebUI feature sprint
         run: bash scripts/smoke/live-webui-feature-sprint.sh
 
+      - name: Check full benchmark evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          proof_dir="forge-proof/live-webui-feature-sprint"
+          conversation="$proof_dir/full-benchmark-conversation.json"
+          stream="$proof_dir/full-benchmark-stream.sse"
+          checker="$proof_dir/full-benchmark-checker.json"
+          if [ ! -s "$conversation" ] || [ ! -s "$stream" ]; then
+            mkdir -p "$proof_dir"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$checker"
+            echo "::error::missing full benchmark conversation or stream artifact"
+            exit 1
+          fi
+          python3 scripts/smoke/check-full-agentic-benchmark.py "$conversation" "$stream" "$checker"
+          jq -e '.passed == true' "$checker" >/dev/null
+
       - name: Upload feature sprint proof
         if: always()
         uses: actions/upload-artifact@v4
