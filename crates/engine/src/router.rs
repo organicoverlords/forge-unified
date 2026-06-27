@@ -135,21 +135,6 @@ impl Router {
                         continue;
                     }
 
-                    if let Some(message) = crate::router_semantic::no_tool_benchmark_answer(&request, &response) {
-                        let classification = FailureClass::Other;
-                        self.put_cooldown(&provider_id, &model_id, classification, message.clone());
-                        attempts.push(AttemptReceipt {
-                            provider: provider_id.0,
-                            model: model_id.0,
-                            cooldown_scope: "model".to_string(),
-                            status: "failed".to_string(),
-                            classification: Some("tool_required_no_tool_call".to_string()),
-                            error: Some(message),
-                            cooldown_ms: cooldown_for(classification).as_millis() as u64,
-                        });
-                        continue;
-                    }
-
                     attempts.push(AttemptReceipt {
                         provider: provider_id.0.clone(),
                         model: model_id.0.clone(),
@@ -162,7 +147,7 @@ impl Router {
                     response.message.metadata.insert("routing_receipt".to_string(), serde_json::json!({
                         "strategy": "freellmapi_priority_cooldown",
                         "cooldown_scope": "provider_model",
-                        "semantic_no_tool_fallback": true,
+                        "fallback_scope": "provider_transport_empty_response_only",
                         "exhausted_means": "model_busy_capacity_not_provider_quota",
                         "selected_provider": response.provider.0.clone(),
                         "selected_model": response.model.0.clone(),
