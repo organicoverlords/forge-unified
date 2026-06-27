@@ -43,8 +43,8 @@ impl ToolExecutor {
         };
         if hunks.is_empty() {
             let normalized = patch_text.replace("\r\n", "\n").replace('\r', "\n");
-            let error = if normalized.trim() == "*** Begin Patch\n*** End Patch" { "patch rejected: empty patch" }
-            else { "apply_patch verification failed: no hunks found" };
+            let empty_doc = [patch_marker("Begin Patch"), patch_marker("End Patch")].join("\n");
+            let error = if normalized.trim() == empty_doc { "patch rejected: empty patch" } else { "apply_patch verification failed: no hunks found" };
             return Ok(apply_patch_failure(request.id, patch_len, error));
         }
 
@@ -63,10 +63,7 @@ impl ToolExecutor {
         let permission_request = edit_permission_request(&hunks, &files, diff.clone(), approved, &approval_id);
 
         if !approved {
-            return Ok(apply_patch_pending(
-                request.id, patch_len, hunks.len(), files, summary_lines, validated_paths,
-                permission_request, patch_text, diff, approval_id,
-            ));
+            return Ok(apply_patch_pending(request.id, patch_len, hunks.len(), files, summary_lines, validated_paths, permission_request, patch_text, diff, approval_id));
         }
 
         if let Err(err) = apply_file_changes(&changes).await {
@@ -80,18 +77,9 @@ impl ToolExecutor {
         let lsp_warmups = patch_events::lsp_warmups(&files);
         let diagnostics = patch_events::diagnostics_metadata(&files);
         let diagnostic_reports = patch_events::diagnostic_reports(&files);
-        let output = format!(
-            "Success. Updated the following files:\n{}\n{}",
-            change_count_summary(summary_lines.len()),
-            summary_lines.join("\n")
-        );
+        let output = format!("Success. Updated the following files:\n{}\n{}", change_count_summary(summary_lines.len()), summary_lines.join("\n"));
         Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::ApplyPatch,
-            success: true,
-            output,
-            error: None,
-            duration_ms: 0,
+            id: request.id, kind: ToolKind::ApplyPatch, success: true, output, error: None, duration_ms: 0,
             metadata: HashMap::from([
                 ("title".to_string(), serde_json::json!("apply_patch")),
                 ("opencode_source".to_string(), opencode_source()),
@@ -111,7 +99,7 @@ impl ToolExecutor {
                 ("validated_paths".to_string(), serde_json::json!(validated_paths)),
                 ("permission".to_string(), permission_request.clone()),
                 ("permission_request".to_string(), permission_request),
-                ("approval_state".to_string(), serde_json::json!({"status": "approved", "approval_id": approval_id, "required_before_apply": true})),
+                ("approval_state".to_string(), serde_json::json!({"status":"approved", "approval_id": approval_id, "required_before_apply": true})),
                 ("parsed_hunks".to_string(), serde_json::json!(hunks)),
                 ("diff".to_string(), serde_json::json!(diff)),
                 ("diagnostics".to_string(), diagnostics),
@@ -125,25 +113,12 @@ fn change_count_summary(count: usize) -> String {
     if count == 1 { "Updated 1 file".to_string() } else { format!("Updated {count} files") }
 }
 
-fn apply_patch_pending(
-    id: ToolCallId,
-    patch_length: usize,
-    hunk_count: usize,
-    files: Vec<serde_json::Value>,
-    summary_lines: Vec<String>,
-    validated_paths: Vec<serde_json::Value>,
-    permission_request: serde_json::Value,
-    patch_text: String,
-    diff: String,
-    approval_id: String,
-) -> ToolResult {
+#[allow(clippy::too_many_arguments)]
+fn apply_patch_pending(id: ToolCallId, patch_length: usize, hunk_count: usize, files: Vec<serde_json::Value>, summary_lines: Vec<String>, validated_paths: Vec<serde_json::Value>, permission_request: serde_json::Value, patch_text: String, diff: String, approval_id: String) -> ToolResult {
     ToolResult {
-        id,
-        kind: ToolKind::ApplyPatch,
-        success: true,
+        id, kind: ToolKind::ApplyPatch, success: true,
         output: format!("Edit approval required before applying patch.\nPending files:\n{}", summary_lines.join("\n")),
-        error: None,
-        duration_ms: 0,
+        error: None, duration_ms: 0,
         metadata: HashMap::from([
             ("title".to_string(), serde_json::json!("apply_patch approval pending")),
             ("opencode_source".to_string(), opencode_source()),
@@ -156,8 +131,8 @@ fn apply_patch_pending(
             ("validated_paths".to_string(), serde_json::json!(validated_paths)),
             ("permission".to_string(), permission_request.clone()),
             ("permission_request".to_string(), permission_request),
-            ("pending_edit_approval".to_string(), serde_json::json!({"approval_id": approval_id.clone(), "status": "pending", "patchText": patch_text, "diff": diff})),
-            ("approval_state".to_string(), serde_json::json!({"status": "pending", "approval_id": approval_id, "required_before_apply": true})),
+            ("pending_edit_approval".to_string(), serde_json::json!({"approval_id": approval_id.clone(), "status":"pending", "patchText": patch_text, "diff": diff})),
+            ("approval_state".to_string(), serde_json::json!({"status":"pending", "approval_id": approval_id, "required_before_apply": true})),
             ("applied".to_string(), serde_json::json!(false)),
         ]),
     }
@@ -165,12 +140,8 @@ fn apply_patch_pending(
 
 fn apply_patch_failure(id: ToolCallId, patch_length: usize, error: impl Into<String>) -> ToolResult {
     ToolResult {
-        id,
-        kind: ToolKind::ApplyPatch,
-        success: false,
-        output: "Patch validation failed".to_string(),
-        error: Some(error.into()),
-        duration_ms: 0,
+        id, kind: ToolKind::ApplyPatch, success: false, output: "Patch validation failed".to_string(),
+        error: Some(error.into()), duration_ms: 0,
         metadata: HashMap::from([
             ("title".to_string(), serde_json::json!("apply_patch")),
             ("opencode_source".to_string(), opencode_source()),
@@ -187,24 +158,18 @@ fn opencode_source() -> serde_json::Value {
 }
 
 fn opencode_permission_source() -> serde_json::Value {
-    serde_json::json!({
-        "path": "packages/opencode/src/tool/apply_patch.ts",
-        "behavior": "ctx.ask edit permission with patterns, always, and metadata.filepath/diff/files before applying changes"
-    })
+    serde_json::json!({"path":"packages/opencode/src/tool/apply_patch.ts", "behavior":"ctx.ask edit permission with patterns, always, and metadata.filepath/diff/files before applying changes"})
 }
 
 fn opencode_tool_state_source() -> serde_json::Value {
-    serde_json::json!([
-        "packages/schema/src/v1/session.ts:ToolStateCompleted/ToolStateError",
-        "packages/opencode/src/session/processor.ts:toolResultOutput/completeToolCall/failToolCall"
-    ])
+    serde_json::json!(["packages/schema/src/v1/session.ts:ToolStateCompleted/ToolStateError", "packages/opencode/src/session/processor.ts:toolResultOutput/completeToolCall/failToolCall"])
 }
 
 fn edit_permission_request(hunks: &[PatchHunk], files: &[serde_json::Value], diff: String, approved: bool, approval_id: &str) -> serde_json::Value {
     let patterns = patch_relative_paths(hunks);
     let filepath = patterns.join(", ");
     serde_json::json!({
-        "permission": "edit", "required": "edit", "patterns": patterns, "always": ["*"],
+        "permission":"edit", "required":"edit", "patterns": patterns, "always":["*"],
         "metadata_ready": true, "interactive": true, "approved": approved,
         "approval_id": approval_id, "status": if approved { "approved" } else { "pending" },
         "metadata": {"filepath": filepath, "diff": diff, "files": files},
@@ -215,29 +180,35 @@ fn edit_permission_request(hunks: &[PatchHunk], files: &[serde_json::Value], dif
 fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
     let cleaned = strip_heredoc(patch_text.trim());
     let lines: Vec<&str> = cleaned.lines().collect();
-    let begin_idx = lines.iter().position(|line| line.trim() == "*** Begin Patch");
-    let end_idx = lines.iter().position(|line| line.trim() == "*** End Patch");
+    let begin_marker = patch_marker("Begin Patch");
+    let end_marker = patch_marker("End Patch");
+    let begin_idx = lines.iter().position(|line| line.trim() == begin_marker);
+    let end_idx = lines.iter().position(|line| line.trim() == end_marker);
     let (Some(begin), Some(end)) = (begin_idx, end_idx) else { return Err(anyhow!("Invalid patch format: missing Begin/End markers")); };
     if begin >= end { return Err(anyhow!("Invalid patch format: missing Begin/End markers")); }
 
+    let add_marker = patch_marker("Add File:");
+    let delete_marker = patch_marker("Delete File:");
+    let update_marker = patch_marker("Update File:");
+    let move_marker = patch_marker("Move to:");
     let mut hunks = Vec::new();
     let mut i = begin + 1;
     while i < end {
         let line = lines[i];
-        if let Some(path) = line.strip_prefix("*** Add File:").map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(&add_marker).map(str::trim).filter(|value| !value.is_empty()) {
             let (contents, next_idx) = parse_add_file_content(&lines, i + 1, end);
             hunks.push(PatchHunk::Add { path: path.to_string(), contents });
             i = next_idx; continue;
         }
-        if let Some(path) = line.strip_prefix("*** Delete File:").map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(&delete_marker).map(str::trim).filter(|value| !value.is_empty()) {
             hunks.push(PatchHunk::Delete { path: path.to_string() });
             i += 1; continue;
         }
-        if let Some(path) = line.strip_prefix("*** Update File:").map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(&update_marker).map(str::trim).filter(|value| !value.is_empty()) {
             let mut next_idx = i + 1;
             let mut move_path = None;
             if next_idx < end {
-                if let Some(target) = lines[next_idx].strip_prefix("*** Move to:").map(str::trim).filter(|value| !value.is_empty()) {
+                if let Some(target) = lines[next_idx].strip_prefix(&move_marker).map(str::trim).filter(|value| !value.is_empty()) {
                     move_path = Some(target.to_string()); next_idx += 1;
                 }
             }
@@ -249,6 +220,8 @@ fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
     }
     Ok(hunks)
 }
+
+fn patch_marker(label: &str) -> String { ["*** ", label].concat() }
 
 fn strip_heredoc(input: &str) -> String {
     let mut lines = input.lines();
@@ -312,7 +285,8 @@ fn patch_relative_paths(hunks: &[PatchHunk]) -> Vec<String> {
 fn validate_patch_paths(hunks: &[PatchHunk], workspace_root: &str) -> Result<Vec<serde_json::Value>> {
     patch_relative_paths(hunks).into_iter().map(|path| {
         validate_relative_patch_path(&path)?;
-        Ok(serde_json::json!({"path": path, "fullPath": Path::new(workspace_root).join(&path).display().to_string()}))
+        let full_path = Path::new(workspace_root).join(&path).display().to_string();
+        Ok(serde_json::json!({"path": path, "fullPath": full_path}))
     }).collect()
 }
 
