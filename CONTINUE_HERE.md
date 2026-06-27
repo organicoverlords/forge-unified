@@ -17,8 +17,8 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Default branch: `master`
-- Latest fully green baseline: `a83ddac8542264cf69bd18988cd6e7dc6f518d95` for real OpenCode-style edit approval gating.
-- Latest Live WebUI proof artifact: `live-webui-feature-sprint-proof-a83ddac.zip`.
+- Latest fully green baseline: `6a34928048b86e6d7b91468789eeef4489744ae8` for OpenCode post-edit event and LSP touch receipts.
+- Latest Live WebUI proof artifact: `live-webui-feature-sprint-proof-6a34928.zip`.
 - The docs-updated HEAD after this sync needs its own Actions check before a fresh green claim.
 
 ## Latest proven green baselines
@@ -31,9 +31,32 @@ Updated: 2026-06-27
 - `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` — OpenCode `FilePart` persistence.
 - `a0efdb6372cd92ac6b579bd152f009bb3debefbd` — OpenCode `ReasoningPart` persistence.
 - `84e459ef3bd4d4f88636239c76136617a98b68e3` — OpenCode `CompactionPart` persistence.
-- `a83ddac8542264cf69bd18988cd6e7dc6f518d95` — real edit approval-before-write gate for `apply_patch`; CI, Build Proof, and Live WebUI Feature Sprint all passed.
+- `a83ddac8542264cf69bd18988cd6e7dc6f518d95` — real edit approval-before-write gate for `apply_patch`.
+- `805406542b55f803924401459f881f5df43680b7` — modern dark Codex/OpenCode-style WebUI theme.
+- `6a34928048b86e6d7b91468789eeef4489744ae8` — OpenCode post-edit event receipts for approved `apply_patch`; CI, Build Proof, and Live WebUI Feature Sprint all passed.
 
 ## Latest OpenCode-source slices
+
+### Post-edit event and LSP touch receipts
+
+Upstream sources studied:
+
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/edit.ts`
+
+Copied behavior shape:
+
+- OpenCode publishes `FileSystem.Event.Edited` after add/update/move edit targets.
+- OpenCode publishes `Watcher.Event.Updated` with `add`, `change`, and `unlink` events after mutations.
+- OpenCode touches changed files through `lsp.touchFile(target, "document")` and then collects diagnostics.
+- Forge now records durable OpenCode-shaped receipts for approved `apply_patch` results:
+  - `opencode_event_source`
+  - `opencode_watcher_updates`
+  - `opencode_filesystem_edits`
+  - `lsp_touches`
+  - `diagnostics.touched_files`
+- Live proof artifact confirms these receipts in approval response, persisted conversation JSON, and browser DOM proof.
+- This is not yet a real live watcher bus or live LSP diagnostics implementation; it is a source-shaped event/diagnostics receipt slice.
 
 ### Real edit approval gate
 
@@ -52,12 +75,7 @@ Copied behavior:
   - `applied=false`
 - The file is not written before approval.
 - `POST /api/conversations/:id/approvals/:approval_id/approve` re-runs the same patch with `approved=true`.
-- Approved result records:
-  - `approval_state.status=approved`
-  - `approved_via_api=true`
-  - `applied=true`
-  - file events
-  - FilePart and PatchPart only after approval.
+- Approved result records `approval_state.status=approved`, `approved_via_api=true`, `applied=true`, file events, FilePart, and PatchPart.
 - WebUI renders an `OpenCode edit permission request` card with an `Approve edit` control and `Edit approval metadata`.
 - Live proof asserts the proof note does not exist before approval and does exist after approval.
 
@@ -80,8 +98,8 @@ Forge behavior present and proofed:
 
 ## Still incomplete versus upstream OpenCode
 
-- Watcher/file edited events are not yet published as a real event bus.
-- LSP touch/diagnostics collection is not yet implemented.
+- Watcher/file edited events are receipt metadata, not yet a real event bus.
+- LSP touch/diagnostics are receipt metadata, not yet a live LSP diagnostics service.
 - BOM preservation and formatter hooks are not yet equivalent.
 - Tool parts are durable enough for visible WebUI proof, but not full OpenCode pending/running/completed/error lifecycle parity.
 - Orchestrator/system prompt is not yet fully copied from OpenCode prompt behavior.
@@ -102,11 +120,12 @@ Forge behavior present and proofed:
 
 After this docs head is green, continue with one of these source-backed slices:
 
-1. Watcher/file edited event bus and LSP diagnostics for approved patch changes.
-2. Full durable OpenCode `ToolPart` lifecycle parity.
-3. Full OpenCode compaction process parity beyond the request marker.
-4. OpenCode `AgentPart` / subtask behavior only if backed by a real Forge path.
-5. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
+1. Full durable OpenCode `ToolPart` lifecycle parity.
+2. Real watcher/file edited event bus beyond metadata receipts.
+3. Live LSP diagnostics beyond touched-file receipts.
+4. Full OpenCode compaction process parity beyond the request marker.
+5. OpenCode `AgentPart` / subtask behavior only if backed by a real Forge path.
+6. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
 
 Do not add a broad invented workflow. Keep the natural browser proof style: normal user prompts, real tool execution, human summary, screenshot artifact.
 
