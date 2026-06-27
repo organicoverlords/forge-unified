@@ -12,7 +12,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 |---|---|
 | `packages/opencode/src/tool/apply_patch.ts` | Forge implements patch parsing, approval metadata, changed-file summaries, post-edit receipts, watcher update receipts, LSP touch/warmup receipts, diagnostic report envelopes, and now advertises provider-visible `apply_patch` with `patchText` schema and source metadata. |
 | `packages/opencode/src/session/processor.ts` | Forge emits source-tagged WebUI SSE lifecycle receipts for `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error`; renders live ToolPart lifecycle cards; tracks `providerExecuted` metadata; and now cites this source for provider-visible task/batch/tool stream catalog entries. |
-| `packages/schema/src/v1/session.ts` | ToolPart lifecycle receipt slice is implemented for pending, running, completed, and error states. TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart remain proofed. |
+| `packages/schema/src/v1/session.ts` | ToolPart lifecycle receipt slice is implemented for pending, running, completed, and error states. TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart now include deterministic schema-compatible `id`, `sessionID`, and `messageID` fields. |
+| `packages/schema/src/session-id.ts` | Generated Forge session parts now use `ses_`-prefixed deterministic session IDs to match OpenCode SessionID prefix rules. |
 | `packages/opencode/src/tool/write.ts` / `edit.ts` / `read.ts` | Forge file tools are exposed to providers with source-path metadata and keep copied BOM, formatter, watcher, LSP, and attachment proof behavior. |
 | `packages/opencode/src/tool/bash.ts` | Forge advertises bounded `shell_command` and `terminal_run` tool schemas for repo inspection and validation. |
 | `packages/opencode/src/tool/glob.ts` / `grep.ts` / `ls.ts` | Forge advertises provider-visible file discovery tools: `file_glob`, `file_search`, and `file_list`. |
@@ -35,6 +36,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 - Tool lifecycle receipts include pending, input-start/input-delta/input-end, running, completed, and error stages.
 - WebUI streams live ToolPart lifecycle cards and an in-chat EventV2Bridge receipt rail.
 - Tool results update the existing assistant-message `tool_parts` row for the matching `callID`.
+- Generated OpenCode-style parts now include deterministic `prt_`, `ses_`, and `msg_` prefixed base fields with source metadata.
 - File write/edit operations preserve UTF-8 BOMs and run contained formatter hooks.
 - Native watcher, event bus, LSP diagnostic envelopes, and compaction receipts remain visible and proofed.
 
@@ -42,7 +44,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 - Current HEAD is not yet same-head workflow/browser-proof green.
 - Full provider-executed tool execution remains incomplete; Forge-owned tools explicitly mark `providerExecuted: false` while preserving the copied metadata/delta shape.
-- Database-backed OpenCode part IDs remain partial.
+- Database-backed OpenCode part persistence remains partial; Forge currently emits deterministic schema-shaped IDs, not OpenCode database rows.
 - Live language-server process/client diagnostics remain incomplete.
 - Full OpenCode formatter catalog/config/runtime remains partial.
 - LLM-streamed compaction summaries through NVIDIA NIM remain incomplete.
