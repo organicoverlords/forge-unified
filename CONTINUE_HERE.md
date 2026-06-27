@@ -17,18 +17,19 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Default branch: `master`
-- Latest fully green baseline before the ReasoningPart slice: `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7`
-- Latest source/proof code head before this docs sync: `d880f839a44b7ad551e47e95bc9cd1b1987d60ae`
+- Latest fully green baseline: `a0efdb6372cd92ac6b579bd152f009bb3debefbd` for OpenCode `ReasoningPart`.
+- Latest source/proof code head before this docs sync: `bd118d718e01469445fafaf266527b97511bbba5` for OpenCode `CompactionPart`.
+- The CompactionPart docs-updated HEAD after this sync needs its own Actions check before a fresh green claim.
 
 ## Latest proven green baselines
 
-- `0da7281dc0f85bb16906103343d2e9d24827dafa` was fully green for the first OpenCode `apply_patch` mutation slice.
-- `65c1cb5f5c534149d4e08000e8553a498767ed00` was fully green for the compact WebUI tool-card slice.
-- `7f46ea1c0e7498a353fa18a3781b062580105236` was fully green for the natural proof-note + repo-inspection two-prompt proof.
-- `e160fa4bf9326c26d5731e9fb474574a4d068b2f` was fully green for compact repo-inspection presentation.
-- `b7b0e7eb88570900ad8e3252d8190004342678fd` was fully green for OpenCode `SnapshotPart` persistence.
-- `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` was fully green for OpenCode `FilePart` persistence: CI, Build Proof, and Live WebUI Feature Sprint all passed.
-- The ReasoningPart docs-updated HEAD after this sync must get its own Actions check before a fresh green claim.
+- `0da7281dc0f85bb16906103343d2e9d24827dafa` — first OpenCode `apply_patch` mutation slice.
+- `65c1cb5f5c534149d4e08000e8553a498767ed00` — compact WebUI tool-card slice.
+- `7f46ea1c0e7498a353fa18a3781b062580105236` — natural proof-note + repo-inspection two-prompt proof.
+- `e160fa4bf9326c26d5731e9fb474574a4d068b2f` — compact repo-inspection presentation.
+- `b7b0e7eb88570900ad8e3252d8190004342678fd` — OpenCode `SnapshotPart` persistence.
+- `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` — OpenCode `FilePart` persistence.
+- `a0efdb6372cd92ac6b579bd152f009bb3debefbd` — OpenCode `ReasoningPart`; CI, Build Proof, and Live WebUI Feature Sprint all passed.
 
 ## Latest OpenCode-source slices
 
@@ -37,22 +38,24 @@ Updated: 2026-06-27
 Upstream source studied:
 
 - `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/compaction.ts`
 
-Forge behavior now present and proofed through `c3f15e4`:
+Forge behavior present and proofed through `a0efdb6`:
 
 - `TextPart` for user and assistant public text.
+- `ReasoningPart` for safe public progress summaries only; never private chain-of-thought.
 - `SnapshotPart` for explicit snapshot saves.
 - `FilePart` for files changed by `apply_patch`, including `workspace://...` URLs.
 - `ToolPart` running/completed/error metadata cards.
 - `PatchPart` hashes and changed file lists for successful patches.
 
-New ReasoningPart slice at source/proof code head `d880f839`:
+New CompactionPart slice at source/proof code head `bd118d7`:
 
-- Adds OpenCode-shaped `ReasoningPart` helper using the upstream shape: `type`, `text`, `metadata`, and `time`.
-- Persists only safe public progress summaries on assistant messages.
-- Explicitly marks `private_chain_of_thought=false` and `visibility=public_progress_summary`.
-- WebUI renders `OpenCode ReasoningPart` and collapsed `ReasoningPart metadata`.
-- Live proof now requires `reasoning_parts`, `"type":"reasoning"`, `"identifier":"ReasoningPart"`, `opencode_reasoning_part_source`, and browser DOM proof.
+- Adds OpenCode-shaped `CompactionPart` helper using upstream shape: `type`, `auto`, optional `overflow`, optional `tail_start_id`.
+- Adds `/api/conversations/:id/compact` to create a durable compaction request marker and optionally compact message history when `keep_last` is lower than current size.
+- WebUI renders `OpenCode CompactionPart` and collapsed `CompactionPart metadata`.
+- Live proof now requires `compaction_parts`, `"type":"compaction"`, `"identifier":"CompactionPart"`, `opencode_compaction_part_source`, and browser DOM proof.
+- This is not full OpenCode compaction parity yet: no LLM summary generation, replay, plugin transform, auto-continue, or overflow retry loop.
 
 ### `apply_patch` mutation and file cards
 
@@ -88,6 +91,7 @@ Forge behavior now present:
 - Tool parts are durable enough for visible WebUI proof, but not full OpenCode pending/running/completed/error lifecycle parity.
 - Orchestrator/system prompt is not yet fully copied from OpenCode prompt behavior.
 - ReasoningPart is a safe public summary only, not hidden chain-of-thought.
+- CompactionPart is a durable request marker and optional local pruning, not full OpenCode compaction process parity.
 
 ## Required workflow for new feature work
 
@@ -101,12 +105,12 @@ Forge behavior now present:
 
 ## Current next target
 
-After the ReasoningPart docs head is green, continue with one of these source-backed slices:
+After the CompactionPart docs head is green, continue with one of these source-backed slices:
 
 1. Real permission/edit approval flow for `apply_patch`, from `packages/opencode/src/tool/apply_patch.ts` and session approval handling.
 2. OpenCode `AgentPart` / subtask part behavior from `packages/schema/src/v1/session.ts`, only if the current task/subagent path is real enough to prove without faking.
-3. OpenCode `CompactionPart` using existing conversation compaction logic.
-4. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
+3. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
+4. Full OpenCode compaction process parity: LLM summary generation, overflow replay, and auto-continue.
 
 Do not add a broad invented workflow. Keep the natural browser proof style: normal user prompts, real tool execution, human summary, screenshot artifact.
 
