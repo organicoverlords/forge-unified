@@ -12,6 +12,7 @@ STATUS_OUT="$PROOF_DIR/git-status.txt"
 PROMPT_FILE="$PROOF_DIR/screenshot-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 STREAM_OUT="$PROOF_DIR/screenshot-stream.sse"
+APPROVAL_JSON="$PROOF_DIR/approval-response.json"
 SNAPSHOT_JSON="$PROOF_DIR/snapshot-response.json"
 COMPACTION_JSON="$PROOF_DIR/compaction-response.json"
 CONVERSATION_JSON="$PROOF_DIR/screenshot-conversation.json"
@@ -19,7 +20,7 @@ BROWSER_PROOF_JSON="$PROOF_DIR/browser-proof.json"
 SCREENSHOT_PNG="$PROOF_DIR/webui.png"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 mkdir -p "$PROOF_DIR"
-rm -f "$NOTE_PATH" "$STREAM_OUT" "$SNAPSHOT_JSON" "$COMPACTION_JSON"
+rm -f "$NOTE_PATH" "$STREAM_OUT" "$APPROVAL_JSON" "$SNAPSHOT_JSON" "$COMPACTION_JSON"
 
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -46,6 +47,7 @@ curl -fsS "$BASE/" | grep -q "CompactionPart"
 curl -fsS "$BASE/" | grep -q "FilePart"
 curl -fsS "$BASE/" | grep -q "OpenCode ToolPart"
 curl -fsS "$BASE/" | grep -q "OpenCode PatchPart"
+curl -fsS "$BASE/" | grep -q "edit approvals"
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
@@ -65,6 +67,49 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
   --data-binary "@$REQUEST_JSON" \
   > "$STREAM_OUT"
 
+grep -q "event: run-start" "$STREAM_OUT"
+grep -q "event: run-finish" "$STREAM_OUT"
+grep -q "event: tool-result" "$STREAM_OUT"
+grep -q "natural-proof-note.txt" "$STREAM_OUT"
+grep -q "Edit approval required before applying patch" "$STREAM_OUT"
+grep -q "pending_edit_approval" "$STREAM_OUT"
+grep -q "approval_state" "$STREAM_OUT"
+grep -q '"status":"pending"' "$STREAM_OUT"
+grep -q "Approve edit to apply the patch" "$STREAM_OUT"
+grep -q "permission_request" "$STREAM_OUT"
+grep -q '"permission":"edit"' "$STREAM_OUT"
+grep -q '"always":\["\*"\]' "$STREAM_OUT"
+grep -q "opencode_permission_source" "$STREAM_OUT"
+grep -q "packages/opencode/src/tool/apply_patch.ts" "$STREAM_OUT"
+if test -e "$NOTE_PATH"; then
+  echo "::error::apply_patch wrote the proof note before edit approval."
+  exit 4
+fi
+if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
+  echo "::error::Natural prompt produced provider-error or missing-key output."
+  exit 3
+fi
+
+curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
+APPROVAL_ID="$(jq -r '.messages[]? | .tool_results[]? | .metadata.pending_edit_approval.approval_id? // empty' "$CONVERSATION_JSON" | head -n 1)"
+test -n "$APPROVAL_ID"
+
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" \
+  -H 'content-type: application/json' \
+  -d '{"approved":true}' > "$APPROVAL_JSON"
+grep -q '"approval_applied":true' "$APPROVAL_JSON"
+grep -q '"approved_via_api":true' "$APPROVAL_JSON"
+grep -q '"applied":true' "$APPROVAL_JSON"
+grep -q '"status":"approved"' "$APPROVAL_JSON"
+grep -q "Success. Updated the following files" "$APPROVAL_JSON"
+grep -q "Updated 1 file" "$APPROVAL_JSON"
+grep -q "file_events" "$APPROVAL_JSON"
+grep -q "file.added" "$APPROVAL_JSON"
+grep -q "natural-proof-note.txt" "$APPROVAL_JSON"
+
+test -s "$NOTE_PATH"
+grep -q "Natural prompt completed" "$NOTE_PATH"
+
 cat > "$PROMPT_FILE" <<'PROMPT'
 Please inspect this repository and summarize what you find.
 PROMPT
@@ -76,19 +121,6 @@ curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
   --data-binary "@$REQUEST_JSON" \
   >> "$STREAM_OUT"
 
-grep -q "event: run-start" "$STREAM_OUT"
-grep -q "event: run-finish" "$STREAM_OUT"
-grep -q "event: tool-result" "$STREAM_OUT"
-grep -q "event: file-change" "$STREAM_OUT"
-grep -q "file.added" "$STREAM_OUT"
-grep -q "natural-proof-note.txt" "$STREAM_OUT"
-grep -q "Created.*natural-proof-note.txt" "$STREAM_OUT"
-grep -q "Updated 1 file" "$STREAM_OUT"
-grep -q "permission_request" "$STREAM_OUT"
-grep -q '"permission":"edit"' "$STREAM_OUT"
-grep -q '"always":\["\*"\]' "$STREAM_OUT"
-grep -q "opencode_permission_source" "$STREAM_OUT"
-grep -q "packages/opencode/src/tool/apply_patch.ts" "$STREAM_OUT"
 grep -q "repo_info" "$STREAM_OUT"
 grep -q "file_list" "$STREAM_OUT"
 grep -q "Repository status" "$STREAM_OUT"
@@ -98,13 +130,6 @@ grep -q "compact_repo_info" "$STREAM_OUT"
 grep -q "compact_file_list" "$STREAM_OUT"
 grep -q "Inspected the repository" "$STREAM_OUT"
 grep -q "top-level files were listed" "$STREAM_OUT"
-if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
-  echo "::error::Natural prompts produced provider-error or missing-key output."
-  exit 3
-fi
-
-test -s "$NOTE_PATH"
-grep -q "Natural prompt completed" "$NOTE_PATH"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
   -H 'content-type: application/json' \
@@ -123,9 +148,14 @@ grep -q '"identifier":"CompactionPart"' "$COMPACTION_JSON"
 grep -q "packages/opencode/src/session/compaction.ts:create/process" "$COMPACTION_JSON"
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-grep -q "Created.*natural-proof-note.txt" "$CONVERSATION_JSON"
+grep -q "pending_edit_approval" "$CONVERSATION_JSON"
+grep -q '"status":"pending"' "$CONVERSATION_JSON"
+grep -q '"status":"approved"' "$CONVERSATION_JSON"
+grep -q '"approved_via_api":true' "$CONVERSATION_JSON"
+grep -q "Approved and applied edit" "$CONVERSATION_JSON"
 grep -q "Updated 1 file" "$CONVERSATION_JSON"
 grep -q "file_events" "$CONVERSATION_JSON"
+grep -q "file.added" "$CONVERSATION_JSON"
 grep -q "natural-proof-note.txt" "$CONVERSATION_JSON"
 grep -q "permission_request" "$CONVERSATION_JSON"
 grep -q '"permission":"edit"' "$CONVERSATION_JSON"
@@ -182,7 +212,10 @@ jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
 grep -q "natural file creation and repo inspection proof" "$BROWSER_PROOF_JSON"
-grep -q "Created.*natural-proof-note.txt" "$BROWSER_PROOF_JSON"
+grep -q "OpenCode edit permission request" "$BROWSER_PROOF_JSON"
+grep -q "Approve edit" "$BROWSER_PROOF_JSON"
+grep -q "Edit approval metadata" "$BROWSER_PROOF_JSON"
+grep -q "Approved and applied edit" "$BROWSER_PROOF_JSON"
 grep -q "Updated 1 file" "$BROWSER_PROOF_JSON"
 grep -q "ADDED" "$BROWSER_PROOF_JSON"
 grep -q "natural-proof-note.txt" "$BROWSER_PROOF_JSON"
@@ -211,4 +244,4 @@ grep -q "PatchPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "patch_" "$BROWSER_PROOF_JSON"
 grep -q "completed" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI natural file creation + compact repo inspection + visible OpenCode Text/Reasoning/Snapshot/Compaction/File/Tool/PatchPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural edit approval + compact repo inspection + visible OpenCode session parts proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
