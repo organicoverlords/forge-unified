@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+const UTF8_BOM: &str = "\u{feff}";
+const UTF8_BOM_BYTES: &[u8] = &[0xef, 0xbb, 0xbf];
+
 impl ToolExecutor {
     pub async fn execute_file_read(&self, request: ToolRequest) -> Result<ToolResult> {
         let path: String = serde_json::from_value(request.args.clone())?;
@@ -24,6 +27,7 @@ impl ToolExecutor {
             metadata: HashMap::from([
                 ("path".to_string(), serde_json::json!(path)),
                 ("size".to_string(), serde_json::json!(content_clone.len())),
+                ("bom".to_string(), serde_json::json!(content_clone.starts_with(UTF8_BOM))),
             ]),
         })
     }
@@ -34,19 +38,27 @@ impl ToolExecutor {
         let args: Args = serde_json::from_value(request.args)?;
         let full_path = self.resolve_path(&args.path)?;
         let existed = full_path.exists();
+        let current = if existed { fs::read(&full_path).await.ok() } else { None };
+        let existing_bom = current.as_deref().map(has_utf8_bom).unwrap_or(false);
+        let input_bom = args.content.starts_with(UTF8_BOM);
+        let keep_bom = existing_bom || input_bom;
+        let write_content = join_bom(&args.content, keep_bom);
         if let Some(parent) = full_path.parent() { fs::create_dir_all(parent).await?; }
-        fs::write(&full_path, &args.content).await.with_context(|| format!("Failed to write file: {}", full_path.display()))?;
+        fs::write(&full_path, write_content.as_bytes()).await.with_context(|| format!("Failed to write file: {}", full_path.display()))?;
         let kind = if existed { "update" } else { "add" };
-        let files = vec![file_change_record(&args.path, kind, line_count(&args.content), if existed { 1 } else { 0 })];
+        let files = vec![file_change_record(&args.path, kind, line_count(&write_content), if existed { 1 } else { 0 }, keep_bom)];
         let mut metadata = file_event_metadata(files);
         metadata.insert("path".to_string(), serde_json::json!(args.path));
-        metadata.insert("bytes".to_string(), serde_json::json!(args.content.len()));
+        metadata.insert("bytes".to_string(), serde_json::json!(write_content.len()));
+        metadata.insert("bom".to_string(), serde_json::json!(keep_bom));
+        metadata.insert("bom_preserved".to_string(), serde_json::json!(keep_bom));
+        metadata.insert("bom_strategy".to_string(), serde_json::json!("writeTextPreservingBom: preserve existing/input UTF-8 BOM and emit at most one BOM"));
         metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
         Ok(ToolResult {
             id: request.id,
             kind: ToolKind::FileWrite,
             success: true,
-            output: format!("Written {} bytes to {}", args.content.len(), metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")),
+            output: format!("Written {} bytes to {}", write_content.len(), metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")),
             error: None,
             duration_ms: 0,
             metadata,
@@ -58,7 +70,9 @@ impl ToolExecutor {
         struct Args { path: String, old_string: String, new_string: String, replace_all: Option<bool> }
         let args: Args = serde_json::from_value(request.args)?;
         let full_path = self.resolve_path(&args.path)?;
-        let content = fs::read_to_string(&full_path).await?;
+        let bytes = fs::read(&full_path).await?;
+        let existing_bom = has_utf8_bom(&bytes);
+        let content = String::from_utf8(bytes).with_context(|| format!("File is not valid UTF-8: {}", full_path.display()))?;
         let replace_all = args.replace_all.unwrap_or(false);
         let new_content = if replace_all { content.replace(&args.old_string, &args.new_string) } else { content.replacen(&args.old_string, &args.new_string, 1) };
         if new_content == content {
@@ -72,11 +86,16 @@ impl ToolExecutor {
                 metadata: HashMap::new(),
             });
         }
-        fs::write(&full_path, &new_content).await?;
-        let files = vec![file_change_record(&args.path, "update", line_count(&args.new_string), line_count(&args.old_string))];
+        let keep_bom = existing_bom || new_content.starts_with(UTF8_BOM);
+        let write_content = join_bom(&new_content, keep_bom);
+        fs::write(&full_path, write_content.as_bytes()).await?;
+        let files = vec![file_change_record(&args.path, "update", line_count(&args.new_string), line_count(&args.old_string), keep_bom)];
         let mut metadata = file_event_metadata(files);
         metadata.insert("path".to_string(), serde_json::json!(args.path));
         metadata.insert("replacements".to_string(), serde_json::json!(if replace_all { "all" } else { "first" }));
+        metadata.insert("bom".to_string(), serde_json::json!(keep_bom));
+        metadata.insert("bom_preserved".to_string(), serde_json::json!(existing_bom && keep_bom));
+        metadata.insert("bom_strategy".to_string(), serde_json::json!("writeTextPreservingBom: preserve existing/input UTF-8 BOM and emit at most one BOM"));
         metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
         Ok(ToolResult {
             id: request.id,
@@ -93,7 +112,7 @@ impl ToolExecutor {
         let path: String = serde_json::from_value(request.args)?;
         let full_path = self.resolve_path(&path)?;
         fs::remove_file(&full_path).await.with_context(|| format!("Failed to delete file: {}", full_path.display()))?;
-        let files = vec![file_change_record(&path, "delete", 0, 1)];
+        let files = vec![file_change_record(&path, "delete", 0, 1, false)];
         let mut metadata = file_event_metadata(files);
         metadata.insert("path".to_string(), serde_json::json!(path.clone()));
         metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
@@ -210,8 +229,8 @@ impl ToolExecutor {
 
 fn line_count(value: &str) -> usize { value.lines().count().max(1) }
 
-fn file_change_record(path: &str, kind: &str, additions: usize, deletions: usize) -> serde_json::Value {
-    serde_json::json!({"type": kind, "path": path, "relativePath": path, "additions": additions, "deletions": deletions, "bom": false})
+fn file_change_record(path: &str, kind: &str, additions: usize, deletions: usize, bom: bool) -> serde_json::Value {
+    serde_json::json!({"type": kind, "path": path, "relativePath": path, "additions": additions, "deletions": deletions, "bom": bom})
 }
 
 fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_json::Value> {
@@ -236,9 +255,21 @@ fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_j
     ])
 }
 
+fn has_utf8_bom(content: &[u8]) -> bool { content.starts_with(UTF8_BOM_BYTES) }
+
+fn split_bom(text: &str) -> (bool, String) {
+    let stripped = text.trim_start_matches(UTF8_BOM);
+    (stripped.len() != text.len(), stripped.to_string())
+}
+
+fn join_bom(text: &str, bom: bool) -> String {
+    let (_, stripped) = split_bom(text);
+    if bom { format!("{UTF8_BOM}{stripped}") } else { stripped }
+}
+
 fn opencode_file_tool_source() -> serde_json::Value {
     serde_json::json!({
-        "paths": ["packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/opencode/src/tool/apply_patch.ts"],
-        "behaviors": ["events.publish(FileSystem.Event.Edited)", "events.publish(Watcher.Event.Updated)", "lsp.touchFile(document)", "lsp.diagnostics() -> LSP.Diagnostic.report"]
+        "paths": ["packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/opencode/src/tool/apply_patch.ts", "packages/core/src/file-mutation.ts"],
+        "behaviors": ["events.publish(FileSystem.Event.Edited)", "events.publish(Watcher.Event.Updated)", "lsp.touchFile(document)", "lsp.diagnostics() -> LSP.Diagnostic.report", "FileMutation.writeTextPreservingBom preserves an existing/input UTF-8 BOM and emits at most one BOM"]
     })
 }
