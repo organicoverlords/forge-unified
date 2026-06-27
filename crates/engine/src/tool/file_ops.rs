@@ -225,6 +225,7 @@ fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_j
     HashMap::from([
         ("files".to_string(), serde_json::json!(files)),
         ("file_events".to_string(), serde_json::json!(file_events)),
+        ("opencode_event_publisher".to_string(), serde_json::json!("opencode.file_tool")),
         ("opencode_event_source".to_string(), patch_events::opencode_event_source()),
         ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)),
         ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
