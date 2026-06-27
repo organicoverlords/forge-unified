@@ -9,6 +9,7 @@ PROOF_DIR="${FORGE_FEATURE_PROOF_DIR:-$ROOT/forge-proof/live-webui-feature-sprin
 mkdir -p "$PROOF_DIR"
 SERVER_LOG="$PROOF_DIR/server.log"
 STATUS_OUT="$PROOF_DIR/git-status.txt"
+TOOL_CATALOG_JSON="$PROOF_DIR/tool-catalog.json"
 CONVERSATION_JSON="$PROOF_DIR/live-model-conversation.json"
 MODEL_STREAM="$PROOF_DIR/live-model-stream.sse"
 TOOL_CONVERSATION_JSON="$PROOF_DIR/tool-lifecycle-conversation.json"
@@ -41,7 +42,10 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
-for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
+for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible" "opencode-provider-tool-catalog" "apply_patch-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
+curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$TOOL_CATALOG_JSON"
+jq -e '.catalog == "opencode_provider_tool_catalog" and .provider_visible == true and .tool_count >= 20 and (.names | index("apply_patch")) and (.names | index("task")) and (.names | index("batch_parallel"))' "$TOOL_CATALOG_JSON" >/dev/null
+for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "provider_visible" "patchText"; do grep -Fq "$marker" "$TOOL_CATALOG_JSON"; done
 
 step "create NIM conversation"
 CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"live NIM browser model proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -85,7 +89,7 @@ for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_to
 
 step "browser proof tool lifecycle"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/tool-lifecycle-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 
@@ -106,8 +110,8 @@ if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
   exit 13
 fi
 for marker in 'event: run-finish' '"provider":"nvidia_nim"' '"model":"' 'event: tool-call' 'event: tool-result'; do grep -Fq "$marker" "$BENCH_STREAM"; done
-if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command' "$BENCH_STREAM"; then
-  echo "::error::full benchmark did not use repo inspection tools" >&2
+if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel' "$BENCH_STREAM"; then
+  echo "::error::full benchmark did not use advertised provider tools" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 14
 fi
@@ -116,10 +120,10 @@ jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) 
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'Founder report'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'Founder report' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
-echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png" > "$PROOF_DIR/live-proof-status.txt"
+echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON" > "$PROOF_DIR/live-proof-status.txt"
 step "done"
-echo "LIVE model-backed browser proof, visible ToolPart proof, and full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
+echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, and full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
