@@ -108,9 +108,9 @@ for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.upd
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' > "$PROOF_DIR/compaction-response.json"
-for marker in "session.compaction.started" "session.compaction.finished" "opencode.compaction" "event_bus_receipts" "event_bus_status" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$PROOF_DIR/compaction-response.json"; done
+for marker in "session.next.compaction.started" "session.next.compaction.ended" "opencode.session.compaction" "event_bus_receipts" "event_bus_status" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$PROOF_DIR/compaction-response.json"; done
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
-for marker in '"event_type":"session.compaction.started"' '"event_type":"session.compaction.finished"' "opencode.compaction" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+for marker in '"event_type":"session.next.compaction.started"' '"event_type":"session.next.compaction.ended"' "opencode.session.compaction" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 for marker in "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
@@ -124,6 +124,6 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.compaction.started" "session.compaction.finished" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
 echo "LIVE WebUI natural event bridge proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG status=$EVENT_STATUS_JSON"
