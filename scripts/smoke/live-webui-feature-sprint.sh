@@ -80,7 +80,7 @@ wait_for_webui() {
 
 wait_for_webui
 
-CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural lsp warmup compaction event proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural lsp warmup compaction lifecycle event proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
@@ -88,7 +88,7 @@ Please create a short proof note for this WebUI sprint, then summarize what chan
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$STREAM_OUT"
-for marker in "event: run-start" "event: run-finish" "event: tool-result" "pending_edit_approval" "approval_state" "permission_request" "natural-proof-note.txt"; do grep -Fq "$marker" "$STREAM_OUT"; done
+for marker in "event: run-start" "event: run-finish" "event: tool-lifecycle" "event: tool-input-start" "event: tool-call" "pending_edit_approval" "approval_state" "permission_request" "natural-proof-note.txt" "packages/opencode/src/session/processor.ts" "ToolStatePending" "ToolStateRunning"; do grep -Fq "$marker" "$STREAM_OUT"; done
 if test -e "$NOTE_PATH"; then echo "::error::file appeared before approval"; exit 4; fi
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
@@ -101,14 +101,14 @@ for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_
 test -s "$NOTE_PATH"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
-Please run an OpenCode file tool event proof: write, edit, and delete a temporary file, then summarize the emitted watcher and LSP events.
+Please run an OpenCode file tool event proof: write, edit, and delete a temporary file, then summarize the emitted watcher, LSP, and streamed ToolPart lifecycle events.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$FILE_TOOL_STREAM"
-for marker in "event: run-start" "event: run-finish" "file_write" "file_edit" "file_delete" "file-tool-event-proof.txt" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
+for marker in "event: run-start" "event: run-finish" "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "file_write" "file_edit" "file_delete" "file-tool-event-proof.txt" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "packages/opencode/src/session/processor.ts" "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle" "ToolStatePending" "ToolStateRunning" "ToolStateCompleted" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
 if test -e "$FILE_TOOL_PATH"; then echo "::error::file tool proof file remained after delete"; exit 5; fi
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"identifier":"FilePart"' '"path":"packages/schema/src/v1/session.ts"' '"tool":"file_write"'; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"identifier":"FilePart"' '"path":"packages/schema/src/v1/session.ts"' '"tool":"file_write"' "opencode_session_processor" "packages/opencode/src/session/processor.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
@@ -128,7 +128,7 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural lsp warmup compaction event proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural lsp warmup compaction lifecycle event proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart" "packages/opencode/src/session/processor.ts" "OpenCode SessionProcessor lifecycle receipts"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
