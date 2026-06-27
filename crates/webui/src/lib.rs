@@ -14,14 +14,13 @@ use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
-async fn index() -> Html<&'static str> {
-    Html(chat_ui::CHAT_HTML)
-}
+async fn index() -> Html<&'static str> { Html(chat_ui::CHAT_HTML) }
 
 pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/api/health", get(routes::health))
+        .route("/api/events/recent", get(routes::recent_events))
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
