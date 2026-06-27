@@ -49,7 +49,7 @@ pub fn compaction_part(auto: bool, overflow: Option<bool>, tail_start_id: Option
 pub fn file_parts(results: &[ToolResult]) -> Vec<serde_json::Value> { results.iter().flat_map(file_parts_for_result).collect() }
 
 fn file_parts_for_result(result: &ToolResult) -> Vec<serde_json::Value> {
-    if !result.success || !matches!(result.kind, ToolKind::ApplyPatch) || !apply_patch_applied(result) { return Vec::new(); }
+    if !result.success || !matches!(&result.kind, ToolKind::ApplyPatch) || !apply_patch_applied(result) { return Vec::new(); }
     patch_file_values(result).into_iter().map(|file| {
         let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
         let text = file.get("diff").and_then(serde_json::Value::as_str).unwrap_or("");
@@ -134,7 +134,7 @@ fn tool_input(result: &ToolResult) -> serde_json::Value {
 }
 
 pub fn patch_part(result: &ToolResult) -> Option<serde_json::Value> {
-    if !result.success || !matches!(result.kind, ToolKind::ApplyPatch) || !apply_patch_applied(result) { return None; }
+    if !result.success || !matches!(&result.kind, ToolKind::ApplyPatch) || !apply_patch_applied(result) { return None; }
     let files = patch_files(result);
     if files.is_empty() { return None; }
     let hash = patch_hash(result, &files);
