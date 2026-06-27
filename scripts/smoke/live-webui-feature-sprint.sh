@@ -63,6 +63,13 @@ curl_with_retry() {
   return 1
 }
 
+latest_conversation_from_sse() {
+  local sse_file="$1"
+  local out_file="$2"
+  awk 'prev == "event: conversation" { sub(/^data: /, ""); print } { prev = $0 }' "$sse_file" | tail -n 1 > "$out_file"
+  jq -e '.messages | length >= 1' "$out_file" >/dev/null
+}
+
 wait_for_webui() {
   local health="$PROOF_DIR/health.json"
   local index="$PROOF_DIR/index.html"
@@ -108,7 +115,7 @@ jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$FILE_TOOL_STREAM"
 for marker in "event: run-start" "event: run-finish" "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "file_write" "file_edit" "file_delete" "file-tool-event-proof.rs" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "bom_strategy" "writeTextPreservingBom" "formatter_status" "opencode_formatter_source" "Format.file" "rustfmt" "packages/opencode/src/format/index.ts" "packages/core/src/file-mutation.ts" "packages/opencode/src/session/processor.ts" "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle" "ToolStatePending" "ToolStateRunning" "ToolStateCompleted" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "severity_counts" "diagnostic_count" "report_block" "max_per_file" "packages/opencode/src/lsp/diagnostic.ts" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
 if test -e "$FILE_TOOL_PATH"; then echo "::error::file tool proof file remained after delete"; exit 5; fi
-curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
+latest_conversation_from_sse "$FILE_TOOL_STREAM" "$CONVERSATION_JSON"
 for marker in "attachments_schema" "ToolStateCompleted.attachments" '"attachments"' '"type":"file"' '"identifier":"FilePart"' '"path":"packages/schema/src/v1/session.ts"' '"tool":"file_write"' "opencode_session_processor" "packages/opencode/src/session/processor.ts" "mutable_tool_part_updates" "opencode_mutable_tool_part_source" "before_status" "after_status" "same ToolPart row updated by callID" "bom_preserved" "bom_strategy" "writeTextPreservingBom" "formatter_status" "opencode_formatter_source" "Format.file" "packages/opencode/src/format/index.ts" "packages/core/src/file-mutation.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 jq -e '[.messages[]?.metadata.mutable_tool_part_updates[]? | select(.before_status == "running" and .after_status == "completed")] | length >= 1' "$CONVERSATION_JSON" >/dev/null
 
