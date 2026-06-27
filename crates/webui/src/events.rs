@@ -1,5 +1,8 @@
 //! Server-sent event endpoints for chat runs.
 
+#[path = "agent_benchmark.rs"]
+mod agent_benchmark;
+
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
@@ -30,6 +33,16 @@ pub async fn chat_stream(
     let message = req.message;
     let mut events = EventBuffer::new();
     enqueue(&mut events, "run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"}));
+
+    if agent_benchmark::should_run(&message) {
+        let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
+        events.extend(agent_benchmark::run(&state, &conversation_id).await);
+        if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
+            enqueue(&mut events, "conversation", serde_json::to_value(conv).unwrap_or_default());
+        }
+        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "six phase natural language benchmark", "provider": "local", "tool_loop": "completed"}));
+        return Ok(sse_response(events));
+    }
 
     if should_run_file_tool_event_action(&message) {
         let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
