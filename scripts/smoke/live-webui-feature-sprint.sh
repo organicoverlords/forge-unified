@@ -34,11 +34,11 @@ curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/events?static=1" | grep -q "Forge Activity"
 curl -fsS "$BASE/api/events/recent" | grep -q '"event_bus":"change_bus"'
 
-CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural event bus proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural compaction event bus proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
-Please create a short proof note for this WebUI sprint.
+Please create a short proof note for this WebUI sprint, then summarize what changed in plain English so I can see the work finished.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$STREAM_OUT"
@@ -50,29 +50,29 @@ APPROVAL_ID="$(jq -r '.messages[]? | .tool_results[]? | .metadata.pending_edit_a
 test -n "$APPROVAL_ID"
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" -H 'content-type: application/json' -d '{"approved":true}' > "$APPROVAL_JSON"
-for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_events" "event_bus_receipts" "filesystem.edited" "watcher.updated" "natural-proof-note.txt"; do grep -Fq "$marker" "$APPROVAL_JSON"; done
+for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_events" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "natural-proof-note.txt"; do grep -Fq "$marker" "$APPROVAL_JSON"; done
 
 test -s "$NOTE_PATH"
 
 curl -fsS "$BASE/api/events/recent" > "$EVENT_BUS_JSON"
-jq -e '.count >= 2' "$EVENT_BUS_JSON" >/dev/null
-for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' "natural-proof-note.txt" "opencode.apply_patch"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+jq -e '.count >= 3' "$EVENT_BUS_JSON" >/dev/null
+for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "opencode.apply_patch"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":64,"auto":false,"overflow":false}' >/dev/null
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' >/dev/null
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "filesystem.edited" "watcher.updated" "file_parts" "patch_parts" "compaction_parts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "file_parts" "patch_parts" "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
 curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural event bus proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "event_bus_receipts" "filesystem.edited" "watcher.updated" "OpenCode ToolPart metadata" "OpenCode PatchPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural compaction event bus proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
 curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
-echo "LIVE WebUI main activity rail proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
+echo "LIVE WebUI natural compaction/event proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
