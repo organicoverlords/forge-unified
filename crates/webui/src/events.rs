@@ -104,7 +104,7 @@ fn sse_response(events: EventBuffer) -> Sse<impl Stream<Item = Result<Event, Inf
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
 
 fn append_tool_call_lifecycle(events: &mut EventBuffer, call: &ToolRequest) {
-    let id = call.id.0.to_string();
+    let id = call.id.clone().0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
     enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
@@ -155,7 +155,7 @@ async fn append_repo_preflight(state: &AppState, events: &mut EventBuffer, conve
 }
 
 async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
-    let id = req.id.0.to_string();
+    let id = req.id.clone().0.to_string();
     let input = req.args.clone();
     enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
     enqueue(events, "tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()}));
@@ -220,11 +220,13 @@ fn compact_repo_info_output(output: &str) -> Option<String> {
 
 fn append_file_change_events(events: &mut EventBuffer, result: &ToolResult) {
     let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else { return; };
+    let tool_id = result.id.clone().0.to_string();
+    let tool_kind = tool_name(&result.kind).to_string();
     for file_event in file_events {
         let mut payload = file_event.clone();
         if let Some(obj) = payload.as_object_mut() {
-            obj.insert("tool_id".to_string(), serde_json::json!(result.id.0.to_string()));
-            obj.insert("tool_kind".to_string(), serde_json::json!(tool_name(&result.kind)));
+            obj.insert("tool_id".to_string(), serde_json::json!(tool_id));
+            obj.insert("tool_kind".to_string(), serde_json::json!(tool_kind));
         }
         enqueue(events, "file-change", payload);
     }
