@@ -5,15 +5,16 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Accepted proof HEAD: `7a1951ec9b706bca9a3dea3d7204fff1e01f87cf`
-- Same-head workflows: CI `28301576019`, Build Proof `28301575992`, Live WebUI Feature Sprint `28301576020` all green.
-- Accepted proof artifact: Live WebUI Feature Sprint artifact `7928099674`, digest `sha256:ecee63563b695fbbc62e270dae86ca9347c202ca191a0eb0845da3144503d078`.
+- Previous accepted proof HEAD: `7a1951ec9b706bca9a3dea3d7204fff1e01f87cf`
+- Previous same-head workflows: CI `28301576019`, Build Proof `28301575992`, Live WebUI Feature Sprint `28301576020` all green for that older accepted proof head.
+- Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928099674`, digest `sha256:ecee63563b695fbbc62e270dae86ca9347c202ca191a0eb0845da3144503d078`.
+- Latest work after that proof: provider-executed tool result metadata propagation in `crates/engine/src/orchestrator.rs`.
 
 ## Accepted live full benchmark proof
 
-Forge now has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on the previous accepted proof head.
 
-Proof requirements now satisfied:
+Proof requirements satisfied by the older accepted artifact:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream`.
 - The proof rejects local/scripted paths: no `provider: local`, no `local_shortcut`, no `benchmark-phase`.
@@ -32,6 +33,7 @@ Proof requirements now satisfied:
 - Returned failed tool executions to the model as tool results instead of dropping them.
 - Normalized `/` and empty file paths to workspace root for repo-scoped file tools.
 - Added clean no-tools finalization from a compact evidence digest when the model exhausts tool rounds.
+- Added OpenCode-style provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
 
 ## OpenCode source anchors retained
 
@@ -44,7 +46,7 @@ Proof requirements now satisfied:
 
 - WebUI uses the dark Codex/OpenCode-like theme.
 - Live WebUI proof must use a real NVIDIA NIM route, not local shortcuts.
-- Natural WebUI tool prompt renders live ToolPart lifecycle cards with `providerExecuted` metadata.
+- Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
 - Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, and completed ToolPart attachments.
 - Native watcher publishes `watcher.started` and live `watcher.updated` events.
@@ -53,7 +55,8 @@ Proof requirements now satisfied:
 
 ## Current gaps / do not overclaim
 
-- Forge-owned tools still mark `providerExecuted: false`; provider-side execution with true provider-executed tool calls remains incomplete.
+- Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
+- Full provider-side OpenCode processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
 - Full OpenCode formatter catalog/config/runtime remains partial.
 - Full NIM-backed streamed compaction remains incomplete.
@@ -61,8 +64,9 @@ Proof requirements now satisfied:
 
 ## Next targets
 
-1. Continue toward true providerExecuted tool calls from the NIM/provider stream.
-2. Continue live LSP diagnostics.
-3. Continue full formatter registry/config/runtime parity.
-4. Continue deeper watcher parity.
-5. Continue NIM-backed compaction summaries.
+1. Prove the latest HEAD with same-head CI, Build Proof, and Live WebUI Feature Sprint.
+2. Prove provider-selected tool results visibly carry provider metadata in WebUI screenshots/DOM.
+3. Continue live LSP diagnostics.
+4. Continue full formatter registry/config/runtime parity.
+5. Continue deeper watcher parity.
+6. Continue NIM-backed compaction summaries.
