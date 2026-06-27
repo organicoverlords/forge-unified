@@ -61,7 +61,7 @@ pub async fn chat_stream(
                             let mut run_local_preflight = false;
                             if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
                                 for msg in &conv.messages {
-                                    match msg.role {
+                                    match &msg.role {
                                         MessageRole::Assistant => {
                                             if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
                                                 run_local_preflight = true;
