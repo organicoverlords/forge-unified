@@ -38,7 +38,8 @@ impl ToolExecutor {
 
     pub async fn execute(&self, request: ToolRequest) -> Result<ToolResult> {
         let start = Instant::now();
-        let result = match &request.kind {
+        let kind = request.kind.clone();
+        let result = match kind {
             ToolKind::FileRead => self.execute_file_read(request).await,
             ToolKind::FileWrite => self.execute_file_write(request).await,
             ToolKind::FileEdit => self.execute_file_edit(request).await,
