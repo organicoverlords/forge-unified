@@ -14,7 +14,7 @@ use std::{collections::VecDeque, convert::Infallible};
 type EventBuffer = VecDeque<(String, serde_json::Value)>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
-const FILE_TOOL_EVENT_PATH: &str = "forge-proof/live-webui-feature-sprint/file-tool-event-proof.txt";
+const FILE_TOOL_EVENT_PATH: &str = "forge-proof/live-webui-feature-sprint/file-tool-event-proof.rs";
 const OPENCODE_PROCESSOR_SOURCE: &str = "packages/opencode/src/session/processor.ts";
 const OPENCODE_SCHEMA_SOURCE: &str = "packages/schema/src/v1/session.ts";
 
