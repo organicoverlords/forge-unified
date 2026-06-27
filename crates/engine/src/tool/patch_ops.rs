@@ -195,20 +195,20 @@ fn parse_opencode_patch(patch_text: &str) -> Result<Vec<PatchHunk>> {
     let mut i = begin + 1;
     while i < end {
         let line = lines[i];
-        if let Some(path) = line.strip_prefix(&add_marker).map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(add_marker.as_str()).map(str::trim).filter(|value| !value.is_empty()) {
             let (contents, next_idx) = parse_add_file_content(&lines, i + 1, end);
             hunks.push(PatchHunk::Add { path: path.to_string(), contents });
             i = next_idx; continue;
         }
-        if let Some(path) = line.strip_prefix(&delete_marker).map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(delete_marker.as_str()).map(str::trim).filter(|value| !value.is_empty()) {
             hunks.push(PatchHunk::Delete { path: path.to_string() });
             i += 1; continue;
         }
-        if let Some(path) = line.strip_prefix(&update_marker).map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(path) = line.strip_prefix(update_marker.as_str()).map(str::trim).filter(|value| !value.is_empty()) {
             let mut next_idx = i + 1;
             let mut move_path = None;
             if next_idx < end {
-                if let Some(target) = lines[next_idx].strip_prefix(&move_marker).map(str::trim).filter(|value| !value.is_empty()) {
+                if let Some(target) = lines[next_idx].strip_prefix(move_marker.as_str()).map(str::trim).filter(|value| !value.is_empty()) {
                     move_path = Some(target.to_string()); next_idx += 1;
                 }
             }
