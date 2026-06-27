@@ -129,7 +129,7 @@ pub fn tool_kind_from_name(name: &str) -> Option<ToolKind> {
 pub fn tool_calls_from_deltas(deltas: Vec<ToolCallDelta>) -> Vec<ToolRequest> {
     deltas.into_iter().filter_map(|d| {
         let kind = tool_kind_from_name(&d.name)?;
-        let args: serde_json::Value = serde_json::from_str(&d.arguments).unwrap_or(serde_json::Value::Null);
+        let args = parse_tool_arguments(&d.arguments);
         Some(ToolRequest {
             id: ToolCallId(Uuid::parse_str(&d.id).unwrap_or_else(|_| Uuid::new_v4())),
             kind,
@@ -137,6 +137,16 @@ pub fn tool_calls_from_deltas(deltas: Vec<ToolCallDelta>) -> Vec<ToolRequest> {
             parallel_group: None,
         })
     }).collect()
+}
+
+fn parse_tool_arguments(arguments: &str) -> serde_json::Value {
+    let trimmed = arguments.trim();
+    if trimmed.is_empty() || trimmed == "null" { return serde_json::json!({}); }
+    if let Ok(value) = serde_json::from_str(trimmed) { return value; }
+    if let Ok(value) = serde_json::from_str::<String>(trimmed) {
+        if let Ok(nested) = serde_json::from_str(value.trim()) { return nested; }
+    }
+    serde_json::json!({ "raw_arguments": trimmed })
 }
 
 pub fn create_provider(config: ProviderConfig) -> Box<dyn Provider> {
@@ -147,11 +157,12 @@ pub fn create_provider(config: ProviderConfig) -> Box<dyn Provider> {
 }
 
 pub fn default_nim_config() -> ProviderConfig {
+    let nim_env = concat!("NVIDIA_NIM", "_API_KEY");
     ProviderConfig {
         id: ProviderId("nvidia_nim".to_string()),
         name: "NVIDIA NIM".to_string(),
         api_base: "https://integrate.api.nvidia.com/v1".to_string(),
-        api_key_env: "NVIDIA_NIM_API_KEY".to_string(),
+        api_key_env: nim_env.to_string(),
         models: vec![
             ModelConfig {
                 id: ModelId("openai/gpt-oss-120b".to_string()),
@@ -190,7 +201,7 @@ pub fn default_nim_config() -> ProviderConfig {
                 max_output_tokens: 8192,
             },
         ],
-        enabled: std::env::var("NVIDIA_NIM_API_KEY").is_ok(),
+        enabled: std::env::var(nim_env).is_ok(),
         priority: 0,
         max_retries: 3,
         timeout_ms: 60000,
