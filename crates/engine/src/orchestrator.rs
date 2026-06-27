@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+const DOOM_LOOP_THRESHOLD: usize = 3;
+
 pub struct Orchestrator {
     state: Arc<RwLock<EngineState>>, router: Arc<Router>, tool_executor: Arc<ToolExecutor>,
     conversation_mgr: Arc<RwLock<ConversationManager>>, strategy: Arc<StrategyEngine>, safety: Arc<SafetyChecker>,
@@ -41,6 +43,8 @@ impl Orchestrator {
         let mut total_tool_calls = 0u32;
         let mut total_tool_failures = 0u32;
         let mut stopped_on_tool_cap = false;
+        let mut doom_loop_interrupted = false;
+        let mut tool_signature_history: Vec<Vec<String>> = Vec::new();
         {
             let mut mgr = self.conversation_mgr.write().await;
             if let Some(conv) = mgr.get_mut(&conversation_id) { conv.provider = Some(provider.clone()); conv.model = Some(model.clone()); conv.updated_at = chrono::Utc::now(); }
@@ -62,6 +66,14 @@ impl Orchestrator {
             let decision = self.strategy.decide_for_requests(&provider, &model, &tool_requests);
             let mut allowed_requests = Vec::new();
             for req in tool_requests { if self.safety.check_tool(&req.kind).await { allowed_requests.push(req); } else { total_tool_failures += 1; } }
+            let current_tool_signatures = tool_request_signatures(&allowed_requests);
+            if repeated_tool_signature_window(&tool_signature_history, &current_tool_signatures) {
+                doom_loop_interrupted = true;
+                stopped_on_tool_cap = false;
+                self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[OpenCode doom-loop guard interrupted repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds: {}]", current_tool_signatures.join(", ")));
+                break;
+            }
+            remember_tool_signatures(&mut tool_signature_history, current_tool_signatures);
             let results = if decision.strategy == crate::model_caps::ToolStrategy::Serial {
                 let mut results = Vec::new();
                 for req in allowed_requests {
@@ -86,7 +98,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD and recent tool part comparison"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -167,6 +179,24 @@ fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<se
     if let Some(input) = input {
         result.metadata.entry("opencode_tool_input".to_string()).or_insert(input);
     }
+}
+
+fn tool_request_signatures(requests: &[ToolRequest]) -> Vec<String> {
+    requests.iter().map(tool_request_signature).collect()
+}
+
+fn tool_request_signature(request: &ToolRequest) -> String {
+    format!("{:?}:{}", request.kind, request.args)
+}
+
+fn repeated_tool_signature_window(history: &[Vec<String>], current: &[String]) -> bool {
+    if current.is_empty() || history.len() + 1 < DOOM_LOOP_THRESHOLD { return false; }
+    history.iter().rev().take(DOOM_LOOP_THRESHOLD - 1).all(|previous| previous == current)
+}
+
+fn remember_tool_signatures(history: &mut Vec<Vec<String>>, current: Vec<String>) {
+    history.push(current);
+    if history.len() > DOOM_LOOP_THRESHOLD { history.remove(0); }
 }
 
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
