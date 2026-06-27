@@ -77,6 +77,7 @@ impl ToolExecutor {
         let mut receipts = Vec::new();
         receipts.extend(self.publish_metadata_array(result, "opencode_filesystem_edits", "filesystem.edited"));
         receipts.extend(self.publish_metadata_array(result, "opencode_watcher_updates", "watcher.updated"));
+        receipts.extend(self.publish_metadata_array(result, "opencode_lsp_warmups", "lsp.warmup.contained"));
         receipts.extend(self.publish_metadata_array(result, "opencode_lsp_diagnostics", "lsp.diagnostics"));
         receipts
     }
