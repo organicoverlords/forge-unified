@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fmt;
 use std::sync::{atomic::{AtomicU64, Ordering}, Arc, Mutex};
 use tokio::sync::broadcast;
 
@@ -15,14 +16,16 @@ pub struct ChangeEvent {
 }
 
 #[derive(Clone)]
-pub struct ChangeBus {
-    inner: Arc<Inner>,
-}
+pub struct ChangeBus { inner: Arc<Inner> }
 
 struct Inner {
     next_seq: AtomicU64,
     history: Mutex<VecDeque<ChangeEvent>>,
     tx: broadcast::Sender<ChangeEvent>,
+}
+
+impl fmt::Debug for ChangeBus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.debug_struct("ChangeBus").finish_non_exhaustive() }
 }
 
 impl ChangeBus {
@@ -42,7 +45,6 @@ impl ChangeBus {
     }
 
     pub fn recent(&self) -> Vec<ChangeEvent> { self.inner.history.lock().map(|h| h.iter().cloned().collect()).unwrap_or_default() }
-
     pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> { self.inner.tx.subscribe() }
 }
 
