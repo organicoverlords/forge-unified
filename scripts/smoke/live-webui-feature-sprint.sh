@@ -25,33 +25,21 @@ rm -f "$NOTE_PATH" "$STREAM_OUT" "$APPROVAL_JSON" "$SNAPSHOT_JSON" "$COMPACTION_
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 PID=$!
-cleanup() {
-  kill "$PID" >/dev/null 2>&1 || true
-  git status --short > "$STATUS_OUT" 2>/dev/null || true
-}
+cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
 trap cleanup EXIT
 
 for _ in $(seq 1 60); do
-  if curl -fsS "$BASE/api/health" >/dev/null; then
-    break
-  fi
+  curl -fsS "$BASE/api/health" >/dev/null && break
   sleep 0.5
 done
 
 curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
-curl -fsS "$BASE/" | grep -q "OpenCode TextPart"
-curl -fsS "$BASE/" | grep -q "ReasoningPart"
-curl -fsS "$BASE/" | grep -q "SnapshotPart"
-curl -fsS "$BASE/" | grep -q "CompactionPart"
-curl -fsS "$BASE/" | grep -q "FilePart"
-curl -fsS "$BASE/" | grep -q "OpenCode ToolPart"
-curl -fsS "$BASE/" | grep -q "OpenCode PatchPart"
-curl -fsS "$BASE/" | grep -q "edit approvals"
+for marker in "OpenCode TextPart" "ReasoningPart" "SnapshotPart" "CompactionPart" "FilePart" "OpenCode ToolPart" "OpenCode PatchPart" "edit approvals"; do
+  curl -fsS "$BASE/" | grep -q "$marker"
+done
 
-CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
-  -H 'content-type: application/json' \
-  -d '{"title":"natural file creation and repo inspection proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural file creation and repo inspection proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
@@ -61,51 +49,22 @@ Keep the reply brief and tell me what changed.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
-  -H 'content-type: application/json' \
-  -H 'accept: text/event-stream' \
-  --data-binary "@$REQUEST_JSON" \
-  > "$STREAM_OUT"
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$STREAM_OUT"
 
-grep -q "event: run-start" "$STREAM_OUT"
-grep -q "event: run-finish" "$STREAM_OUT"
-grep -q "event: tool-result" "$STREAM_OUT"
-grep -q "natural-proof-note.txt" "$STREAM_OUT"
-grep -q "Edit approval required before applying patch" "$STREAM_OUT"
-grep -q "pending_edit_approval" "$STREAM_OUT"
-grep -q "approval_state" "$STREAM_OUT"
-grep -q '"status":"pending"' "$STREAM_OUT"
-grep -q "Approve edit to apply the patch" "$STREAM_OUT"
-grep -q "permission_request" "$STREAM_OUT"
-grep -q '"permission":"edit"' "$STREAM_OUT"
-grep -q '"always":\["\*"\]' "$STREAM_OUT"
-grep -q "opencode_permission_source" "$STREAM_OUT"
-grep -q "packages/opencode/src/tool/apply_patch.ts" "$STREAM_OUT"
-if test -e "$NOTE_PATH"; then
-  echo "::error::apply_patch wrote the proof note before edit approval."
-  exit 4
-fi
-if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then
-  echo "::error::Natural prompt produced provider-error or missing-key output."
-  exit 3
-fi
+for marker in "event: run-start" "event: run-finish" "event: tool-result" "natural-proof-note.txt" "Edit approval required before applying patch" "pending_edit_approval" "approval_state" '"status":"pending"' "Approve edit to apply the patch" "permission_request" '"permission":"edit"' '"always":["*"]' "opencode_permission_source" "packages/opencode/src/tool/apply_patch.ts"; do
+  grep -Fq "$marker" "$STREAM_OUT"
+done
+if test -e "$NOTE_PATH"; then echo "::error::apply_patch wrote before approval"; exit 4; fi
+if grep -qi "provider-error\|missing_key\|runtime is missing" "$STREAM_OUT"; then echo "::error::provider failure in natural prompt"; exit 3; fi
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 APPROVAL_ID="$(jq -r '.messages[]? | .tool_results[]? | .metadata.pending_edit_approval.approval_id? // empty' "$CONVERSATION_JSON" | head -n 1)"
 test -n "$APPROVAL_ID"
 
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" \
-  -H 'content-type: application/json' \
-  -d '{"approved":true}' > "$APPROVAL_JSON"
-grep -q '"approval_applied":true' "$APPROVAL_JSON"
-grep -q '"approved_via_api":true' "$APPROVAL_JSON"
-grep -q '"applied":true' "$APPROVAL_JSON"
-grep -q '"status":"approved"' "$APPROVAL_JSON"
-grep -q "Success. Updated the following files" "$APPROVAL_JSON"
-grep -q "Updated 1 file" "$APPROVAL_JSON"
-grep -q "file_events" "$APPROVAL_JSON"
-grep -q "file.added" "$APPROVAL_JSON"
-grep -q "natural-proof-note.txt" "$APPROVAL_JSON"
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" -H 'content-type: application/json' -d '{"approved":true}' > "$APPROVAL_JSON"
+for marker in '"approval_applied":true' '"approved_via_api":true' '"applied":true' '"status":"approved"' "Success. Updated the following files" "Updated 1 file" "file_events" "file.added" "natural-proof-note.txt"; do
+  grep -Fq "$marker" "$APPROVAL_JSON"
+done
 
 test -s "$NOTE_PATH"
 grep -q "Natural prompt completed" "$NOTE_PATH"
@@ -114,134 +73,41 @@ cat > "$PROMPT_FILE" <<'PROMPT'
 Please inspect this repository and summarize what you find.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" >> "$STREAM_OUT"
+for marker in "repo_info" "file_list" "Repository status" "Top-level repository entries" "raw_output" "compact_repo_info" "compact_file_list" "Inspected the repository" "top-level files were listed"; do
+  grep -Fq "$marker" "$STREAM_OUT"
+done
 
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
-  -H 'content-type: application/json' \
-  -H 'accept: text/event-stream' \
-  --data-binary "@$REQUEST_JSON" \
-  >> "$STREAM_OUT"
-
-grep -q "repo_info" "$STREAM_OUT"
-grep -q "file_list" "$STREAM_OUT"
-grep -q "Repository status" "$STREAM_OUT"
-grep -q "Top-level repository entries" "$STREAM_OUT"
-grep -q "raw_output" "$STREAM_OUT"
-grep -q "compact_repo_info" "$STREAM_OUT"
-grep -q "compact_file_list" "$STREAM_OUT"
-grep -q "Inspected the repository" "$STREAM_OUT"
-grep -q "top-level files were listed" "$STREAM_OUT"
-
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
-  -H 'content-type: application/json' \
-  -d '{}' > "$SNAPSHOT_JSON"
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' > "$SNAPSHOT_JSON"
 grep -q '"snapshot_saved":true' "$SNAPSHOT_JSON"
 grep -q "Snapshot saved at" "$SNAPSHOT_JSON"
 
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" \
-  -H 'content-type: application/json' \
-  -d '{"keep_last":64,"auto":false,"overflow":false}' > "$COMPACTION_JSON"
-grep -q '"compaction_created":true' "$COMPACTION_JSON"
-grep -q '"type":"compaction"' "$COMPACTION_JSON"
-grep -q '"auto":false' "$COMPACTION_JSON"
-grep -q '"overflow":false' "$COMPACTION_JSON"
-grep -q '"identifier":"CompactionPart"' "$COMPACTION_JSON"
-grep -q "packages/opencode/src/session/compaction.ts:create/process" "$COMPACTION_JSON"
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":64,"auto":false,"overflow":false}' > "$COMPACTION_JSON"
+for marker in '"compaction_created":true' '"type":"compaction"' '"auto":false' '"overflow":false' '"identifier":"CompactionPart"' "packages/opencode/src/session/compaction.ts:create/process"; do
+  grep -Fq "$marker" "$COMPACTION_JSON"
+done
 
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-grep -q "pending_edit_approval" "$CONVERSATION_JSON"
-grep -q '"status":"pending"' "$CONVERSATION_JSON"
-grep -q '"status":"approved"' "$CONVERSATION_JSON"
-grep -q '"approved_via_api":true' "$CONVERSATION_JSON"
-grep -q "Approved and applied edit" "$CONVERSATION_JSON"
-grep -q "Updated 1 file" "$CONVERSATION_JSON"
-grep -q "file_events" "$CONVERSATION_JSON"
-grep -q "file.added" "$CONVERSATION_JSON"
-grep -q "natural-proof-note.txt" "$CONVERSATION_JSON"
-grep -q "permission_request" "$CONVERSATION_JSON"
-grep -q '"permission":"edit"' "$CONVERSATION_JSON"
-grep -q "opencode_permission_source" "$CONVERSATION_JSON"
-grep -q "text_parts" "$CONVERSATION_JSON"
-grep -q '"type":"text"' "$CONVERSATION_JSON"
-grep -q '"identifier":"TextPart"' "$CONVERSATION_JSON"
-grep -q "opencode_text_part_source" "$CONVERSATION_JSON"
-grep -q "reasoning_parts" "$CONVERSATION_JSON"
-grep -q '"type":"reasoning"' "$CONVERSATION_JSON"
-grep -q '"identifier":"ReasoningPart"' "$CONVERSATION_JSON"
-grep -q "opencode_reasoning_part_source" "$CONVERSATION_JSON"
-grep -q "public_progress_summary" "$CONVERSATION_JSON"
-grep -q '"private_chain_of_thought":false' "$CONVERSATION_JSON"
-grep -q "snapshot_parts" "$CONVERSATION_JSON"
-grep -q '"type":"snapshot"' "$CONVERSATION_JSON"
-grep -q '"identifier":"SnapshotPart"' "$CONVERSATION_JSON"
-grep -q "opencode_snapshot_part_source" "$CONVERSATION_JSON"
-grep -q "Snapshot saved at" "$CONVERSATION_JSON"
-grep -q "compaction_parts" "$CONVERSATION_JSON"
-grep -q '"type":"compaction"' "$CONVERSATION_JSON"
-grep -q '"identifier":"CompactionPart"' "$CONVERSATION_JSON"
-grep -q "opencode_compaction_part_source" "$CONVERSATION_JSON"
-grep -q "packages/opencode/src/session/compaction.ts:create/process" "$CONVERSATION_JSON"
-grep -q "file_parts" "$CONVERSATION_JSON"
-grep -q '"type":"file"' "$CONVERSATION_JSON"
-grep -q '"identifier":"FilePart"' "$CONVERSATION_JSON"
-grep -q '"url":"workspace://forge-proof/live-webui-feature-sprint/natural-proof-note.txt"' "$CONVERSATION_JSON"
-grep -q '"mime":"text/plain"' "$CONVERSATION_JSON"
-grep -q "opencode_file_part_source" "$CONVERSATION_JSON"
-grep -q "tool_parts" "$CONVERSATION_JSON"
-grep -q '"type":"tool"' "$CONVERSATION_JSON"
-grep -q '"status":"completed"' "$CONVERSATION_JSON"
-grep -q "ToolPart/ToolStateRunning/ToolStateCompleted/ToolStateError" "$CONVERSATION_JSON"
-grep -q "packages/opencode/src/session/processor.ts:completeToolCall/failToolCall" "$CONVERSATION_JSON"
-grep -q "patch_parts" "$CONVERSATION_JSON"
-grep -q '"type":"patch"' "$CONVERSATION_JSON"
-grep -q '"hash":"patch_' "$CONVERSATION_JSON"
-grep -q '"identifier":"PatchPart"' "$CONVERSATION_JSON"
-grep -q "packages/schema/src/v1/session.ts" "$CONVERSATION_JSON"
-grep -q "Inspected the repository" "$CONVERSATION_JSON"
-grep -q "repo_info" "$CONVERSATION_JSON"
-grep -q "file_list" "$CONVERSATION_JSON"
-grep -q "Repository status" "$CONVERSATION_JSON"
-grep -q "Top-level repository entries" "$CONVERSATION_JSON"
-grep -q "raw_output" "$CONVERSATION_JSON"
+for marker in \
+  "pending_edit_approval" '"status":"pending"' '"status":"approved"' '"approved_via_api":true' "Approved and applied edit" "Updated 1 file" \
+  "file_events" "file.added" "natural-proof-note.txt" "permission_request" '"permission":"edit"' "opencode_permission_source" \
+  "text_parts" '"type":"text"' '"identifier":"TextPart"' "opencode_text_part_source" \
+  "reasoning_parts" '"type":"reasoning"' '"identifier":"ReasoningPart"' "opencode_reasoning_part_source" "public_progress_summary" '"private_chain_of_thought":false' \
+  "snapshot_parts" '"type":"snapshot"' '"identifier":"SnapshotPart"' "opencode_snapshot_part_source" "Snapshot saved at" \
+  "compaction_parts" '"type":"compaction"' '"identifier":"CompactionPart"' "opencode_compaction_part_source" "packages/opencode/src/session/compaction.ts:create/process" \
+  "file_parts" '"type":"file"' '"identifier":"FilePart"' '"url":"workspace://forge-proof/live-webui-feature-sprint/natural-proof-note.txt"' '"mime":"text/plain"' "opencode_file_part_source" \
+  "tool_parts" "tool_lifecycle_parts" '"type":"tool"' '"status":"pending"' '"status":"running"' '"status":"completed"' "ToolStatePending" "ToolStateRunning" "ToolStateCompleted" "ToolStateError" "ensureToolCall/updateToolCall/completeToolCall/failToolCall" \
+  "patch_parts" '"type":"patch"' '"hash":"patch_' '"identifier":"PatchPart"' "packages/schema/src/v1/session.ts" \
+  "Inspected the repository" "repo_info" "file_list" "Repository status" "Top-level repository entries" "raw_output"; do
+  grep -Fq "$marker" "$CONVERSATION_JSON"
+done
 
-curl -fsS -X POST "$BASE/api/browser-proof" \
-  -H 'content-type: application/json' \
-  -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" \
-  > "$BROWSER_PROOF_JSON"
-
+curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-grep -q "natural file creation and repo inspection proof" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode edit permission request" "$BROWSER_PROOF_JSON"
-grep -q "Approve edit" "$BROWSER_PROOF_JSON"
-grep -q "Edit approval metadata" "$BROWSER_PROOF_JSON"
-grep -q "Approved and applied edit" "$BROWSER_PROOF_JSON"
-grep -q "Updated 1 file" "$BROWSER_PROOF_JSON"
-grep -q "ADDED" "$BROWSER_PROOF_JSON"
-grep -q "natural-proof-note.txt" "$BROWSER_PROOF_JSON"
-grep -q "permission_request" "$BROWSER_PROOF_JSON"
-grep -q "opencode_permission_source" "$BROWSER_PROOF_JSON"
-grep -q "Inspected the repository" "$BROWSER_PROOF_JSON"
-grep -q "repo_info" "$BROWSER_PROOF_JSON"
-grep -q "file_list" "$BROWSER_PROOF_JSON"
-grep -q "Repository status" "$BROWSER_PROOF_JSON"
-grep -q "Top-level repository entries" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode TextPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode ReasoningPart" "$BROWSER_PROOF_JSON"
-grep -q "ReasoningPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "public_progress_summary" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode SnapshotPart" "$BROWSER_PROOF_JSON"
-grep -q "SnapshotPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "Snapshot saved at" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode CompactionPart" "$BROWSER_PROOF_JSON"
-grep -q "CompactionPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode FilePart" "$BROWSER_PROOF_JSON"
-grep -q "FilePart metadata" "$BROWSER_PROOF_JSON"
-grep -q "workspace://forge-proof/live-webui-feature-sprint/natural-proof-note.txt" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode ToolPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "OpenCode PatchPart" "$BROWSER_PROOF_JSON"
-grep -q "PatchPart metadata" "$BROWSER_PROOF_JSON"
-grep -q "patch_" "$BROWSER_PROOF_JSON"
-grep -q "completed" "$BROWSER_PROOF_JSON"
+for marker in "natural file creation and repo inspection proof" "OpenCode edit permission request" "Approve edit" "Edit approval metadata" "Approved and applied edit" "Updated 1 file" "ADDED" "natural-proof-note.txt" "permission_request" "opencode_permission_source" "Inspected the repository" "repo_info" "file_list" "Repository status" "Top-level repository entries" "OpenCode TextPart metadata" "OpenCode ReasoningPart" "ReasoningPart metadata" "public_progress_summary" "OpenCode SnapshotPart" "SnapshotPart metadata" "Snapshot saved at" "OpenCode CompactionPart" "CompactionPart metadata" "OpenCode FilePart" "FilePart metadata" "workspace://forge-proof/live-webui-feature-sprint/natural-proof-note.txt" "OpenCode ToolPart metadata" "pending" "running" "completed" "OpenCode PatchPart" "PatchPart metadata" "patch_"; do
+  grep -Fq "$marker" "$BROWSER_PROOF_JSON"
+done
 
-echo "LIVE WebUI natural edit approval + compact repo inspection + visible OpenCode session parts proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural edit approval + compact repo inspection + ToolPart lifecycle proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
