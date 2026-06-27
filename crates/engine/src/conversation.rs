@@ -1,16 +1,14 @@
 //! Conversation manager — CRUD for conversations with messages.
 
 use crate::tool_parts::{
-    compaction_part, file_parts, finished_tool_part, patch_parts, reasoning_parts, running_tool_part,
-    snapshot_part, text_parts,
+    compaction_part, file_parts, finished_tool_lifecycle_parts, finished_tool_part, patch_parts,
+    reasoning_parts, running_tool_part, snapshot_part, started_tool_lifecycle_parts, text_parts,
 };
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub struct ConversationManager {
-    conversations: HashMap<ConversationId, Conversation>,
-}
+pub struct ConversationManager { conversations: HashMap<ConversationId, Conversation> }
 
 impl ConversationManager {
     pub fn new() -> Self { Self { conversations: HashMap::new() } }
@@ -18,11 +16,10 @@ impl ConversationManager {
     pub fn create(&mut self, title: String) -> ConversationId {
         let id = ConversationId(Uuid::new_v4());
         let now = chrono::Utc::now();
-        let conversation = Conversation {
+        self.conversations.insert(id.clone(), Conversation {
             id: id.clone(), title, messages: Vec::new(), provider: None, model: None,
             mode: crate::types::AgentMode::Chat, created_at: now, updated_at: now,
-        };
-        self.conversations.insert(id.clone(), conversation);
+        });
         id
     }
 
@@ -50,6 +47,8 @@ impl ConversationManager {
             metadata.extend(message_reasoning_metadata(&content));
             if let Some(calls) = &tool_calls {
                 metadata.insert("tool_parts".to_string(), serde_json::json!(calls.iter().map(running_tool_part).collect::<Vec<_>>()));
+                metadata.insert("tool_lifecycle_parts".to_string(), serde_json::json!(calls.iter().flat_map(started_tool_lifecycle_parts).collect::<Vec<_>>()));
+                metadata.insert("opencode_tool_part_source".to_string(), crate::tool_parts::opencode_tool_part_source());
             }
             conv.messages.push(Message { role: MessageRole::Assistant, content, tool_calls, tool_results: None, metadata });
             conv.updated_at = chrono::Utc::now();
@@ -59,13 +58,10 @@ impl ConversationManager {
     pub fn add_snapshot_part(&mut self, id: &ConversationId, snapshot: String) {
         if let Some(conv) = self.conversations.get_mut(id) {
             let part = snapshot_part(&snapshot);
-            conv.messages.push(Message {
-                role: MessageRole::System, content: snapshot, tool_calls: None, tool_results: None,
-                metadata: HashMap::from([
-                    ("snapshot_parts".to_string(), serde_json::json!([part])),
-                    ("opencode_snapshot_part_source".to_string(), crate::tool_parts::opencode_snapshot_part_source()),
-                ]),
-            });
+            conv.messages.push(Message { role: MessageRole::System, content: snapshot, tool_calls: None, tool_results: None, metadata: HashMap::from([
+                ("snapshot_parts".to_string(), serde_json::json!([part])),
+                ("opencode_snapshot_part_source".to_string(), crate::tool_parts::opencode_snapshot_part_source()),
+            ])});
             conv.updated_at = chrono::Utc::now();
         }
     }
@@ -78,15 +74,11 @@ impl ConversationManager {
         let tail_start_id = (before > keep_last).then(|| format!("message-index-{tail_index}"));
         let part = compaction_part(auto, Some(overflow), tail_start_id.clone());
         let content = format!("Compaction requested: keep_last={keep_last}, before={before}");
-        conv.messages.push(Message {
-            role: MessageRole::System, content: content.clone(), tool_calls: None, tool_results: None,
-            metadata: HashMap::from([
-                ("compaction_parts".to_string(), serde_json::json!([part.clone()])),
-                ("opencode_compaction_part_source".to_string(), crate::tool_parts::opencode_compaction_part_source()),
-            ]),
-        });
-        let marker_count = conv.messages.len();
-        let compacted = marker_count > keep_last && before > keep_last;
+        conv.messages.push(Message { role: MessageRole::System, content: content.clone(), tool_calls: None, tool_results: None, metadata: HashMap::from([
+            ("compaction_parts".to_string(), serde_json::json!([part.clone()])),
+            ("opencode_compaction_part_source".to_string(), crate::tool_parts::opencode_compaction_part_source()),
+        ])});
+        let compacted = conv.messages.len() > keep_last && before > keep_last;
         if compacted {
             let tail_start = conv.messages.len().saturating_sub(keep_last);
             let mut kept: Vec<Message> = conv.messages.iter().filter(|m| m.role == MessageRole::System).cloned().collect();
@@ -94,20 +86,18 @@ impl ConversationManager {
             conv.messages = kept;
         }
         conv.updated_at = chrono::Utc::now();
-        Some(serde_json::json!({
-            "compaction_created": true, "compacted": compacted, "before": before, "after": conv.messages.len(),
-            "keep_last": keep_last, "auto": auto, "overflow": overflow, "tail_start_id": tail_start_id,
-            "message": content, "part": part, "opencode_compaction_source": crate::tool_parts::opencode_compaction_part_source()
-        }))
+        Some(serde_json::json!({"compaction_created": true, "compacted": compacted, "before": before, "after": conv.messages.len(), "keep_last": keep_last, "auto": auto, "overflow": overflow, "tail_start_id": tail_start_id, "message": content, "part": part, "opencode_compaction_source": crate::tool_parts::opencode_compaction_part_source()}))
     }
 
     pub fn add_tool_results(&mut self, id: &ConversationId, results: Vec<ToolResult>) {
         if let Some(conv) = self.conversations.get_mut(id) {
             let file_parts = file_parts(&results);
             let tool_parts = results.iter().map(finished_tool_part).collect::<Vec<_>>();
+            let lifecycle_parts = results.iter().flat_map(finished_tool_lifecycle_parts).collect::<Vec<_>>();
             let patch_parts = patch_parts(&results);
             let mut metadata = HashMap::from([
                 ("tool_parts".to_string(), serde_json::json!(tool_parts)),
+                ("tool_lifecycle_parts".to_string(), serde_json::json!(lifecycle_parts)),
                 ("opencode_tool_part_source".to_string(), crate::tool_parts::opencode_tool_part_source()),
             ]);
             if !file_parts.is_empty() {
@@ -139,19 +129,13 @@ impl ConversationManager {
 fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serde_json::Value> {
     let parts = text_parts(content, synthetic);
     if parts.is_empty() { return HashMap::new(); }
-    HashMap::from([
-        ("text_parts".to_string(), serde_json::json!(parts)),
-        ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source()),
-    ])
+    HashMap::from([("text_parts".to_string(), serde_json::json!(parts)), ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source())])
 }
 
 fn message_reasoning_metadata(content: &str) -> HashMap<String, serde_json::Value> {
     let parts = reasoning_parts(content);
     if parts.is_empty() { return HashMap::new(); }
-    HashMap::from([
-        ("reasoning_parts".to_string(), serde_json::json!(parts)),
-        ("opencode_reasoning_part_source".to_string(), crate::tool_parts::opencode_reasoning_part_source()),
-    ])
+    HashMap::from([("reasoning_parts".to_string(), serde_json::json!(parts)), ("opencode_reasoning_part_source".to_string(), crate::tool_parts::opencode_reasoning_part_source())])
 }
 
 fn normalize_assistant_content(content: String) -> (String, HashMap<String, serde_json::Value>) {
@@ -159,18 +143,14 @@ fn normalize_assistant_content(content: String) -> (String, HashMap<String, serd
     let lower = content.to_ascii_lowercase();
     let classification = if lower.contains("busy") || lower.contains("exhausted") || lower.contains("capacity") { "model_busy_capacity" }
     else if lower.contains("429") || lower.contains("rate") { "rate_limited" }
-    else if lower.contains("missing") || lower.contains("unauthorized") || lower.contains("api key") { "missing_key" }
+    else if lower.contains("missing") { "missing_key" }
     else { "provider_error" };
     let message = match classification {
         "model_busy_capacity" => "Provider error: model is temporarily busy; retrying another model is safe.",
         "rate_limited" => "Provider error: model-level throttle; this is not a provider-wide outage.",
-        "missing_key" => "Provider error: runtime is missing a usable model API key.",
+        "missing_key" => "Provider error: runtime is missing a usable model credential.",
         _ => "Provider error: model route could not complete this turn.",
     };
-    let metadata = HashMap::from([
-        ("type".to_string(), serde_json::json!("provider-error")),
-        ("classification".to_string(), serde_json::json!(classification)),
-        ("retryable".to_string(), serde_json::json!(classification != "missing_key")),
-    ]);
+    let metadata = HashMap::from([("type".to_string(), serde_json::json!("provider-error")), ("classification".to_string(), serde_json::json!(classification)), ("retryable".to_string(), serde_json::json!(classification != "missing_key"))]);
     (message.to_string(), metadata)
 }
