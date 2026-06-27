@@ -20,6 +20,7 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/", get(index))
         .route("/events", get(change_events::events_page))
         .route("/api/health", get(routes::health))
+        .route("/api/tools", get(routes::tool_catalog))
         .route("/api/events/recent", get(change_events::recent_events))
         .route("/api/events/status", get(change_events::event_status))
         .route("/api/events/stream", get(change_events::stream_events))
