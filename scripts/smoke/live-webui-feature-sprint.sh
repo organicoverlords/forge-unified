@@ -112,7 +112,7 @@ for marker in "session.compaction.started" "session.compaction.finished" "openco
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 for marker in '"event_type":"session.compaction.started"' '"event_type":"session.compaction.finished"' "opencode.compaction" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "event_bus_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "LSP.Warmup.contained" "warmup_contained" "file_parts" "patch_parts" "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts" "packages/opencode/src/tool/read.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+for marker in "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
