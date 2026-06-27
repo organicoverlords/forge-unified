@@ -15,35 +15,36 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this slice: `04d35a5085a89658b158b7ee23f40510d9a949cd`.
-- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28297659029`, artifact `7926961624`.
+- Latest fully green baseline before this slice: `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed`.
+- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28299351117`, artifact `7927453969`.
 - Current branch HEAD after this slice needs Actions before calling it green.
 
 ## Latest source-backed slice
 
-Forge now starts an OS-backed native workspace watcher and publishes real watcher updates, instead of only using receipt-backed watcher metadata from tool results.
+Forge now renders OpenCode-style live ToolPart lifecycle cards while a natural WebUI tool prompt is streaming, instead of only showing final tool result cards after completion.
 
 Upstream source paths:
 
-- `packages/core/src/filesystem/watcher.ts`
+- `packages/opencode/src/session/processor.ts`
+- `packages/schema/src/v1/session.ts`
 - `packages/opencode/src/event-v2-bridge.ts`
-- `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`
 
 Copied behavior:
 
-- OpenCode detects watcher backend names (`windows`, `fs-events`, `inotify`).
-- OpenCode keeps `SUBSCRIBE_TIMEOUT_MS = 10_000` as watcher subscription metadata.
-- OpenCode subscribes to workspace changes and publishes `Watcher.Event.Updated` for create/update/delete.
-- Forge maps native create/update/delete to add/change/unlink and publishes `watcher.updated` from `opencode.native_filewatcher`.
-- Forge exposes active native watcher status through `/api/events/status`: `watcher_native_binding`, `native_filewatcher_active`, backend, ignore/protected paths, and copied source path.
-- The live WebUI proof now creates, edits, and deletes `native-watch-proof.txt` and requires the native watcher event in `/api/events/recent` and browser-captured event rail proof.
+- OpenCode `ensureToolCall` creates or finds the same ToolPart row by tool call ID.
+- OpenCode `updateToolCall` moves the same ToolPart into running state with input.
+- OpenCode `completeToolCall` / `failToolCall` update the same ToolPart row to completed/error.
+- OpenCode preserves `providerExecuted` metadata when provider/tool stream deltas mark it true.
+- Forge-owned local tool execution now marks `providerExecuted: false` explicitly while carrying the same metadata/delta shape.
+- Forge SSE emits `providerExecuted`, `providerExecuted_delta`, and `doom_loop_threshold` metadata from the OpenCode SessionProcessor shape.
+- The WebUI renders live cards for `tool-lifecycle`, `tool-input-*`, and `tool-call` events.
+- The WebUI renders `file-change` and `event-bus` SSE events as an in-chat EventV2Bridge receipt rail.
+- Live WebUI smoke first proves a real NVIDIA NIM model route, then runs a natural-language tool-lifecycle prompt and requires screenshot DOM markers for the visible prompt, ToolPart cards, `providerExecuted`, EventV2Bridge receipts, and final summary.
 
 Forge files touched:
 
-- `Cargo.toml`
-- `crates/engine/Cargo.toml`
-- `crates/engine/src/change_bus.rs`
-- `crates/engine/src/tool.rs`
+- `crates/webui/src/events.rs`
+- `crates/webui/src/chat_ui.rs`
 - `scripts/smoke/live-webui-feature-sprint.sh`
 - `OPENCODE-PARITY.md`
 - `PROJECT_STATE.md`
@@ -52,15 +53,15 @@ Forge files touched:
 Still incomplete / do not overclaim:
 
 - Current HEAD is not yet workflow/browser-proof green.
-- Native watcher config is partial: exact OpenCode config-driven ignore entries, protected path service, VCS-directory watch behavior, and scoped finalizer semantics are not fully copied.
+- Full provider-side/providerExecuted tool execution is still incomplete; current Forge-owned tools mark false explicitly while preserving the OpenCode metadata shape.
+- OpenCode database-backed part IDs are not fully copied.
 - Live LSP server/client diagnostics are not implemented yet; current LSP slice improves source-backed visibility of the copied diagnostic envelope.
 - Full OpenCode formatter catalog/config/runtime remains partial; only rustfmt `.rs` path is wired.
-- OpenCode database-backed part IDs are not fully copied.
-- `providerExecuted` delta updates are still partial.
 - Full NIM-backed streamed compaction remains incomplete.
 
 ## Previous proven slices
 
+- `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed` — live model-backed browser proof; CI `28299351121`, Build Proof `28299351118`, and Live WebUI Feature Sprint `28299351117` were green with proof artifact `7927453969`.
 - `04d35a5085a89658b158b7ee23f40510d9a949cd` — six-phase natural WebUI repo benchmark path; CI `28297659041`, Build Proof `28297659050`, and Live WebUI Feature Sprint `28297659029` were green with proof artifact `7926961624`.
 - `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; CI `28295482729`, Build Proof `28295482721`, and Live WebUI Feature Sprint `28295482726` were green with proof artifact `7926326967`.
 - `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; CI `28293770704`, Build Proof `28293770703`, and Live WebUI Feature Sprint `28293770706` were green with proof artifact `7925827340`.
@@ -76,8 +77,8 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current native watcher HEAD.
+1. Check Actions for the current visible lifecycle rail HEAD.
 2. If Rust compile/test fails, inspect exact logs; do not rerun deterministic failures blindly.
-3. If WebUI smoke fails, inspect proof artifact, native watcher event status, event rail DOM, and `server.log` first.
+3. If WebUI smoke fails, inspect proof artifact, browser-proof DOM markers, `tool-lifecycle-stream.sse`, and `server.log` first.
 4. Inspect proof artifact screenshots after green.
-5. Continue toward live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
+5. Continue toward full provider-side tool execution, live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction.
