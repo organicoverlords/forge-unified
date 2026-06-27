@@ -2,6 +2,7 @@
 //!
 //! Upstream references:
 //! - `packages/schema/src/v1/session.ts`: session part schemas.
+//! - `packages/schema/src/v1/session.ts`: ToolStateCompleted carries optional FilePart attachments.
 //! - `packages/opencode/src/session/processor.ts`: pending/running/completed/error tool part lifecycle.
 //! - `packages/opencode/src/session/compaction.ts`: creates compaction parts with auto/overflow/tail metadata.
 
@@ -49,21 +50,34 @@ pub fn compaction_part(auto: bool, overflow: Option<bool>, tail_start_id: Option
 pub fn file_parts(results: &[ToolResult]) -> Vec<serde_json::Value> { results.iter().flat_map(file_parts_for_result).collect() }
 
 fn file_parts_for_result(result: &ToolResult) -> Vec<serde_json::Value> {
-    if !result.success || !matches!(&result.kind, ToolKind::ApplyPatch) || !apply_patch_applied(result) { return Vec::new(); }
-    patch_file_values(result).into_iter().map(|file| {
+    if !result.success || !result_can_attach_files(result) { return Vec::new(); }
+    file_values(result).into_iter().map(|file| {
         let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
-        let text = file.get("diff").and_then(serde_json::Value::as_str).unwrap_or("");
+        let text = file.get("diff").and_then(serde_json::Value::as_str).unwrap_or_else(|| result.output.as_str());
+        let kind = file.get("type").and_then(serde_json::Value::as_str).unwrap_or("update");
         serde_json::json!({
             "type": "file", "mime": mime_for(path), "filename": path.rsplit('/').next().unwrap_or(path),
             "url": format!("workspace://{}", path),
             "source": {"type": "file", "path": path, "text": {"value": text, "start": 0, "end": text.len()}},
-            "metadata": {"opencode_source": opencode_file_part_source()}
+            "metadata": {"opencode_source": opencode_file_part_source(), "tool": tool_name(&result.kind), "change_type": kind}
         })
     }).collect()
 }
 
+fn result_can_attach_files(result: &ToolResult) -> bool {
+    match &result.kind {
+        ToolKind::ApplyPatch => apply_patch_applied(result),
+        ToolKind::FileWrite | ToolKind::FileEdit | ToolKind::FileDelete => true,
+        _ => false,
+    }
+}
+
 fn apply_patch_applied(result: &ToolResult) -> bool {
     result.metadata.get("applied").and_then(serde_json::Value::as_bool).unwrap_or(true)
+}
+
+fn file_values(result: &ToolResult) -> Vec<&serde_json::Value> {
+    result.metadata.get("files").and_then(serde_json::Value::as_array).map(|files| files.iter().collect()).unwrap_or_default()
 }
 
 fn mime_for(path: &str) -> &'static str {
@@ -98,9 +112,12 @@ pub fn finished_tool_lifecycle_parts(result: &ToolResult) -> Vec<serde_json::Val
 
 pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
     let title = result.metadata.get("title").and_then(serde_json::Value::as_str).unwrap_or_else(|| tool_name(&result.kind));
+    let mut state = serde_json::json!({"status": "completed", "input": tool_input(result), "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}});
+    let attachments = file_parts_for_result(result);
+    if !attachments.is_empty() { state["attachments"] = serde_json::json!(attachments); }
     serde_json::json!({
         "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
-        "state": {"status": "completed", "input": tool_input(result), "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
+        "state": state,
         "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "completed"}
     })
 }
@@ -143,13 +160,9 @@ pub fn patch_part(result: &ToolResult) -> Option<serde_json::Value> {
 
 pub fn patch_parts(results: &[ToolResult]) -> Vec<serde_json::Value> { results.iter().filter_map(patch_part).collect() }
 
-fn patch_file_values(result: &ToolResult) -> Vec<&serde_json::Value> {
-    result.metadata.get("files").and_then(serde_json::Value::as_array).map(|files| files.iter().collect()).unwrap_or_default()
-}
-
 fn patch_files(result: &ToolResult) -> Vec<String> {
     let mut out = Vec::new();
-    for file in patch_file_values(result) {
+    for file in file_values(result) {
         if let Some(path) = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str) { out.push(path.to_string()); }
     }
     out.sort(); out.dedup(); out
@@ -189,6 +202,7 @@ pub fn opencode_patch_part_source() -> serde_json::Value {
 pub fn opencode_tool_part_source() -> serde_json::Value {
     serde_json::json!({
         "schema": "packages/schema/src/v1/session.ts:ToolPart/ToolStatePending/ToolStateRunning/ToolStateCompleted/ToolStateError",
+        "attachments_schema": "packages/schema/src/v1/session.ts:ToolStateCompleted.attachments -> Array<FilePart>",
         "processor": "packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall/failToolCall"
     })
 }
@@ -219,6 +233,11 @@ mod tests {
 
     fn result() -> ToolResult { result_with_applied(true) }
 
+    fn file_write_result() -> ToolResult {
+        ToolResult { id: ToolCallId(Uuid::nil()), kind: ToolKind::FileWrite, success: true, output: "Written 12 bytes to proof.txt".into(), error: None, duration_ms: 5,
+            metadata: HashMap::from([("title".into(), serde_json::json!("file_write")), ("files".into(), serde_json::json!([{"type":"add", "relativePath": "proof.txt", "path":"proof.txt"}]))]), }
+    }
+
     #[test]
     fn builds_text_part() { assert_eq!(text_part("hello", false)["metadata"]["opencode_source"]["identifier"], "TextPart"); }
 
@@ -248,6 +267,22 @@ mod tests {
         assert_eq!(parts[0]["type"], "file");
         assert_eq!(parts[0]["filename"], "proof.txt");
         assert_eq!(parts[0]["metadata"]["opencode_source"]["identifier"], "FilePart");
+    }
+
+    #[test]
+    fn builds_file_part_for_normal_file_tools() {
+        let parts = file_parts(&[file_write_result()]);
+        assert_eq!(parts[0]["type"], "file");
+        assert_eq!(parts[0]["metadata"]["tool"], "file_write");
+        assert_eq!(parts[0]["metadata"]["change_type"], "add");
+    }
+
+    #[test]
+    fn completed_file_tool_part_carries_file_attachments() {
+        let part = completed_tool_part(&file_write_result());
+        assert_eq!(part["state"]["status"], "completed");
+        assert_eq!(part["state"]["attachments"][0]["filename"], "proof.txt");
+        assert!(part["metadata"]["opencode_source"]["attachments_schema"].as_str().unwrap().contains("ToolStateCompleted.attachments"));
     }
 
     #[test]
