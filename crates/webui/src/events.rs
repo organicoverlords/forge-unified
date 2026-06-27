@@ -188,6 +188,7 @@ async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversa
     enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string()})));
     enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({})));
     enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input})));
+    let _ = state.agent.record_assistant_tool_call(conversation_id, format!("Running `{name}` through the OpenCode SessionProcessor-compatible proof path."), req.clone()).await;
     match state.agent.execute_tool(req).await {
         Ok(mut result) => {
             present_tool_result(name, &mut result);
