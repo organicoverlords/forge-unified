@@ -12,12 +12,13 @@ STATUS_OUT="$PROOF_DIR/git-status.txt"
 PROMPT_FILE="$PROOF_DIR/screenshot-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 STREAM_OUT="$PROOF_DIR/screenshot-stream.sse"
+SNAPSHOT_JSON="$PROOF_DIR/snapshot-response.json"
 CONVERSATION_JSON="$PROOF_DIR/screenshot-conversation.json"
 BROWSER_PROOF_JSON="$PROOF_DIR/browser-proof.json"
 SCREENSHOT_PNG="$PROOF_DIR/webui.png"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 mkdir -p "$PROOF_DIR"
-rm -f "$NOTE_PATH" "$STREAM_OUT"
+rm -f "$NOTE_PATH" "$STREAM_OUT" "$SNAPSHOT_JSON"
 
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -38,6 +39,7 @@ done
 curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 curl -fsS "$BASE/" | grep -q "OpenCode TextPart"
+curl -fsS "$BASE/" | grep -q "SnapshotPart"
 curl -fsS "$BASE/" | grep -q "OpenCode ToolPart"
 curl -fsS "$BASE/" | grep -q "OpenCode PatchPart"
 
@@ -100,6 +102,12 @@ fi
 test -s "$NOTE_PATH"
 grep -q "Natural prompt completed" "$NOTE_PATH"
 
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" \
+  -H 'content-type: application/json' \
+  -d '{}' > "$SNAPSHOT_JSON"
+grep -q '"snapshot_saved":true' "$SNAPSHOT_JSON"
+grep -q "Snapshot saved at" "$SNAPSHOT_JSON"
+
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 grep -q "Created.*natural-proof-note.txt" "$CONVERSATION_JSON"
 grep -q "Updated 1 file" "$CONVERSATION_JSON"
@@ -112,6 +120,11 @@ grep -q "text_parts" "$CONVERSATION_JSON"
 grep -q '"type":"text"' "$CONVERSATION_JSON"
 grep -q '"identifier":"TextPart"' "$CONVERSATION_JSON"
 grep -q "opencode_text_part_source" "$CONVERSATION_JSON"
+grep -q "snapshot_parts" "$CONVERSATION_JSON"
+grep -q '"type":"snapshot"' "$CONVERSATION_JSON"
+grep -q '"identifier":"SnapshotPart"' "$CONVERSATION_JSON"
+grep -q "opencode_snapshot_part_source" "$CONVERSATION_JSON"
+grep -q "Snapshot saved at" "$CONVERSATION_JSON"
 grep -q "tool_parts" "$CONVERSATION_JSON"
 grep -q '"type":"tool"' "$CONVERSATION_JSON"
 grep -q '"status":"completed"' "$CONVERSATION_JSON"
@@ -150,10 +163,13 @@ grep -q "file_list" "$BROWSER_PROOF_JSON"
 grep -q "Repository status" "$BROWSER_PROOF_JSON"
 grep -q "Top-level repository entries" "$BROWSER_PROOF_JSON"
 grep -q "OpenCode TextPart metadata" "$BROWSER_PROOF_JSON"
+grep -q "OpenCode SnapshotPart" "$BROWSER_PROOF_JSON"
+grep -q "SnapshotPart metadata" "$BROWSER_PROOF_JSON"
+grep -q "Snapshot saved at" "$BROWSER_PROOF_JSON"
 grep -q "OpenCode ToolPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "OpenCode PatchPart" "$BROWSER_PROOF_JSON"
 grep -q "PatchPart metadata" "$BROWSER_PROOF_JSON"
 grep -q "patch_" "$BROWSER_PROOF_JSON"
 grep -q "completed" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI natural file creation + compact repo inspection + visible OpenCode TextPart/ToolPart/PatchPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural file creation + compact repo inspection + visible OpenCode Text/Snapshot/Tool/PatchPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
