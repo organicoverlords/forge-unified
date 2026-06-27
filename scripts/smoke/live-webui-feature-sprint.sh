@@ -29,9 +29,27 @@ PID=$!
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
 trap cleanup EXIT
 
-for _ in $(seq 1 60); do curl -fsS "$BASE/api/health" >/dev/null && break; sleep 0.5; done
-curl -fsS "$BASE/" | grep -q "Forge Unified"
-curl -fsS "$BASE/events?static=1" | grep -q "Forge Activity"
+wait_for_webui() {
+  local attempt
+  for attempt in $(seq 1 90); do
+    if ! kill -0 "$PID" >/dev/null 2>&1; then
+      echo "::error::forge-app exited before readiness" >&2
+      tail -n 120 "$SERVER_LOG" >&2 || true
+      return 1
+    fi
+    if curl -fsS "$BASE/api/health" >/dev/null \
+      && curl -fsS "$BASE/" | grep -q "Forge Unified" \
+      && curl -fsS "$BASE/events?static=1" | grep -q "Forge Activity"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "::error::forge-app did not become ready at $BASE" >&2
+  tail -n 160 "$SERVER_LOG" >&2 || true
+  return 1
+}
+
+wait_for_webui
 curl -fsS "$BASE/api/events/recent" | grep -q '"event_bus":"change_bus"'
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural compaction event bus proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -59,7 +77,10 @@ jq -e '.count >= 3' "$EVENT_BUS_JSON" >/dev/null
 for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "opencode.apply_patch"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' >/dev/null
+curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' > "$PROOF_DIR/compaction-response.json"
+for marker in "session.compaction.started" "session.compaction.finished" "opencode.compaction" "event_bus_receipts" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$PROOF_DIR/compaction-response.json"; done
+curl -fsS "$BASE/api/events/recent" > "$EVENT_BUS_JSON"
+for marker in '"event_type":"session.compaction.started"' '"event_type":"session.compaction.finished"' "opencode.compaction" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "file_parts" "patch_parts" "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
@@ -73,6 +94,6 @@ curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' 
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "session.compaction.started" "session.compaction.finished" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
 echo "LIVE WebUI natural compaction/event proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
