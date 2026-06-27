@@ -9,6 +9,24 @@ pub async fn health(State(_s): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
 }
 
+pub async fn tool_catalog(State(_s): State<AppState>) -> Json<serde_json::Value> {
+    let tools = forge_engine::tool_definitions();
+    let names: Vec<_> = tools.iter().map(|t| t.name.clone()).collect();
+    Json(serde_json::json!({
+        "catalog": "opencode_provider_tool_catalog",
+        "provider_visible": true,
+        "tool_count": tools.len(),
+        "names": names,
+        "required_tools": ["repo_info", "file_read", "file_write", "file_edit", "file_delete", "apply_patch", "shell_command", "task", "batch_parallel", "browser_proof"],
+        "opencode_sources": [
+            "packages/opencode/src/tool/apply_patch.ts",
+            "packages/opencode/src/session/processor.ts",
+            "packages/schema/src/v1/session.ts"
+        ],
+        "tools": tools
+    }))
+}
+
 #[derive(Serialize)]
 pub struct ConversationListEntry { id: String, title: String, message_count: usize, mode: String, updated_at: String }
 
