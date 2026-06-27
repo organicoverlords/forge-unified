@@ -19,7 +19,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | `packages/llm/src/schema/events.ts` | LLM lifecycle event names | Partially copied in WebUI SSE proof |
 | `packages/core/src/session/runner/publish-llm-event.ts` | Tool lifecycle validation and ordering | Partially copied in WebUI SSE proof |
 | `packages/opencode/src/session/processor.ts` | Tool part lifecycle; completed tools expose `title`, `metadata`, `output`, optional attachments, and timing | Partially copied: Forge emits/persists tool results, uses `metadata.title`, preserves raw details in metadata, and presents compact output first; durable lifecycle parity remains incomplete |
-| `packages/schema/src/v1/session.ts` | `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `PatchPart`, `ToolPart` / `ToolState` schema | Partially copied: Forge persists/render-proofs these shapes as OpenCode-style metadata/cards; not full OpenCode storage semantics yet |
+| `packages/schema/src/v1/session.ts` | Session part schema: `TextPart`, `ReasoningPart`, `SnapshotPart`, `CompactionPart`, `FilePart`, `PatchPart`, `ToolPart` / `ToolState` | Partially copied: Forge persists/render-proofs these shapes as OpenCode-style metadata/cards; not full OpenCode storage semantics yet |
+| `packages/opencode/src/session/compaction.ts` | Creates `CompactionPart` messages with `auto` and optional `overflow`; processing may update `tail_start_id`, generate summaries, replay overflow turns, and auto-continue | First slice copied: durable compaction request marker, optional local pruning, API route, WebUI card, browser proof. Full LLM summary/replay/autocontinue process is not copied yet |
 | `packages/opencode/specs/effect/tools.md` | Tool surface and migration list for tool-like behavior | Used as a guardrail: repo inspection uses existing Forge `repo_info` and `file_list` tools rather than inventing a fake OpenCode tool |
 
 ## Current highest-priority parity gaps
@@ -30,7 +31,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 4. BOM preservation and formatter hooks.
 5. Orchestrator system prompt copied from OpenCode prompt behavior instead of a hand-written approximation.
 6. Full durable tool part lifecycle matching OpenCode pending/running/completed/error behavior.
-7. Context compaction and prompt/session continuation behavior.
+7. Full context compaction process: summary generation, replay, overflow handling, and auto-continue.
 8. Durable session/message/part persistence beyond current snapshots.
 9. Agent/subtask session part behavior.
 10. Retry/fallback receipts as OpenCode-style retry parts.
@@ -44,17 +45,19 @@ Upstream source:
 Implemented / proofed:
 
 - `TextPart`: public user/assistant text with collapsed metadata.
+- `ReasoningPart`: safe public progress summary on assistant messages, with `private_chain_of_thought=false` and `visibility=public_progress_summary`.
 - `SnapshotPart`: explicit snapshot save messages and WebUI card.
+- `CompactionPart`: durable compaction request marker with `auto`, `overflow`, and optional `tail_start_id`; WebUI card and proof route added.
 - `FilePart`: changed-file metadata for successful `apply_patch`, including `mime`, `filename`, `workspace://...` URL, and `FilePartSource`-style file source.
 - `ToolPart`: running/completed/error cards from tool calls/results, preserving metadata and compact visible output.
 - `PatchPart`: patch hash and changed file list for successful `apply_patch`.
-- `ReasoningPart`: safe public progress summary on assistant messages, with `private_chain_of_thought=false` and `visibility=public_progress_summary`.
 
 Not done / do not overclaim:
 
 - ReasoningPart is not hidden chain-of-thought capture and must not become that.
+- CompactionPart is not full OpenCode compaction process parity yet.
 - ToolPart is not yet full OpenCode lifecycle/storage parity.
-- AgentPart, CompactionPart, RetryPart, StepStartPart, StepFinishPart, and SubtaskPart remain to be implemented only when backed by a real Forge behavior path.
+- AgentPart, RetryPart, StepStartPart, StepFinishPart, and SubtaskPart remain to be implemented only when backed by a real Forge behavior path.
 
 ## `apply_patch` target behavior
 
@@ -83,7 +86,8 @@ Implemented and proofed:
 - Tool cards show compact visible output first.
 - Raw JSON details are preserved under metadata (`raw_output`) instead of being the primary visible UI.
 - Live WebUI proof at `c3f15e4` requires text/snapshot/file/tool/patch parts in the stream, persisted conversation JSON, and browser DOM.
-- Live WebUI proof after `d880f839` also requires visible/persisted OpenCode `ReasoningPart` proof.
+- Live WebUI proof at `a0efdb6` also requires visible/persisted OpenCode `ReasoningPart` proof.
+- Live WebUI proof after `bd118d7` also requires visible/persisted OpenCode `CompactionPart` proof.
 
 Not done:
 
@@ -91,6 +95,7 @@ Not done:
 - Attachments are not modeled like OpenCode tool parts.
 - Tool timing is not preserved in the same complete shape.
 - Real approval controls for edit permission are not implemented.
+- Compaction card does not yet mean full OpenCode summary/replay/autocontinue behavior.
 
 ## File size rule
 
