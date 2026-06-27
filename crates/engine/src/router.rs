@@ -95,9 +95,7 @@ impl Router {
         let mut tried = 0usize;
 
         for (provider_id, model_id) in candidates {
-            if tried >= 20 {
-                break;
-            }
+            if tried >= 20 { break; }
 
             let key = route_key(&provider_id, &model_id);
             if let Some(entry) = self.cooldowns.lock().get(&key).cloned() {
@@ -150,8 +148,8 @@ impl Router {
                         "strategy": "freellmapi_priority_cooldown",
                         "cooldown_scope": "provider_model",
                         "exhausted_means": "model_busy_capacity_not_provider_quota",
-                        "selected_provider": response.provider.0,
-                        "selected_model": response.model.0,
+                        "selected_provider": response.provider.0.clone(),
+                        "selected_model": response.model.0.clone(),
                         "attempts": attempts,
                     }));
                     return Ok(response);
@@ -180,9 +178,7 @@ impl Router {
         self.expire_cooldowns();
         for (provider_id, model_id) in self.candidates(&request.model) {
             let key = route_key(&provider_id, &model_id);
-            if self.cooldowns.lock().contains_key(&key) {
-                continue;
-            }
+            if self.cooldowns.lock().contains_key(&key) { continue; }
             if let Some(provider) = self.providers.get(&provider_id) {
                 let mut routed = request.clone();
                 routed.model = model_id.clone();
@@ -206,15 +202,11 @@ impl Router {
         results
     }
 
-    pub fn provider(&self, id: &ProviderId) -> Option<&dyn Provider> {
-        self.providers.get(id).map(|p| p.as_ref())
-    }
+    pub fn provider(&self, id: &ProviderId) -> Option<&dyn Provider> { self.providers.get(id).map(|p| p.as_ref()) }
 
     pub fn available_models(&self) -> Vec<(ProviderId, ModelId)> {
         self.providers.values()
-            .flat_map(|p| {
-                p.config().models.iter().map(|m| (p.id().clone(), m.id.clone())).collect::<Vec<_>>()
-            })
+            .flat_map(|p| p.config().models.iter().map(|m| (p.id().clone(), m.id.clone())).collect::<Vec<_>>())
             .collect()
     }
 
@@ -247,9 +239,7 @@ impl Router {
 
     fn put_cooldown(&self, provider_id: &ProviderId, model_id: &ModelId, classification: FailureClass, message: String) {
         self.cooldowns.lock().insert(route_key(provider_id, model_id), CooldownEntry {
-            until: Instant::now() + cooldown_for(classification),
-            classification,
-            message,
+            until: Instant::now() + cooldown_for(classification), classification, message,
         });
     }
 
@@ -259,28 +249,13 @@ impl Router {
     }
 }
 
-fn route_key(provider_id: &ProviderId, model_id: &ModelId) -> String {
-    format!("{}:{}", provider_id.0, model_id.0)
-}
+fn route_key(provider_id: &ProviderId, model_id: &ModelId) -> String { format!("{}:{}", provider_id.0, model_id.0) }
 
 fn classify_failure(message: &str) -> FailureClass {
     let lower = message.to_ascii_lowercase();
-
-    if lower.contains("exhausted")
-        || lower.contains("model is busy")
-        || lower.contains("engine is busy")
-        || lower.contains("capacity")
-        || lower.contains("temporarily unavailable")
-        || lower.contains("overloaded")
-    {
+    if lower.contains("exhausted") || lower.contains("model is busy") || lower.contains("engine is busy") || lower.contains("capacity") || lower.contains("temporarily unavailable") || lower.contains("overloaded") {
         FailureClass::BusyCapacity
-    } else if lower.contains("quota exceeded")
-        || lower.contains("hard limit")
-        || lower.contains("billing")
-        || lower.contains("insufficient credits")
-        || lower.contains("monthly limit")
-        || lower.contains("daily limit")
-    {
+    } else if lower.contains("quota exceeded") || lower.contains("hard limit") || lower.contains("billing") || lower.contains("insufficient credits") || lower.contains("monthly limit") || lower.contains("daily limit") {
         FailureClass::QuotaCapped
     } else if lower.contains("429") || lower.contains("rate limit") || lower.contains("too many") {
         FailureClass::RateLimited
