@@ -21,7 +21,7 @@ PROMPT_FILE="$PROOF_DIR/screenshot-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 mkdir -p "$PROOF_DIR"
-rm -f "$NOTE_PATH" "$STREAM_OUT" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_PAGE_JSON"
+rm -f "$NOTE_PATH" "$STREAM_OUT" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
 
 cargo build --workspace
 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -29,37 +29,53 @@ PID=$!
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
 trap cleanup EXIT
 
-wait_for_webui() {
+curl_with_retry() {
+  local url="$1"
+  local out="${2:-}"
   local attempt
   for attempt in $(seq 1 90); do
     if ! kill -0 "$PID" >/dev/null 2>&1; then
-      echo "::error::forge-app exited before readiness" >&2
-      tail -n 120 "$SERVER_LOG" >&2 || true
+      echo "::error::forge-app exited while waiting for $url" >&2
+      tail -n 160 "$SERVER_LOG" >&2 || true
       return 1
     fi
-    if curl -fsS "$BASE/api/health" >/dev/null \
-      && curl -fsS "$BASE/" | grep -q "Forge Unified" \
-      && curl -fsS "$BASE/events?static=1" | grep -q "Forge Activity"; then
+    if [[ -n "$out" ]]; then
+      if curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 10 "$url" -o "$out"; then
+        return 0
+      fi
+    elif curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 10 "$url"; then
       return 0
     fi
     sleep 1
   done
-  echo "::error::forge-app did not become ready at $BASE" >&2
+  echo "::error::timed out waiting for $url" >&2
   tail -n 160 "$SERVER_LOG" >&2 || true
   return 1
 }
 
-wait_for_webui
-curl -fsS "$BASE/api/events/recent" | grep -q '"event_bus":"change_bus"'
+wait_for_webui() {
+  local health="$PROOF_DIR/health.json"
+  local index="$PROOF_DIR/index.html"
+  local events="$PROOF_DIR/events.html"
+  curl_with_retry "$BASE/api/health" "$health"
+  curl_with_retry "$BASE/" "$index"
+  grep -q "Forge Unified" "$index"
+  curl_with_retry "$BASE/events?static=1" "$events"
+  grep -q "Forge Activity" "$events"
+  curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
+  grep -q '"event_bus":"change_bus"' "$EVENT_BUS_JSON"
+}
 
-CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural compaction event bus proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+wait_for_webui
+
+CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural lsp warmup compaction event proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
 
 cat > "$PROMPT_FILE" <<'PROMPT'
 Please create a short proof note for this WebUI sprint, then summarize what changed in plain English so I can see the work finished.
 PROMPT
 jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$STREAM_OUT"
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$STREAM_OUT"
 for marker in "event: run-start" "event: run-finish" "event: tool-result" "pending_edit_approval" "approval_state" "permission_request" "natural-proof-note.txt"; do grep -Fq "$marker" "$STREAM_OUT"; done
 if test -e "$NOTE_PATH"; then echo "::error::file appeared before approval"; exit 4; fi
 
@@ -67,33 +83,33 @@ curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 APPROVAL_ID="$(jq -r '.messages[]? | .tool_results[]? | .metadata.pending_edit_approval.approval_id? // empty' "$CONVERSATION_JSON" | head -n 1)"
 test -n "$APPROVAL_ID"
 
-curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" -H 'content-type: application/json' -d '{"approved":true}' > "$APPROVAL_JSON"
-for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_events" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "natural-proof-note.txt"; do grep -Fq "$marker" "$APPROVAL_JSON"; done
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/conversations/$CONV_ID/approvals/$APPROVAL_ID/approve" -H 'content-type: application/json' -d '{"approved":true}' > "$APPROVAL_JSON"
+for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_events" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "LSP.Warmup.contained" "warmup_contained" "natural-proof-note.txt"; do grep -Fq "$marker" "$APPROVAL_JSON"; done
 
 test -s "$NOTE_PATH"
 
-curl -fsS "$BASE/api/events/recent" > "$EVENT_BUS_JSON"
-jq -e '.count >= 3' "$EVENT_BUS_JSON" >/dev/null
-for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "opencode.apply_patch"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
+jq -e '.count >= 4' "$EVENT_BUS_JSON" >/dev/null
+for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "opencode.apply_patch"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' > "$PROOF_DIR/compaction-response.json"
 for marker in "session.compaction.started" "session.compaction.finished" "opencode.compaction" "event_bus_receipts" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$PROOF_DIR/compaction-response.json"; done
-curl -fsS "$BASE/api/events/recent" > "$EVENT_BUS_JSON"
+curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 for marker in '"event_type":"session.compaction.started"' '"event_type":"session.compaction.finished"' "opencode.compaction" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
-for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "file_parts" "patch_parts" "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+for marker in "tool_lifecycle_parts" '"status":"pending"' '"status":"running"' '"status":"completed"' "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "LSP.Warmup.contained" "warmup_contained" "file_parts" "patch_parts" "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts" "packages/opencode/src/tool/read.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
-curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural compaction event bus proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural lsp warmup compaction event proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "event_bus_receipts" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
-curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "session.compaction.started" "session.compaction.finished" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.compaction.started" "session.compaction.finished" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
-echo "LIVE WebUI natural compaction/event proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
+echo "LIVE WebUI natural LSP warmup/compaction/event proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
