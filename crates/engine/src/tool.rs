@@ -1,6 +1,6 @@
 //! Tool execution system with parallel batch support.
 
-use crate::change_bus::{ChangeBus, ChangeEvent};
+use crate::change_bus::{ChangeBus, ChangeBusStatus, ChangeEvent};
 use crate::types::{ToolKind, ToolRequest, ToolResult, ToolConfig};
 use anyhow::Result;
 use std::time::Instant;
@@ -33,6 +33,7 @@ impl ToolExecutor {
 
     pub fn change_bus(&self) -> ChangeBus { self.change_bus.clone() }
     pub fn recent_change_events(&self) -> Vec<ChangeEvent> { self.change_bus.recent() }
+    pub fn change_bus_status(&self) -> ChangeBusStatus { self.change_bus.status() }
     pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.change_bus.subscribe() }
 
     pub async fn execute(&self, request: ToolRequest) -> Result<ToolResult> {
@@ -67,6 +68,7 @@ impl ToolExecutor {
             let receipts = self.publish_change_events(&r);
             if !receipts.is_empty() {
                 r.metadata.insert("event_bus_receipts".to_string(), json!(receipts));
+                r.metadata.insert("event_bus_status".to_string(), json!(self.change_bus.status()));
             }
             r
         })
