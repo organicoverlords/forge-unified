@@ -15,32 +15,32 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this slice: `c3b826d7136298c7bb7d62ba30e11fd12cfeff70`.
-- Latest proven browser proof artifact before this slice: `7925108696` from Live WebUI Feature Sprint run `28291373990`.
+- Latest fully green baseline before this slice: `2680e673645ced1a799b3a5053885b11996301e0`.
+- Latest proven browser proof artifact before this slice: `7925391830` from Live WebUI Feature Sprint run `28292308525`.
 - Current branch HEAD after this slice needs Actions before calling it green.
 
 ## Latest OpenCode-source slice
 
-Forge now copies more of OpenCode's LSP diagnostic reporting shape for post-edit receipts.
+Forge now copies OpenCode's UTF-8 BOM preservation behavior for file write/edit tools.
 
 Upstream source paths:
 
-- `packages/opencode/src/tool/apply_patch.ts`
-- `packages/opencode/src/lsp/lsp.ts`
-- `packages/opencode/src/lsp/diagnostic.ts`
-- `packages/opencode/src/tool/read.ts`
+- `packages/core/src/file-mutation.ts`
+- `packages/opencode/src/tool/write.ts`
+- `packages/opencode/src/tool/edit.ts`
 
 Copied behavior:
 
-- OpenCode apply_patch touches edited documents, collects `lsp.diagnostics()`, and emits `LSP.Diagnostic.report(target, diagnostics[path])` for each edited target with errors.
-- OpenCode `Diagnostic.report` caps output at 20 errors per file.
-- OpenCode `Diagnostic.pretty` formats one-based `ERROR [line:col] message` strings.
-- Forge diagnostics receipts now include `severity_counts`, `diagnostic_count`, `max_per_file`, `report_block`, `report_emitted`, `lsp_client_status`, and copied source metadata.
-- Forge still contains missing live LSP clients instead of failing the edit path, matching the safety direction from OpenCode's optional warmup containment path.
+- OpenCode `FileMutation.writeTextPreservingBom` strips duplicate leading BOMs from new content.
+- It preserves an existing UTF-8 BOM when a target already has one.
+- It also preserves an input BOM when a new text payload starts with one.
+- It writes at most one UTF-8 BOM.
+- Forge `file_write` and `file_edit` now follow that behavior and record `bom`, `bom_preserved`, `bom_strategy`, and source metadata in ToolResult metadata.
+- The natural WebUI file-tool proof now requires those markers in the SSE stream and conversation JSON.
 
 Forge files touched:
 
-- `crates/engine/src/tool/patch_events.rs`
+- `crates/engine/src/tool/file_ops.rs`
 - `scripts/smoke/live-webui-feature-sprint.sh`
 - `OPENCODE-PARITY.md`
 - `PROJECT_STATE.md`
@@ -48,15 +48,16 @@ Forge files touched:
 
 Still incomplete / do not overclaim:
 
+- Formatter hooks after write/edit are still incomplete.
 - Live LSP server/client diagnostics are not implemented yet.
 - OpenCode's database-backed part IDs are not fully copied.
 - `providerExecuted` delta updates are still partial.
 - Live OS filesystem watcher integration remains receipt-backed.
-- BOM and formatter parity remain incomplete.
 - Full NIM-backed streamed compaction remains incomplete.
 
 ## Previous proven slices
 
+- `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape; CI `28292308520`, Build Proof `28292308511`, and Live WebUI Feature Sprint `28292308525` were green with proof artifact `7925391830`.
 - `c3b826d7136298c7bb7d62ba30e11fd12cfeff70` — watcher status + local mutable ToolPart proof path; CI `28291374005`, Build Proof `28291373988`, and Live WebUI Feature Sprint `28291373990` were green with proof artifact `7925108696`.
 - `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity; CI, Build Proof, and Live WebUI Feature Sprint were green with proof artifact `7924965603`.
 - `98b408b0f8f8a132ba7df18617d103ea63d43ce1` — ToolStateCompleted FilePart attachment parity.
@@ -67,8 +68,8 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current LSP diagnostic report HEAD.
+1. Check Actions for the current BOM preservation HEAD.
 2. If Rust compile/test fails, inspect the exact job logs; do not rerun deterministic failures blindly.
 3. If WebUI smoke fails on port `3320`, inspect `server.log` first.
 4. Inspect proof artifact screenshots and DOM after green.
-5. Continue toward real LSP server/client diagnostics, OS-backed watcher/file edited events, formatter/BOM parity, or NIM-backed compaction.
+5. Continue toward formatter hooks, real LSP server/client diagnostics, OS-backed watcher/file edited events, or NIM-backed compaction.
