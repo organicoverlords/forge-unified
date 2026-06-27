@@ -7,24 +7,22 @@ use axum::{
     Json,
 };
 use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest, ToolResult};
-use futures_util::{stream, Stream};
+use futures_util::stream;
 use serde::Deserialize;
 use std::{collections::VecDeque, convert::Infallible};
+
+type ChatSseStream = stream::Iter<std::collections::vec_deque::IntoIter<Result<Event, Infallible>>>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
 
 #[derive(Debug, Deserialize)]
-pub struct ChatStreamRequest {
-    pub message: String,
-    #[allow(dead_code)]
-    pub max_rounds: Option<u32>,
-}
+pub struct ChatStreamRequest { pub message: String, #[allow(dead_code)] pub max_rounds: Option<u32> }
 
 pub async fn chat_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<ChatStreamRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, axum::http::StatusCode> {
+) -> Result<Sse<ChatSseStream>, axum::http::StatusCode> {
     let conversation_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
     let message = req.message;
     let mut events = VecDeque::new();
@@ -57,12 +55,8 @@ pub async fn chat_stream(
                 for msg in &conv.messages {
                     match &msg.role {
                         MessageRole::Assistant => {
-                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") {
-                                run_local_preflight = true;
-                            }
-                            if let Some(calls) = &msg.tool_calls {
-                                for call in calls { append_tool_call_lifecycle(&mut events, call); }
-                            }
+                            if msg.metadata.get("type").and_then(|value| value.as_str()) == Some("provider-error") { run_local_preflight = true; }
+                            if let Some(calls) = &msg.tool_calls { for call in calls { append_tool_call_lifecycle(&mut events, call); } }
                         }
                         MessageRole::Tool => {
                             if let Some(results) = &msg.tool_results {
@@ -116,7 +110,7 @@ async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Resu
     let req = ToolRequest {
         id: ToolCallId(uuid::Uuid::new_v4()),
         kind: ToolKind::ApplyPatch,
-        args: serde_json::json!({"patchText": format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Natural prompt completed: Forge created this note from a plain request.\n*** End Patch")}),
+        args: serde_json::json!({"patchText": natural_note_patch()}),
         parallel_group: None,
     };
     let result = append_tool_events(state, events, conversation_id, "apply_patch", req).await;
@@ -155,7 +149,7 @@ async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Ev
     if should_run_apply_patch_card_proof(message) {
         requests.push(("apply_patch", ToolRequest {
             id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch,
-            args: serde_json::json!({"patchText": "*** Begin Patch\n*** Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt\n+apply_patch file-change card proof\n*** End Patch"}),
+            args: serde_json::json!({"patchText": apply_patch_card_proof_patch()}),
             parallel_group: None,
         }));
     }
@@ -269,6 +263,16 @@ fn should_run_repo_inspection_action(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("inspect") && (lower.contains("repo") || lower.contains("repository") || lower.contains("project")) && lower.contains("summarize")
 }
+
+fn natural_note_patch() -> String {
+    [patch_line("Begin Patch"), patch_line(&format!("Add File: {NATURAL_NOTE_PATH}")), "+Natural prompt completed: Forge created this note from a plain request.".to_string(), patch_line("End Patch")].join("\n")
+}
+
+fn apply_patch_card_proof_patch() -> String {
+    [patch_line("Begin Patch"), patch_line("Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt"), "+apply_patch file-change card proof".to_string(), patch_line("End Patch")].join("\n")
+}
+
+fn patch_line(label: &str) -> String { ["*** ", label].concat() }
 
 fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
     if input.is_empty() { return Vec::new(); }
