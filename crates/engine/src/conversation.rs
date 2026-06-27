@@ -165,7 +165,7 @@ fn serialize_message_for_compaction(message: &Message) -> String {
     if !message.content.trim().is_empty() { parts.push(format!("{}: {}", label, one_line(&message.content, 900))); }
     if let Some(results) = &message.tool_results {
         for result in results.iter().take(6) {
-            parts.push(format!("[Tool result]: {:?} success={} {}", result.kind, result.success, one_line(&result.output, 500)));
+            parts.push(format!("[Tool result]: {:?} success={} {}", &result.kind, result.success, one_line(&result.output, 500)));
         }
     }
     parts.join("\n")
@@ -174,14 +174,14 @@ fn serialize_message_for_compaction(message: &Message) -> String {
 fn done_bullet(message: &Message) -> Option<String> {
     match &message.role {
         MessageRole::Assistant if !message.content.trim().is_empty() => Some(format!("- {}", one_line(&message.content, 180))),
-        MessageRole::Tool => message.tool_results.as_ref().and_then(|results| results.iter().find(|r| r.success)).map(|r| format!("- Tool {:?} completed: {}", r.kind, one_line(&r.output, 160))),
+        MessageRole::Tool => message.tool_results.as_ref().and_then(|results| results.iter().find(|r| r.success)).map(|r| format!("- Tool {:?} completed: {}", &r.kind, one_line(&r.output, 160))),
         _ => None,
     }
 }
 
 fn blocker_bullet(message: &Message) -> Option<String> {
     if message.content.to_ascii_lowercase().contains("provider error") { return Some(format!("- {}", one_line(&message.content, 180))); }
-    message.tool_results.as_ref()?.iter().find(|r| !r.success).map(|r| format!("- Tool {:?} failed: {}", r.kind, one_line(r.error.as_deref().unwrap_or(&r.output), 180)))
+    message.tool_results.as_ref()?.iter().find(|r| !r.success).map(|r| format!("- Tool {:?} failed: {}", &r.kind, one_line(r.error.as_deref().unwrap_or(&r.output), 180)))
 }
 
 fn relevant_files(message: &Message) -> Vec<String> {
