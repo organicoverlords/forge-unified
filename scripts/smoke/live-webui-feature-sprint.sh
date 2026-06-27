@@ -9,6 +9,7 @@ BASE="http://127.0.0.1:${PORT}"
 PROOF_DIR="${FORGE_FEATURE_PROOF_DIR:-$ROOT/forge-proof/live-webui-feature-sprint}"
 SERVER_LOG="$PROOF_DIR/server.log"
 STREAM_OUT="$PROOF_DIR/screenshot-stream.sse"
+FILE_TOOL_STREAM="$PROOF_DIR/file-tool-stream.sse"
 APPROVAL_JSON="$PROOF_DIR/approval-response.json"
 EVENT_BUS_JSON="$PROOF_DIR/event-bus.json"
 EVENT_STATUS_JSON="$PROOF_DIR/event-status.json"
@@ -21,8 +22,9 @@ STATUS_OUT="$PROOF_DIR/git-status.txt"
 PROMPT_FILE="$PROOF_DIR/screenshot-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
+FILE_TOOL_PATH="forge-proof/live-webui-feature-sprint/file-tool-event-proof.txt"
 mkdir -p "$PROOF_DIR"
-rm -f "$NOTE_PATH" "$STREAM_OUT" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
+rm -f "$NOTE_PATH" "$FILE_TOOL_PATH" "$STREAM_OUT" "$FILE_TOOL_STREAM" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
 
 cargo build --workspace
 RUST_BACKTRACE=1 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -100,9 +102,17 @@ for marker in '"approval_applied":true' '"applied":true' "Updated 1 file" "file_
 
 test -s "$NOTE_PATH"
 
+cat > "$PROMPT_FILE" <<'PROMPT'
+Please run an OpenCode file tool event proof: write, edit, and delete a temporary file, then summarize the emitted watcher and LSP events.
+PROMPT
+jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 120 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$FILE_TOOL_STREAM"
+for marker in "event: run-start" "event: run-finish" "file_write" "file_edit" "file_delete" "file-tool-event-proof.txt" "opencode_file_tool_source" "opencode_event_publisher" "opencode.file_tool" "file.added" "file.edited" "file.deleted" "FileSystem.Event.Edited" "Watcher.Event.Updated" "LSP.Warmup.contained" "LSP.Diagnostic.report" "lsp.warmup.contained" "lsp.diagnostics"; do grep -Fq "$marker" "$FILE_TOOL_STREAM"; done
+if test -e "$FILE_TOOL_PATH"; then echo "::error::file tool proof file remained after delete"; exit 5; fi
+
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
-jq -e '.count >= 4 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
-for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "opencode.apply_patch" "latest_files" "by_type" "by_source"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
+for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "file-tool-event-proof.txt" "opencode.apply_patch" "opencode.file_tool" "latest_files" "by_type" "by_source"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl_with_retry "$BASE/api/events/status" "$EVENT_STATUS_JSON"
 for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "latest_files" "packages/opencode/src/tool/write.ts" "packages/opencode/src/tool/edit.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
 
