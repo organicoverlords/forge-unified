@@ -13,7 +13,7 @@ pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
         "tool": tool_name(&call.kind),
         "state": {
             "status": "running",
-            "input": call.args,
+            "input": call.args.clone(),
             "metadata": {},
             "time": {"start": 0}
         },
@@ -42,9 +42,9 @@ pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
         "state": {
             "status": "completed",
             "input": {},
-            "output": result.output,
+            "output": result.output.clone(),
             "title": title,
-            "metadata": result.metadata,
+            "metadata": result.metadata.clone(),
             "time": {"start": 0, "end": result.duration_ms}
         },
         "metadata": {
@@ -62,7 +62,7 @@ pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
             "status": "error",
             "input": {},
             "error": result.error.clone().unwrap_or_else(|| result.output.clone()),
-            "metadata": result.metadata,
+            "metadata": result.metadata.clone(),
             "time": {"start": 0, "end": result.duration_ms}
         },
         "metadata": {
