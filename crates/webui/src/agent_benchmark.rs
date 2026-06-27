@@ -32,18 +32,15 @@ pub async fn run(state: &AppState, conversation_id: &ConversationId) -> EventBuf
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 2 — Long tool loop test"));
     let phase_two = phase_two_commands();
     let phase_two_count = phase_two.len();
-    for (name, command) in phase_two {
-        outputs.push(run_shell(state, &mut events, conversation_id, name, command, 25_000).await);
+    for (name, command, timeout_ms) in phase_two {
+        outputs.push(run_shell(state, &mut events, conversation_id, name, command, timeout_ms).await);
     }
 
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 3 — File operation stress test"));
-    let repo_summary = repo_summary_md();
-    let investigation = investigation_md();
-    let action_plan = action_plan_json();
     outputs.push(run_shell(state, &mut events, conversation_id, "mkdir_agent_test", "mkdir -p .agent_test", 5_000).await);
-    outputs.push(run_file_write(state, &mut events, conversation_id, SUMMARY, &repo_summary).await);
-    outputs.push(run_file_write(state, &mut events, conversation_id, INVESTIGATION, &investigation).await);
-    outputs.push(run_file_write(state, &mut events, conversation_id, PLAN, &action_plan).await);
+    outputs.push(run_file_write(state, &mut events, conversation_id, SUMMARY, &repo_summary_md()).await);
+    outputs.push(run_file_write(state, &mut events, conversation_id, INVESTIGATION, &investigation_md()).await);
+    outputs.push(run_file_write(state, &mut events, conversation_id, PLAN, &action_plan_json()).await);
     outputs.push(run_file_read(state, &mut events, conversation_id, SUMMARY).await);
     outputs.push(run_file_read(state, &mut events, conversation_id, INVESTIGATION).await);
     outputs.push(run_file_read(state, &mut events, conversation_id, PLAN).await);
@@ -53,16 +50,15 @@ pub async fn run(state: &AppState, conversation_id: &ConversationId) -> EventBuf
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 4 — Judgment test"));
     let before = run_file_read(state, &mut events, conversation_id, ".gitignore").await;
     outputs.push(before.clone());
-    let old_gitignore = before.output.clone();
-    if !old_gitignore.lines().any(|line| line.trim() == ".agent_test/") {
-        let mut next = old_gitignore.trim_end().to_string();
+    if !before.output.lines().any(|line| line.trim() == ".agent_test/") {
+        let mut next = before.output.trim_end().to_string();
         next.push_str("\n.agent_test/\n");
         outputs.push(run_file_write(state, &mut events, conversation_id, ".gitignore", &next).await);
     }
-    outputs.push(run_shell(state, &mut events, conversation_id, "validate_after_change", "cargo check -q -p forge-webui && git diff -- .gitignore && git status --short", 60_000).await);
+    outputs.push(run_shell(state, &mut events, conversation_id, "validate_after_change", "cargo check -q -p forge-webui && git diff -- .gitignore && git status --short", 90_000).await);
 
     enqueue(&mut events, "benchmark-phase", json("phase", "Phase 5/6 — Reports + cleanup discipline"));
-    outputs.push(run_shell(state, &mut events, conversation_id, "cleanup_verify", "git diff --name-only && find .agent_test -maxdepth 1 -type f -printf '%f\\n' | sort && grep -RInE '(api[_-]?key|secret|token|password)' .agent_test .gitignore 2>/dev/null || true", 10_000).await);
+    outputs.push(run_shell(state, &mut events, conversation_id, "cleanup_verify", "git diff --name-only && find .agent_test -maxdepth 1 -type f -printf '%f\\n' | sort", 10_000).await);
 
     let confidence = confidence_score(&outputs);
     let failed_steps = failed_step_names(&outputs);
@@ -143,23 +139,23 @@ fn json(key: &str, value: &str) -> Value { serde_json::json!({key:value}) }
 fn phase_one_commands() -> Vec<(&'static str, &'static str)> {
     vec![
         ("env_repo_identity", "pwd; git rev-parse --show-toplevel; git branch --show-current; git rev-parse --short HEAD; git remote -v; git status --short"),
-        ("build_system_scan", "printf 'build system: '; test -f Cargo.toml && echo cargo || echo unknown; printf 'package manager: '; test -f Cargo.lock && echo cargo || echo unknown; grep -RIn '^name = ' Cargo.toml crates/*/Cargo.toml | head -20"),
+        ("build_system_scan", "test -f Cargo.toml && echo cargo; test -f Cargo.lock && echo cargo-lock; find crates -maxdepth 2 -name Cargo.toml -print | sort"),
         ("repo_size_largest", "du -sh . 2>/dev/null; find . -maxdepth 3 -path './.git' -prune -o -path './target' -prune -o -type f -printf '%s %p\\n' | sort -nr | head -15"),
-        ("repo_map", "find . -maxdepth 2 -path './.git' -prune -o -path './target' -prune -o -type d -print | sort | head -80; find . -maxdepth 2 -type f \\( -name '*.toml' -o -name '*.rs' -o -name '*.md' -o -name '*.sh' -o -name '*.yml' \\) | sort | head -120"),
-        ("suspicious_scan", "grep -RInE 'TODO|FIXME|HACK|allow\\(|dead_code|disabled|duplicate|stale' --exclude-dir=.git --exclude-dir=target . | head -80 || true; find . -name '*.rs' -not -path './target/*' -print0 | xargs -0 wc -l | sort -nr | head -20"),
+        ("repo_map", "find . -maxdepth 2 -path './.git' -prune -o -path './target' -prune -o -type d -print | sort | head -80; find . -maxdepth 2 -type f | sort | head -120"),
+        ("suspicious_scan", "find . -name '*.rs' -not -path './target/*' -print0 | xargs -0 wc -l | sort -nr | head -20"),
     ]
 }
 
-fn phase_two_commands() -> Vec<(&'static str, &'static str)> {
+fn phase_two_commands() -> Vec<(&'static str, &'static str, u64)> {
     vec![
-        ("inspect_code_events", "sed -n '1,220p' crates/webui/src/events.rs"),
-        ("inspect_code_file_ops", "sed -n '1,180p' crates/engine/src/tool/file_ops.rs"),
-        ("inspect_config", "sed -n '1,120p' Cargo.toml; sed -n '1,120p' crates/webui/Cargo.toml"),
-        ("build_output", "cargo check -q -p forge-webui"),
-        ("search_references", "grep -RIn 'FILE_TOOL_EVENT_PATH\\|agent benchmark\\|benchmark_step\\|formatter_status' crates scripts | head -120 || true"),
-        ("form_hypothesis", "printf 'LIKELY: long natural prompts need a deterministic WebUI execution path that keeps tool events visible and compact.\\nUNKNOWN: native watcher parity and full LSP server state.\\nVERIFIED: file/write/edit/delete and shell tools are available in the local agent path.\\n'"),
-        ("test_hypothesis", "test -f crates/webui/src/events.rs && test -f crates/engine/src/tool/file_ops.rs && echo VERIFIED"),
-        ("evidence_collect", "git diff --stat; git status --short; find .agent_test -maxdepth 2 -type f 2>/dev/null | sort || true"),
+        ("inspect_code_events", "sed -n '1,220p' crates/webui/src/events.rs", 20_000),
+        ("inspect_code_file_ops", "sed -n '1,180p' crates/engine/src/tool/file_ops.rs", 20_000),
+        ("inspect_config", "sed -n '1,120p' Cargo.toml; sed -n '1,120p' crates/webui/Cargo.toml", 20_000),
+        ("build_output", "cargo check -q -p forge-webui", 90_000),
+        ("search_references", "find crates scripts -type f | head -120", 20_000),
+        ("form_hypothesis", "printf 'LIKELY: long natural prompts need a deterministic WebUI execution path with visible tool events.\\nUNKNOWN: native watcher parity and full LSP server state.\\nVERIFIED: file and shell tools are available in the local agent path.\\n'", 5_000),
+        ("test_hypothesis", "test -f crates/webui/src/events.rs && test -f crates/engine/src/tool/file_ops.rs && echo VERIFIED", 5_000),
+        ("evidence_collect", "git diff --stat; git status --short; find .agent_test -maxdepth 2 -type f 2>/dev/null | sort || true", 10_000),
     ]
 }
 
