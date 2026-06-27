@@ -15,70 +15,59 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Red head inspected before this slice: `b0de9a6666a8b18db8e3faf7f2c41ee722bb00d6`.
-- Failed runs on that head: CI `28282995384`, Build Proof `28282995380`, Live WebUI Feature Sprint `28282995387`.
-- Failure detail: Rust check/test/security passed, but WebUI smoke failed while connecting to local port `3320`; CI smoke proof artifact id `7922553769` captured the failed proof directory.
-- Current branch HEAD after this slice: wait for Actions before calling it green.
+- Latest fully green baseline before this slice: `d052a279d7a5c37b275043ad0e52fb966a0be4eb`.
+- Latest proven browser proof artifact before this slice: `7924965603` from Live WebUI Feature Sprint run `28290889903`.
+- Current branch HEAD after this slice needs Actions before calling it green.
 
 ## Latest OpenCode-source slice
 
-Forge now adds an OpenCode EventV2Bridge-style event status layer and proves it through the natural WebUI sprint path.
+Forge now copies more of OpenCode SessionProcessor's mutable ToolPart behavior.
 
 Upstream source paths:
 
-- `packages/opencode/src/event-v2-bridge.ts`
-- `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`
-- `packages/opencode/src/tool/write.ts`
-- `packages/opencode/src/tool/edit.ts`
-- `packages/opencode/src/tool/apply_patch.ts`
+- `packages/opencode/src/session/processor.ts`
+- `packages/schema/src/v1/session.ts`
 
 Copied behavior:
 
-- Event payloads are not only appended to a rail; the bridge now has a status summary with sequence range, event-type counts, source counts, and recently touched files.
-- SSE `server.connected` includes the same status summary so the UI can show bridge state immediately.
-- `/api/events/recent` includes `status`; `/api/events/status` returns the status directly.
-- Approved edits still emit filesystem, watcher, LSP warmup containment, and LSP diagnostic report envelopes.
-- Event rail UI now shows a Bridge status panel, count, sequence range, raw summary, and source paths.
-- Natural WebUI proof now waits on event status readiness and requires `opencode_event_v2_bridge_status` in API and browser DOM proof.
+- OpenCode `readToolCall` locates the existing ToolPart for a `callID`.
+- OpenCode `updateToolCall` writes changes back into the same part row.
+- OpenCode `completeToolCall` replaces the running state with a completed state, preserving the input and adding output, title, metadata, time, and optional attachments.
+- OpenCode `failToolCall` replaces the running state with an error state.
+- Forge now updates the prior assistant message's `tool_parts` row for the matching `callID` when tool results are recorded.
+- Forge records `mutable_tool_part_updates` receipts with `before_status`, `after_status`, and `opencode_mutable_tool_part_source`.
+- The natural WebUI proof now requires these receipts in conversation JSON.
 
 Forge files touched:
 
-- `crates/engine/src/change_bus.rs`
-- `crates/engine/src/tool.rs`
-- `crates/engine/src/orchestrator.rs`
-- `crates/engine/src/agent.rs`
-- `crates/webui/src/change_events.rs`
-- `crates/webui/src/lib.rs`
+- `crates/engine/src/conversation.rs`
 - `scripts/smoke/live-webui-feature-sprint.sh`
 - `OPENCODE-PARITY.md`
+- `PROJECT_STATE.md`
 - `CONTINUE_HERE.md`
 
-This is not full EventV2 parity. Forge still uses in-memory history, not durable aggregate replay/storage.
+Still incomplete / do not overclaim:
 
-## Previous LSP warmup slice
+- OpenCode's database-backed part IDs are not fully copied.
+- `providerExecuted` delta updates are still partial.
+- Live OS filesystem watcher integration remains receipt-backed.
+- Live language-server diagnostics remain event-envelope/touch receipts, not a running LSP service.
+- BOM and formatter parity remain incomplete.
+- Full NIM-backed streamed compaction remains incomplete.
 
-Forge extended the edit event path with optional LSP warmup containment and stronger natural browser proof readiness.
+## Previous proven slices
 
-- Upstream paths: `packages/opencode/src/tool/read.ts`, `packages/opencode/src/tool/apply_patch.ts`, `packages/opencode/src/event-v2-bridge.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`.
-- Optional LSP warmup defects are contained instead of breaking the user-visible path.
-- Event rail receives `lsp.warmup.contained` before diagnostics so the UI shows the LSP lifecycle.
-- Still not full LSP parity: Forge does not run a real language server yet.
-
-## Previous compaction slice
-
-- Upstream source path: `packages/core/src/session/compaction.ts`
-- Forge records structured compaction summaries, recent-tail preservation, and visible `session.compaction.started` / `session.compaction.finished` receipts.
-- Still not full compaction parity: summary generation is deterministic and not yet streamed through NVIDIA NIM.
-
-## Older proven ToolPart slice
-
-Forge persists OpenCode-shaped ToolPart lifecycle receipts: pending, running, completed, and error states. Live proof at `71a0ad3` confirmed lifecycle receipts in stream proof, persisted conversation JSON, and browser DOM proof.
+- `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity; CI, Build Proof, and Live WebUI Feature Sprint were green with proof artifact `7924965603`.
+- `98b408b0f8f8a132ba7df18617d103ea63d43ce1` — ToolStateCompleted FilePart attachment parity.
+- `d24d8e7183216aa8a50627b1bc280251d9171ee4` — OpenCode session compaction event-type parity.
+- `1734ae285237bee4c4bd06a418ecd719a1ccf87a` — durable OpenCode EventV2Bridge-style change bus replay.
+- `6a34928048b86e6d7b91468789eeef4489744ae8` — OpenCode post-edit event and LSP touch receipts.
+- `805406542b55f803924401459f881f5df43680b7` — modern dark Codex/OpenCode-style WebUI theme.
 
 ## Next source-backed targets
 
-1. Check Actions for the current event bridge status HEAD.
-2. If WebUI smoke still fails on port `3320`, inspect `server.log` first; do not assume feature failure.
-3. Attach a real LSP diagnostics backend to replace warmup-contained / pending-service envelopes.
-4. Make compaction LLM-backed through NVIDIA NIM only.
-5. Add BOM preservation and formatter hooks.
-6. Continue durable watcher/file edited event bus behavior beyond in-memory history.
+1. Check Actions for the current mutable ToolPart HEAD.
+2. If Rust compile/test fails, inspect the exact job logs; do not rerun deterministic failures blindly.
+3. If WebUI smoke fails on port `3320`, inspect `server.log` first.
+4. Inspect proof artifact screenshots and DOM after green.
+5. Continue toward real OS-backed watcher/file edited events, live LSP diagnostics, formatter/BOM parity, or NIM-backed compaction.
