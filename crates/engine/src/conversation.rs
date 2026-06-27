@@ -8,6 +8,16 @@ use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolReque
 use std::collections::HashMap;
 use uuid::Uuid;
 
+const COMPACTION_TEMPLATE_SECTIONS: &[&str] = &[
+    "Goal",
+    "Constraints & Preferences",
+    "Progress",
+    "Key Decisions",
+    "Next Steps",
+    "Critical Context",
+    "Relevant Files",
+];
+
 pub struct ConversationManager { conversations: HashMap<ConversationId, Conversation> }
 
 impl ConversationManager {
@@ -72,21 +82,29 @@ impl ConversationManager {
         let keep_last = keep_last.max(1);
         let tail_index = before.saturating_sub(keep_last);
         let tail_start_id = (before > keep_last).then(|| format!("message-index-{tail_index}"));
+        let head_messages: Vec<Message> = conv.messages.iter().take(tail_index).cloned().collect();
+        let recent_messages: Vec<Message> = conv.messages.iter().skip(tail_index).cloned().collect();
+        let summary = build_compaction_summary(&head_messages);
+        let recent = recent_messages.iter().map(serialize_message_for_compaction).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n\n");
         let part = compaction_part(auto, Some(overflow), tail_start_id.clone());
-        let content = format!("Compaction requested: keep_last={keep_last}, before={before}");
-        conv.messages.push(Message { role: MessageRole::System, content: content.clone(), tool_calls: None, tool_results: None, metadata: HashMap::from([
+        let metadata = HashMap::from([
             ("compaction_parts".to_string(), serde_json::json!([part.clone()])),
+            ("compaction_summary".to_string(), serde_json::json!(summary)),
+            ("compaction_recent".to_string(), serde_json::json!(recent)),
+            ("compaction_template_sections".to_string(), serde_json::json!(COMPACTION_TEMPLATE_SECTIONS)),
+            ("compaction_selection".to_string(), serde_json::json!({"before": before, "head_messages": head_messages.len(), "recent_messages": recent_messages.len(), "keep_last": keep_last, "tail_start_id": tail_start_id})),
             ("opencode_compaction_part_source".to_string(), crate::tool_parts::opencode_compaction_part_source()),
-        ])});
-        let compacted = conv.messages.len() > keep_last && before > keep_last;
+            ("opencode_compaction_runtime_source".to_string(), serde_json::json!({"path":"packages/core/src/session/compaction.ts","copied_behaviors":["select old head versus recent tail","serialize user/assistant/tool context","emit structured Markdown summary","preserve recent tail after compaction"]})),
+        ]);
+        conv.messages.push(Message { role: MessageRole::System, content: summary.clone(), tool_calls: None, tool_results: None, metadata });
+        let compacted = before > keep_last;
         if compacted {
-            let tail_start = conv.messages.len().saturating_sub(keep_last);
             let mut kept: Vec<Message> = conv.messages.iter().filter(|m| m.role == MessageRole::System).cloned().collect();
-            kept.extend(conv.messages.iter().skip(tail_start).filter(|m| m.role != MessageRole::System).cloned());
+            kept.extend(conv.messages.iter().take(before).skip(tail_index).filter(|m| m.role != MessageRole::System).cloned());
             conv.messages = kept;
         }
         conv.updated_at = chrono::Utc::now();
-        Some(serde_json::json!({"compaction_created": true, "compacted": compacted, "before": before, "after": conv.messages.len(), "keep_last": keep_last, "auto": auto, "overflow": overflow, "tail_start_id": tail_start_id, "message": content, "part": part, "opencode_compaction_source": crate::tool_parts::opencode_compaction_part_source()}))
+        Some(serde_json::json!({"compaction_created": true, "compacted": compacted, "before": before, "after": conv.messages.len(), "keep_last": keep_last, "auto": auto, "overflow": overflow, "tail_start_id": tail_start_id, "summary": summary, "recent": recent, "template_sections": COMPACTION_TEMPLATE_SECTIONS, "part": part, "opencode_compaction_source": crate::tool_parts::opencode_compaction_part_source()}))
     }
 
     pub fn add_tool_results(&mut self, id: &ConversationId, results: Vec<ToolResult>) {
@@ -124,6 +142,73 @@ impl ConversationManager {
             }
         }
     }
+}
+
+fn build_compaction_summary(messages: &[Message]) -> String {
+    let goal = messages.iter().find(|m| m.role == MessageRole::User).map(|m| one_line(&m.content, 180)).filter(|s| !s.is_empty()).unwrap_or_else(|| "(none)".to_string());
+    let done = messages.iter().filter(|m| matches!(m.role, MessageRole::Assistant | MessageRole::Tool)).filter_map(done_bullet).take(6).collect::<Vec<_>>();
+    let blocked = messages.iter().filter_map(blocker_bullet).take(4).collect::<Vec<_>>();
+    let files = messages.iter().flat_map(relevant_files).take(8).collect::<Vec<_>>();
+    format!(
+        "## Goal\n- {}\n\n## Constraints & Preferences\n- Preserve exact paths, commands, errors, and user constraints when known.\n- Keep recent conversation tail outside the summary so the next turn can continue without stale replay.\n\n## Progress\n### Done\n{}\n\n### In Progress\n- Continue from the preserved recent tail.\n\n### Blocked\n{}\n\n## Key Decisions\n- Compaction follows OpenCode's head/recent split and structured Markdown summary shape from `packages/core/src/session/compaction.ts`.\n\n## Next Steps\n- Use `compaction_recent` as the immediate tail and this summary as the anchored context.\n\n## Critical Context\n- Compaction is deterministic in Forge for now; an LLM-backed summary stream remains a future parity step.\n\n## Relevant Files\n{}",
+        goal,
+        bullet_list(done),
+        bullet_list(blocked),
+        bullet_list(files),
+    )
+}
+
+fn serialize_message_for_compaction(message: &Message) -> String {
+    let label = match message.role { MessageRole::User => "[User]", MessageRole::Assistant => "[Assistant]", MessageRole::Tool => "[Tool result]", MessageRole::System => "[System update]" };
+    if message.content.trim().is_empty() && message.tool_results.is_none() { return String::new(); }
+    let mut parts = Vec::new();
+    if !message.content.trim().is_empty() { parts.push(format!("{}: {}", label, one_line(&message.content, 900))); }
+    if let Some(results) = &message.tool_results {
+        for result in results.iter().take(6) {
+            parts.push(format!("[Tool result]: {:?} success={} {}", result.kind, result.success, one_line(&result.output, 500)));
+        }
+    }
+    parts.join("\n")
+}
+
+fn done_bullet(message: &Message) -> Option<String> {
+    match message.role {
+        MessageRole::Assistant if !message.content.trim().is_empty() => Some(format!("- {}", one_line(&message.content, 180))),
+        MessageRole::Tool => message.tool_results.as_ref().and_then(|results| results.iter().find(|r| r.success)).map(|r| format!("- Tool {:?} completed: {}", r.kind, one_line(&r.output, 160))),
+        _ => None,
+    }
+}
+
+fn blocker_bullet(message: &Message) -> Option<String> {
+    if message.content.to_ascii_lowercase().contains("provider error") { return Some(format!("- {}", one_line(&message.content, 180))); }
+    message.tool_results.as_ref()?.iter().find(|r| !r.success).map(|r| format!("- Tool {:?} failed: {}", r.kind, one_line(r.error.as_deref().unwrap_or(&r.output), 180)))
+}
+
+fn relevant_files(message: &Message) -> Vec<String> {
+    let mut out = Vec::new();
+    for key in ["file_parts", "patch_parts"] {
+        if let Some(values) = message.metadata.get(key).and_then(serde_json::Value::as_array) {
+            for value in values {
+                if let Some(path) = value.get("filename").or_else(|| value.get("path")).and_then(serde_json::Value::as_str) {
+                    out.push(format!("- `{}`: referenced by {}", path, key));
+                }
+                if let Some(files) = value.get("files").and_then(serde_json::Value::as_array) {
+                    for file in files { if let Some(path) = file.as_str() { out.push(format!("- `{}`: patch target", path)); } }
+                }
+            }
+        }
+    }
+    out.sort(); out.dedup(); out
+}
+
+fn bullet_list(items: Vec<String>) -> String {
+    if items.is_empty() { "- (none)".to_string() } else { items.join("\n") }
+}
+
+fn one_line(value: &str, limit: usize) -> String {
+    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() <= limit { return compact; }
+    format!("{}…", compact.chars().take(limit.saturating_sub(1)).collect::<String>())
 }
 
 fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serde_json::Value> {
