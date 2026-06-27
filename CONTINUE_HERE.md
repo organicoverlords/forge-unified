@@ -15,62 +15,51 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Selected because it is the newest active open PR and latest meaningful app work.
-- Latest fully green baseline before this fix: `86fca8e036937f7531ddbf3d09df299119adcc81`.
-- Latest proven browser proof before this fix: Live WebUI Feature Sprint run `28293770706`, artifact `7925827340`.
-- Current branch HEAD after this fix needs Actions before calling it green.
+- Latest fully green baseline before this slice: `e562d783538b884b16558b8a62c4e495423f02b3`.
+- Latest proven browser proof before this slice: Live WebUI Feature Sprint run `28295482726`, artifact `7926326967`.
+- Current branch HEAD after this slice needs Actions before calling it green.
 
-## Latest fix
+## Latest source-backed slice
 
-The formatter-hook implementation was source-backed and compile/test clean, but the proof script failed because it checked file-tool conversation metadata from a follow-up `/api/conversations/{id}` response after the WebUI stream. The failure artifact showed the actual natural-language SSE stream already contained formatter/BOM metadata and the final streamed conversation event, while the later GET response was stale.
-
-The first extraction patch still failed because it assumed `data:` immediately followed `event: conversation`. The current fix parses full SSE blocks and tolerates standard SSE fields between `event:` and `data:` before selecting the final streamed conversation payload.
-
-Fix copied/retained proof behavior:
-
-- The proof now extracts the final `event: conversation` payload from the WebUI SSE stream after the file-tool prompt using block-aware SSE parsing.
-- The proof still uses a natural-language WebUI prompt.
-- The proof still requires formatter metadata, BOM metadata, mutable ToolPart updates, FilePart attachments, watcher/LSP/event-bus receipts, compaction proof, and screenshots.
-- Failed workflows were not rerun blindly; the deterministic proof extraction issue was patched first.
-
-Forge files touched in this fix:
-
-- `scripts/smoke/live-webui-feature-sprint.sh`
-- `CONTINUE_HERE.md`
-
-## Latest OpenCode-source slice retained
-
-Forge copies the post-write `Format.file(filepath)` hook shape used by OpenCode write/edit tools.
+Forge now makes OpenCode LSP diagnostics visible in the activity rail instead of hiding them inside raw event JSON.
 
 Upstream source paths:
 
-- `packages/opencode/src/format/index.ts`
-- `packages/opencode/src/tool/write.ts`
-- `packages/opencode/src/tool/edit.ts`
-- `packages/core/src/file-mutation.ts`
+- `packages/opencode/src/lsp/diagnostic.ts`
+- `packages/opencode/src/lsp/lsp.ts`
+- `packages/opencode/src/event-v2-bridge.ts`
+- `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`
 
 Copied behavior:
 
-- OpenCode write/edit call `format.file(filepath)` after writing the file.
-- If formatting ran, OpenCode syncs the desired BOM back to the file before publishing watcher/LSP work.
-- OpenCode formatter matching is extension-based and returns false when no formatter is available.
-- OpenCode contains formatter spawn/nonzero failures rather than failing the whole edit path.
-- Forge has a contained formatter hook for `file_write` and `file_edit`.
-- `.rs` files use `rustfmt` when available.
-- ToolResult metadata records `formatter_status`, `opencode_formatter_source`, formatter command/name/extension matching, status, exit code when present, and BOM resync state.
-- The natural WebUI file-tool proof uses a temporary `.rs` file and requires formatter markers in the SSE stream and streamed conversation JSON.
+- OpenCode `Diagnostic.report` maps severity numbers to `ERROR`, `WARN`, `INFO`, and `HINT`.
+- OpenCode diagnostic reports use one-based line/column formatting and diagnostics file blocks.
+- OpenCode caps rendered errors at `MAX_PER_FILE = 20`.
+- OpenCode LSP exposes status/touch/diagnostics as a service contract.
+- Forge now presents that copied envelope in the event rail with diagnostic totals, diagnostic file count, severity chips, per-event severity chips, and report-block text.
+- The live WebUI proof now requires `opencode-lsp-diagnostics-panel`, `diagnostic files`, `diagnostic report_block`, `severity_counts`, and the upstream LSP source paths in the captured event rail DOM/screenshot proof.
+
+Forge files touched:
+
+- `crates/webui/src/change_events.rs`
+- `scripts/smoke/live-webui-feature-sprint.sh`
+- `OPENCODE-PARITY.md`
+- `PROJECT_STATE.md`
+- `CONTINUE_HERE.md`
 
 Still incomplete / do not overclaim:
 
 - Current HEAD is not yet workflow/browser-proof green.
+- Live LSP server/client diagnostics are not implemented yet; this slice improves source-backed visibility of the copied diagnostic envelope.
 - Full OpenCode formatter catalog/config/runtime remains partial; only rustfmt `.rs` path is wired.
-- Live LSP server/client diagnostics are not implemented yet.
-- OpenCode's database-backed part IDs are not fully copied.
+- OpenCode database-backed part IDs are not fully copied.
 - `providerExecuted` delta updates are still partial.
 - Live OS filesystem watcher integration remains receipt-backed.
 - Full NIM-backed streamed compaction remains incomplete.
 
 ## Previous proven slices
 
+- `e562d783538b884b16558b8a62c4e495423f02b3` — formatter proof path repaired; CI `28295482729`, Build Proof `28295482721`, and Live WebUI Feature Sprint `28295482726` were green with proof artifact `7926326967`.
 - `86fca8e036937f7531ddbf3d09df299119adcc81` — formatter hook metadata and contained formatter execution; CI `28293770704`, Build Proof `28293770703`, and Live WebUI Feature Sprint `28293770706` were green with proof artifact `7925827340`.
 - `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation; CI `28293331161`, Build Proof `28293331148`, and Live WebUI Feature Sprint `28293331147` were green.
 - `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape; CI `28292308520`, Build Proof `28292308511`, and Live WebUI Feature Sprint `28292308525` were green with proof artifact `7925391830`.
@@ -84,8 +73,8 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current robust SSE proof parser HEAD.
+1. Check Actions for the current LSP diagnostics rail HEAD.
 2. If Rust compile/test fails, inspect the exact job logs; do not rerun deterministic failures blindly.
-3. If WebUI smoke fails, inspect the proof artifact and `server.log` first.
-4. Inspect proof artifact screenshots and DOM after green.
-5. Continue toward full formatter catalog/config, real LSP server/client diagnostics, OS-backed watcher/file edited events, or NIM-backed compaction.
+3. If WebUI smoke fails, inspect the proof artifact, event rail DOM, and `server.log` first.
+4. Inspect proof artifact screenshots after green.
+5. Continue toward live LSP server/client diagnostics, full formatter catalog/config, OS-backed watcher/file edited events, or NIM-backed compaction.
