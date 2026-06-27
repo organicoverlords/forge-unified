@@ -9,10 +9,9 @@ use axum::{
 use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest, ToolResult};
 use futures_util::{stream, Stream};
 use serde::Deserialize;
-use std::{collections::VecDeque, convert::Infallible, pin::Pin};
+use std::{collections::VecDeque, convert::Infallible};
 
 type EventBuffer = VecDeque<(String, serde_json::Value)>;
-pub type ChatSseStream = Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
 
@@ -23,7 +22,7 @@ pub async fn chat_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<ChatStreamRequest>,
-) -> Result<Sse<ChatSseStream>, axum::http::StatusCode> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, axum::http::StatusCode> {
     let conversation_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
     let message = req.message;
     let mut events = EventBuffer::new();
@@ -97,10 +96,9 @@ pub async fn chat_stream(
 
 fn enqueue(events: &mut EventBuffer, name: &str, data: serde_json::Value) { events.push_back((name.to_string(), data)); }
 
-fn sse_response(events: EventBuffer) -> Sse<ChatSseStream> {
+fn sse_response(events: EventBuffer) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let encoded = events.into_iter().map(|(name, data)| event(&name, data)).collect::<Vec<_>>();
-    let stream: ChatSseStream = Box::pin(stream::iter(encoded));
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    Sse::new(stream::iter(encoded)).keep_alive(KeepAlive::default())
 }
 
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
