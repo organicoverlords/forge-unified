@@ -13,10 +13,14 @@ CONVERSATION_JSON="$PROOF_DIR/live-model-conversation.json"
 MODEL_STREAM="$PROOF_DIR/live-model-stream.sse"
 TOOL_CONVERSATION_JSON="$PROOF_DIR/tool-lifecycle-conversation.json"
 TOOL_STREAM="$PROOF_DIR/tool-lifecycle-stream.sse"
+BENCH_CONVERSATION_JSON="$PROOF_DIR/full-benchmark-conversation.json"
+BENCH_STREAM="$PROOF_DIR/full-benchmark-stream.sse"
 PROMPT_FILE="$PROOF_DIR/live-model-prompt.txt"
 TOOL_PROMPT_FILE="$PROOF_DIR/tool-lifecycle-prompt.txt"
+BENCH_PROMPT_FILE="scripts/smoke/full-agentic-benchmark-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/live-model-request.json"
 TOOL_REQUEST_JSON="$PROOF_DIR/tool-lifecycle-request.json"
+BENCH_REQUEST_JSON="$PROOF_DIR/full-benchmark-request.json"
 STEP_LOG="$PROOF_DIR/live-proof-steps.log"
 : > "$STEP_LOG"
 
@@ -37,11 +41,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
-grep -Fq "Forge Unified" "$PROOF_DIR/index.html"
-grep -Fq "provider-model-visible" "$PROOF_DIR/index.html"
-grep -Fq "live-browser-model-proof" "$PROOF_DIR/index.html"
-grep -Fq "opencode-tool-lifecycle-rail" "$PROOF_DIR/index.html"
-grep -Fq "providerExecuted-visible" "$PROOF_DIR/index.html"
+for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
 
 step "create NIM conversation"
 CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"live NIM browser model proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -65,12 +65,7 @@ if grep -Fq 'event: provider-error' "$MODEL_STREAM"; then
   tail -n 160 "$MODEL_STREAM" >&2 || true
   exit 9
 fi
-grep -Fq 'event: run-finish' "$MODEL_STREAM"
-grep -Fq 'event: text-delta' "$MODEL_STREAM"
-grep -Fq '"provider":"nvidia_nim"' "$MODEL_STREAM"
-grep -Fq '"model":"' "$MODEL_STREAM"
-grep -Fq 'LIVE_NIM_BROWSER_PROOF' "$MODEL_STREAM"
-
+for marker in 'event: run-finish' 'event: text-delta' '"provider":"nvidia_nim"' '"model":"' 'LIVE_NIM_BROWSER_PROOF'; do grep -Fq "$marker" "$MODEL_STREAM"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$CONVERSATION_JSON" >/dev/null
 MODEL_ID="$(jq -r '.model' "$CONVERSATION_JSON")"
@@ -91,7 +86,40 @@ for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_to
 step "browser proof tool lifecycle"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
 for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/tool-lifecycle-browser-proof.json"
+cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 
-echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID model=$MODEL_ID screenshot=$PROOF_DIR/webui.png event_rail=$PROOF_DIR/event-rail.png" > "$PROOF_DIR/live-proof-status.txt"
+step "create full benchmark conversation"
+BENCH_CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"Full six-phase agentic benchmark prompt"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+test -n "$BENCH_CONV_ID"
+jq -Rs '{message: ., max_rounds: 10}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
+
+timeout 480s curl -fsS --connect-timeout 2 --max-time 470 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
+if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Fq 'local_shortcut' "$BENCH_STREAM"; then
+  echo "::error::full benchmark used local/scripted shortcut" >&2
+  tail -n 200 "$BENCH_STREAM" >&2 || true
+  exit 12
+fi
+if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
+  echo "::error::provider error during full benchmark prompt" >&2
+  tail -n 200 "$BENCH_STREAM" >&2 || true
+  exit 13
+fi
+for marker in 'event: run-finish' '"provider":"nvidia_nim"' '"model":"' 'event: tool-call' 'event: tool-result'; do grep -Fq "$marker" "$BENCH_STREAM"; done
+if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command' "$BENCH_STREAM"; then
+  echo "::error::full benchmark did not use repo inspection tools" >&2
+  tail -n 200 "$BENCH_STREAM" >&2 || true
+  exit 14
+fi
+curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
+jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$BENCH_CONVERSATION_JSON" >/dev/null
+
+step "browser proof full benchmark"
+timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
+for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'Founder report'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
+cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
+
+echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png" > "$PROOF_DIR/live-proof-status.txt"
 step "done"
-echo "LIVE model-backed browser proof plus visible ToolPart lifecycle proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID model=$MODEL_ID"
+echo "LIVE model-backed browser proof, visible ToolPart proof, and full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
