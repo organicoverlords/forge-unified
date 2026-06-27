@@ -76,6 +76,7 @@ wait_for_webui() {
   grep -q '"event_bus":"change_bus"' "$EVENT_BUS_JSON"
   curl_with_retry "$BASE/api/events/status" "$EVENT_STATUS_JSON"
   grep -q '"bridge_shape":"opencode_event_v2_bridge_status"' "$EVENT_STATUS_JSON"
+  for marker in "watcher_backend" "watcher_native_binding" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "contained_event_bridge_without_native_subscription" "packages/core/src/filesystem/watcher.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
 }
 
 wait_for_webui
@@ -115,7 +116,7 @@ curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
 for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "file-tool-event-proof.txt" "opencode.apply_patch" "opencode.file_tool" "latest_files" "by_type" "by_source"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl_with_retry "$BASE/api/events/status" "$EVENT_STATUS_JSON"
-for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "latest_files" "packages/opencode/src/tool/write.ts" "packages/opencode/src/tool/edit.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
+for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "latest_files" "watcher_backend" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "contained_event_bridge_without_native_subscription" "packages/core/src/filesystem/watcher.ts" "packages/opencode/src/tool/write.ts" "packages/opencode/src/tool/edit.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' > "$PROOF_DIR/compaction-response.json"
