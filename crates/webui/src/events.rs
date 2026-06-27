@@ -11,7 +11,8 @@ use futures_util::stream;
 use serde::Deserialize;
 use std::{collections::VecDeque, convert::Infallible};
 
-type ChatSseStream = stream::Iter<std::collections::vec_deque::IntoIter<Result<Event, Infallible>>>;
+type EventBuffer = VecDeque<(String, serde_json::Value)>;
+type ChatSseStream = stream::Iter<std::vec::IntoIter<Result<Event, Infallible>>>;
 
 const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-proof-note.txt";
 
@@ -25,27 +26,27 @@ pub async fn chat_stream(
 ) -> Result<Sse<ChatSseStream>, axum::http::StatusCode> {
     let conversation_id = ConversationId(id.parse().map_err(|_| axum::http::StatusCode::BAD_REQUEST)?);
     let message = req.message;
-    let mut events = VecDeque::new();
-    events.push_back(event("run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"})));
+    let mut events = EventBuffer::new();
+    enqueue(&mut events, "run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"}));
 
     if should_run_natural_note_action(&message) {
         let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
         append_natural_note_action(&state, &mut events, &conversation_id).await;
         if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
-            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+            enqueue(&mut events, "conversation", serde_json::to_value(conv).unwrap_or_default());
         }
-        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "natural file creation", "provider": "local"})));
-        return Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()));
+        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "natural file creation", "provider": "local"}));
+        return Ok(sse_response(events));
     }
 
     if should_run_repo_inspection_action(&message) {
         let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
         append_repo_inspection_action(&state, &mut events, &conversation_id).await;
         if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
-            events.push_back(event("conversation", serde_json::to_value(conv).unwrap_or_default()));
+            enqueue(&mut events, "conversation", serde_json::to_value(conv).unwrap_or_default());
         }
-        events.push_back(event("run-finish", serde_json::json!({"status": "completed", "task": "repository inspection", "provider": "local"})));
-        return Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()));
+        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "repository inspection", "provider": "local"}));
+        return Ok(sse_response(events));
     }
 
     match state.agent.chat(&conversation_id, message.clone()).await {
@@ -62,7 +63,7 @@ pub async fn chat_stream(
                             if let Some(results) = &msg.tool_results {
                                 for result in results {
                                     let event_name = if result.success { "tool-result" } else { "tool-error" };
-                                    events.push_back(event(event_name, serde_json::to_value(result).unwrap_or_default()));
+                                    enqueue(&mut events, event_name, serde_json::to_value(result).unwrap_or_default());
                                     append_file_change_events(&mut events, result);
                                 }
                             }
@@ -78,41 +79,43 @@ pub async fn chat_stream(
                 append_repo_preflight(&state, &mut events, &conversation_id, &message).await;
             }
             if let Some(latest) = state.agent.get_conversation(&conversation_id).await {
-                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
+                enqueue(&mut events, "conversation", serde_json::to_value(latest).unwrap_or_default());
             }
-            events.push_back(event("run-finish", serde_json::to_value(record).unwrap_or_default()));
+            enqueue(&mut events, "run-finish", serde_json::to_value(record).unwrap_or_default());
         }
         Err(err) => {
-            events.push_back(event("provider-error", serde_json::json!({"message": err.to_string(), "retryable": true})));
+            enqueue(&mut events, "provider-error", serde_json::json!({"message": err.to_string(), "retryable": true}));
             if should_run_local_preflight(&message) { append_repo_preflight(&state, &mut events, &conversation_id, &message).await; }
             if let Some(latest) = state.agent.get_conversation(&conversation_id).await {
-                events.push_back(event("conversation", serde_json::to_value(latest).unwrap_or_default()));
+                enqueue(&mut events, "conversation", serde_json::to_value(latest).unwrap_or_default());
             }
         }
     }
 
-    Ok(Sse::new(stream::iter(events)).keep_alive(KeepAlive::default()))
+    Ok(sse_response(events))
+}
+
+fn enqueue(events: &mut EventBuffer, name: &str, data: serde_json::Value) { events.push_back((name.to_string(), data)); }
+
+fn sse_response(events: EventBuffer) -> Sse<ChatSseStream> {
+    let encoded = events.into_iter().map(|(name, data)| event(&name, data)).collect::<Vec<_>>();
+    Sse::new(stream::iter(encoded)).keep_alive(KeepAlive::default())
 }
 
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
 
-fn append_tool_call_lifecycle(events: &mut VecDeque<Result<Event, Infallible>>, call: &ToolRequest) {
+fn append_tool_call_lifecycle(events: &mut EventBuffer, call: &ToolRequest) {
     let id = call.id.0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id.clone(), "name": name})));
-    events.push_back(event("tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()})));
-    events.push_back(event("tool-input-end", serde_json::json!({"id": id.clone(), "name": name})));
-    events.push_back(event("tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input})));
+    enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
+    enqueue(events, "tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()}));
+    enqueue(events, "tool-input-end", serde_json::json!({"id": id.clone(), "name": name}));
+    enqueue(events, "tool-call", serde_json::json!({"id": id, "name": name, "kind": name, "input": input}));
 }
 
-async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId) {
-    let req = ToolRequest {
-        id: ToolCallId(uuid::Uuid::new_v4()),
-        kind: ToolKind::ApplyPatch,
-        args: serde_json::json!({"patchText": natural_note_patch()}),
-        parallel_group: None,
-    };
+async fn append_natural_note_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
+    let req = ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch, args: serde_json::json!({"patchText": natural_note_patch()}), parallel_group: None };
     let result = append_tool_events(state, events, conversation_id, "apply_patch", req).await;
     let pending = result.as_ref().and_then(|r| r.metadata.get("pending_edit_approval")).is_some();
     let summary = if pending {
@@ -124,7 +127,7 @@ async fn append_natural_note_action(state: &AppState, events: &mut VecDeque<Resu
     stream_summary(events, "natural-summary", &summary);
 }
 
-async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId) {
+async fn append_repo_inspection_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
     let requests = vec![
         ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
         ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
@@ -135,44 +138,40 @@ async fn append_repo_inspection_action(state: &AppState, events: &mut VecDeque<R
     stream_summary(events, "repo-inspection-summary", &summary);
 }
 
-fn stream_summary(events: &mut VecDeque<Result<Event, Infallible>>, id: &str, summary: &str) {
-    events.push_back(event("text-start", serde_json::json!({"id": id})));
-    for chunk in chunk_text(summary, 32) { events.push_back(event("text-delta", serde_json::json!({"id": id, "text": chunk}))); }
-    events.push_back(event("text-end", serde_json::json!({"id": id})));
+fn stream_summary(events: &mut EventBuffer, id: &str, summary: &str) {
+    enqueue(events, "text-start", serde_json::json!({"id": id}));
+    for chunk in chunk_text(summary, 32) { enqueue(events, "text-delta", serde_json::json!({"id": id, "text": chunk})); }
+    enqueue(events, "text-end", serde_json::json!({"id": id}));
 }
 
-async fn append_repo_preflight(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId, message: &str) {
+async fn append_repo_preflight(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId, message: &str) {
     let mut requests = vec![
         ("repo_info", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::RepoInfo, args: serde_json::json!({}), parallel_group: None }),
         ("file_list", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileList, args: serde_json::json!({ "path": "." }), parallel_group: None }),
     ];
     if should_run_apply_patch_card_proof(message) {
-        requests.push(("apply_patch", ToolRequest {
-            id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch,
-            args: serde_json::json!({"patchText": apply_patch_card_proof_patch()}),
-            parallel_group: None,
-        }));
+        requests.push(("apply_patch", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::ApplyPatch, args: serde_json::json!({"patchText": apply_patch_card_proof_patch()}), parallel_group: None }));
     }
     for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
 }
 
-async fn append_tool_events(state: &AppState, events: &mut VecDeque<Result<Event, Infallible>>, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
+async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
     let id = req.id.0.to_string();
     let input = req.args.clone();
-    events.push_back(event("tool-input-start", serde_json::json!({"id": id.clone(), "name": name})));
-    events.push_back(event("tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()})));
-    events.push_back(event("tool-input-end", serde_json::json!({"id": id.clone(), "name": name})));
-    events.push_back(event("tool-call", serde_json::json!({"id": id.clone(), "name": name, "kind": name, "input": input})));
+    enqueue(events, "tool-input-start", serde_json::json!({"id": id.clone(), "name": name}));
+    enqueue(events, "tool-input-delta", serde_json::json!({"id": id.clone(), "name": name, "text": input.to_string()}));
+    enqueue(events, "tool-input-end", serde_json::json!({"id": id.clone(), "name": name}));
+    enqueue(events, "tool-call", serde_json::json!({"id": id.clone(), "name": name, "kind": name, "input": input}));
     match state.agent.execute_tool(req).await {
         Ok(mut result) => {
             present_tool_result(name, &mut result);
-            events.push_back(event("tool-result", serde_json::to_value(&result).unwrap_or_default()));
+            enqueue(events, "tool-result", serde_json::to_value(&result).unwrap_or_default());
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result.clone()]).await;
             Some(result)
         }
         Err(tool_err) => {
-            events.push_back(event("tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()})));
+            enqueue(events, "tool-error", serde_json::json!({"id": id, "name": name, "message": tool_err.to_string()}));
             None
         }
     }
@@ -220,7 +219,7 @@ fn compact_repo_info_output(output: &str) -> Option<String> {
     Some(format!("Repository status:\n- Remote: {remote}\n- Branch: {branch}\n- Head: {head}\n- Working tree: {status}"))
 }
 
-fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, result: &ToolResult) {
+fn append_file_change_events(events: &mut EventBuffer, result: &ToolResult) {
     let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else { return; };
     for file_event in file_events {
         let mut payload = file_event.clone();
@@ -228,7 +227,7 @@ fn append_file_change_events(events: &mut VecDeque<Result<Event, Infallible>>, r
             obj.insert("tool_id".to_string(), serde_json::json!(result.id.0.to_string()));
             obj.insert("tool_kind".to_string(), serde_json::json!(tool_name(&result.kind)));
         }
-        events.push_back(event("file-change", payload));
+        enqueue(events, "file-change", payload);
     }
 }
 
