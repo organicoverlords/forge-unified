@@ -67,7 +67,7 @@ curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' 
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural event bus proof" "event_bus_receipts" "filesystem.edited" "watcher.updated" "OpenCode ToolPart metadata" "OpenCode PatchPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural event bus proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "event_bus_receipts" "filesystem.edited" "watcher.updated" "OpenCode ToolPart metadata" "OpenCode PatchPart"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
 curl -fsS -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
@@ -75,4 +75,4 @@ jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
 for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "filesystem.edited" "watcher.updated" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
-echo "LIVE WebUI event rail proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
+echo "LIVE WebUI main activity rail proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG"
