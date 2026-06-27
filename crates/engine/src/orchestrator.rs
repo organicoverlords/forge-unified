@@ -1,6 +1,6 @@
 //! Run orchestrator.
 
-use crate::change_bus::ChangeEvent;
+use crate::change_bus::{ChangeBusStatus, ChangeEvent};
 use crate::config::Config;
 use crate::conversation::ConversationManager;
 use crate::provider::ChatRequest;
@@ -103,6 +103,7 @@ impl Orchestrator {
     pub async fn execute_tool(&self, request: ToolRequest) -> Result<ToolResult> { self.tool_executor.execute(request).await }
     pub fn publish_change_event(&self, event_type: &str, source: &str, payload: serde_json::Value) -> ChangeEvent { self.tool_executor.change_bus().publish(event_type, source, payload) }
     pub fn recent_change_events(&self) -> Vec<ChangeEvent> { self.tool_executor.recent_change_events() }
+    pub fn change_bus_status(&self) -> ChangeBusStatus { self.tool_executor.change_bus_status() }
     pub fn subscribe_change_events(&self) -> tokio::sync::broadcast::Receiver<ChangeEvent> { self.tool_executor.subscribe_change_events() }
 }
 
