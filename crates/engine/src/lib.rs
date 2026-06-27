@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod benchmark;
+pub mod change_bus;
 pub mod config;
 pub mod conversation;
 pub mod model_caps;
@@ -20,6 +21,7 @@ pub mod types;
 
 pub use agent::*;
 pub use benchmark::*;
+pub use change_bus::*;
 pub use config::*;
 pub use conversation::*;
 pub use model_caps::*;
