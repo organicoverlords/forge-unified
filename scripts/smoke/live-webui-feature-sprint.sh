@@ -39,6 +39,7 @@ curl -fsS "$BASE/" | grep -q "Forge Unified"
 curl -fsS "$BASE/api/health" | grep -q '"status":"ok"'
 curl -fsS "$BASE/" | grep -q "file-change"
 curl -fsS "$BASE/" | grep -q "file-card"
+curl -fsS "$BASE/" | grep -q "OpenCode ToolPart cards"
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
@@ -139,5 +140,7 @@ grep -q "repo_info" "$BROWSER_PROOF_JSON"
 grep -q "file_list" "$BROWSER_PROOF_JSON"
 grep -q "Repository status" "$BROWSER_PROOF_JSON"
 grep -q "Top-level repository entries" "$BROWSER_PROOF_JSON"
+grep -q "OpenCode ToolPart metadata" "$BROWSER_PROOF_JSON"
+grep -q "completed" "$BROWSER_PROOF_JSON"
 
-echo "LIVE WebUI natural file creation + compact repo inspection + permission metadata + durable tool-parts proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
+echo "LIVE WebUI natural file creation + compact repo inspection + visible durable OpenCode ToolPart proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG"
