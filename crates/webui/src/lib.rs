@@ -18,8 +18,10 @@ async fn index() -> Html<&'static str> { Html(chat_ui::CHAT_HTML) }
 pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index))
+        .route("/events", get(change_events::events_page))
         .route("/api/health", get(routes::health))
         .route("/api/events/recent", get(change_events::recent_events))
+        .route("/api/events/stream", get(change_events::stream_events))
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
@@ -42,7 +44,6 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("Forge WebUI listening on {}", addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
