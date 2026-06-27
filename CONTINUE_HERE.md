@@ -17,9 +17,9 @@ Updated: 2026-06-27
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
 - Default branch: `master`
-- Latest fully green baseline: `a0efdb6372cd92ac6b579bd152f009bb3debefbd` for OpenCode `ReasoningPart`.
-- Latest source/proof code head before this docs sync: `bd118d718e01469445fafaf266527b97511bbba5` for OpenCode `CompactionPart`.
-- The CompactionPart docs-updated HEAD after this sync needs its own Actions check before a fresh green claim.
+- Latest fully green baseline: `a83ddac8542264cf69bd18988cd6e7dc6f518d95` for real OpenCode-style edit approval gating.
+- Latest Live WebUI proof artifact: `live-webui-feature-sprint-proof-a83ddac.zip`.
+- The docs-updated HEAD after this sync needs its own Actions check before a fresh green claim.
 
 ## Latest proven green baselines
 
@@ -29,62 +29,57 @@ Updated: 2026-06-27
 - `e160fa4bf9326c26d5731e9fb474574a4d068b2f` — compact repo-inspection presentation.
 - `b7b0e7eb88570900ad8e3252d8190004342678fd` — OpenCode `SnapshotPart` persistence.
 - `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` — OpenCode `FilePart` persistence.
-- `a0efdb6372cd92ac6b579bd152f009bb3debefbd` — OpenCode `ReasoningPart`; CI, Build Proof, and Live WebUI Feature Sprint all passed.
+- `a0efdb6372cd92ac6b579bd152f009bb3debefbd` — OpenCode `ReasoningPart` persistence.
+- `84e459ef3bd4d4f88636239c76136617a98b68e3` — OpenCode `CompactionPart` persistence.
+- `a83ddac8542264cf69bd18988cd6e7dc6f518d95` — real edit approval-before-write gate for `apply_patch`; CI, Build Proof, and Live WebUI Feature Sprint all passed.
 
 ## Latest OpenCode-source slices
 
-### Session part stack
+### Real edit approval gate
 
 Upstream source studied:
+
+- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
+
+Copied behavior:
+
+- OpenCode calls `ctx.ask({ permission: "edit", patterns, always: ["*"], metadata: { filepath, diff, files } })` before file mutation.
+- Forge no longer applies `apply_patch` immediately by default.
+- First `apply_patch` call returns a durable pending edit approval with:
+  - `permission_request`
+  - `pending_edit_approval`
+  - `approval_state.status=pending`
+  - `applied=false`
+- The file is not written before approval.
+- `POST /api/conversations/:id/approvals/:approval_id/approve` re-runs the same patch with `approved=true`.
+- Approved result records:
+  - `approval_state.status=approved`
+  - `approved_via_api=true`
+  - `applied=true`
+  - file events
+  - FilePart and PatchPart only after approval.
+- WebUI renders an `OpenCode edit permission request` card with an `Approve edit` control and `Edit approval metadata`.
+- Live proof asserts the proof note does not exist before approval and does exist after approval.
+
+### Session part stack
+
+Upstream sources studied:
 
 - `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
 - `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/compaction.ts`
 
-Forge behavior present and proofed through `a0efdb6`:
+Forge behavior present and proofed:
 
 - `TextPart` for user and assistant public text.
 - `ReasoningPart` for safe public progress summaries only; never private chain-of-thought.
 - `SnapshotPart` for explicit snapshot saves.
-- `FilePart` for files changed by `apply_patch`, including `workspace://...` URLs.
+- `CompactionPart` for durable compaction request markers.
+- `FilePart` for files changed by approved `apply_patch`, including `workspace://...` URLs.
 - `ToolPart` running/completed/error metadata cards.
-- `PatchPart` hashes and changed file lists for successful patches.
-
-New CompactionPart slice at source/proof code head `bd118d7`:
-
-- Adds OpenCode-shaped `CompactionPart` helper using upstream shape: `type`, `auto`, optional `overflow`, optional `tail_start_id`.
-- Adds `/api/conversations/:id/compact` to create a durable compaction request marker and optionally compact message history when `keep_last` is lower than current size.
-- WebUI renders `OpenCode CompactionPart` and collapsed `CompactionPart metadata`.
-- Live proof now requires `compaction_parts`, `"type":"compaction"`, `"identifier":"CompactionPart"`, `opencode_compaction_part_source`, and browser DOM proof.
-- This is not full OpenCode compaction parity yet: no LLM summary generation, replay, plugin transform, auto-continue, or overflow retry loop.
-
-### `apply_patch` mutation and file cards
-
-Upstream sources studied:
-
-- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/tool/apply_patch.ts`
-- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/patch/index.ts`
-- `anomalyco/opencode`, branch `dev`, `packages/opencode/src/session/processor.ts`
-- `anomalyco/opencode`, branch `dev`, `packages/schema/src/v1/session.ts`
-
-Forge behavior now present:
-
-- `apply_patch` accepts `patchText`, parses Begin/End patches, validates paths, mutates add/update/delete/move hunks, and returns human-readable `A/D/M` summaries.
-- Tool results preserve metadata and raw details while the WebUI shows file-change cards and compact human-readable output first.
-- Natural prompt proof works without marker prompts: `Please create a short proof note for this WebUI sprint.` creates a real file via `apply_patch`, persists the tool result, shows an `ADDED` file card, and gives a human summary.
-
-### Natural repo inspection
-
-- Normal prompt: `Please inspect this repository and summarize what you find.`
-- Forge runs real `repo_info` and `file_list` tools.
-- Visible output is compact:
-  - `Repository status:`
-  - `Top-level repository entries`
-- Raw JSON is preserved under metadata (`raw_output`) instead of being the main visible card.
-- Live WebUI proof requires this compact output in the SSE stream, persisted conversation JSON, and browser DOM/screenshot proof.
+- `PatchPart` hashes and changed file lists for approved patches.
 
 ## Still incomplete versus upstream OpenCode
 
-- Interactive edit approval is recorded as metadata but not actually gated by a permission prompt.
 - Watcher/file edited events are not yet published as a real event bus.
 - LSP touch/diagnostics collection is not yet implemented.
 - BOM preservation and formatter hooks are not yet equivalent.
@@ -105,12 +100,13 @@ Forge behavior now present:
 
 ## Current next target
 
-After the CompactionPart docs head is green, continue with one of these source-backed slices:
+After this docs head is green, continue with one of these source-backed slices:
 
-1. Real permission/edit approval flow for `apply_patch`, from `packages/opencode/src/tool/apply_patch.ts` and session approval handling.
-2. OpenCode `AgentPart` / subtask part behavior from `packages/schema/src/v1/session.ts`, only if the current task/subagent path is real enough to prove without faking.
-3. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
-4. Full OpenCode compaction process parity: LLM summary generation, overflow replay, and auto-continue.
+1. Watcher/file edited event bus and LSP diagnostics for approved patch changes.
+2. Full durable OpenCode `ToolPart` lifecycle parity.
+3. Full OpenCode compaction process parity beyond the request marker.
+4. OpenCode `AgentPart` / subtask behavior only if backed by a real Forge path.
+5. Visible retry/fallback receipts with `RetryPart` if a deterministic retry path exists.
 
 Do not add a broad invented workflow. Keep the natural browser proof style: normal user prompts, real tool execution, human summary, screenshot artifact.
 
