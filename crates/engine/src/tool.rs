@@ -62,7 +62,6 @@ impl ToolExecutor {
             ToolKind::GraphBuild => self.execute_graph_build(request).await,
             ToolKind::GraphQuery => self.execute_graph_query(request).await,
         };
-
         let duration = start.elapsed().as_millis() as u64;
         result.map(|mut r| {
             r.duration_ms = duration;
@@ -89,6 +88,7 @@ impl ToolExecutor {
         let Some(values) = result.metadata.get(key).and_then(Value::as_array) else { return Vec::new(); };
         let tool_id = result.id.clone().0.to_string();
         let tool_kind = format!("{:?}", &result.kind);
+        let source = result.metadata.get("opencode_event_publisher").and_then(Value::as_str).unwrap_or("opencode.apply_patch").to_string();
         values.iter().map(|value| {
             let mut payload = value.clone();
             if let Some(object) = payload.as_object_mut() {
@@ -96,7 +96,7 @@ impl ToolExecutor {
                 object.insert("tool_kind".to_string(), json!(tool_kind.clone()));
                 object.insert("metadata_key".to_string(), json!(key));
             }
-            self.change_bus.publish(event_type, "opencode.apply_patch", payload)
+            self.change_bus.publish(event_type, source.clone(), payload)
         }).collect()
     }
 
