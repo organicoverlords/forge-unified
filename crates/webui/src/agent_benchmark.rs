@@ -188,7 +188,7 @@ fn failed_step_names(results: &[ToolResult]) -> Vec<String> {
 fn confidence_score(results: &[ToolResult]) -> u32 {
     if results.is_empty() { return 0; }
     let success = results.iter().filter(|r| r.success).count() as u32;
-    ((success * 100) / results.len() as u32).min(96)
+    ((success * 100) / results.len() as u32).min(86)
 }
 
 fn final_report(results: &[ToolResult], phase_two_count: usize, confidence: u32) -> String {
