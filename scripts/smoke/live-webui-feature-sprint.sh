@@ -24,9 +24,10 @@ PROMPT_FILE="$PROOF_DIR/screenshot-prompt.txt"
 REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 FILE_TOOL_PATH="forge-proof/live-webui-feature-sprint/file-tool-event-proof.rs"
+NATIVE_WATCH_PATH="forge-proof/live-webui-feature-sprint/native-watch-proof.txt"
 mkdir -p "$PROOF_DIR"
 rm -rf .agent_test
-rm -f "$NOTE_PATH" "$FILE_TOOL_PATH" "$STREAM_OUT" "$FILE_TOOL_STREAM" "$BENCHMARK_STREAM" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
+rm -f "$NOTE_PATH" "$FILE_TOOL_PATH" "$NATIVE_WATCH_PATH" "$STREAM_OUT" "$FILE_TOOL_STREAM" "$BENCHMARK_STREAM" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
 
 cargo build --workspace
 RUST_BACKTRACE=1 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -71,19 +72,9 @@ latest_conversation_from_sse() {
   awk '
     BEGIN { event = ""; data = "" }
     /^event: / { event = substr($0, 8); next }
-    /^data: / {
-      payload = substr($0, 7)
-      if (data == "") data = payload; else data = data "\n" payload
-      next
-    }
-    /^$/ {
-      if (event == "conversation" && data != "") print data
-      event = ""; data = ""
-      next
-    }
-    END {
-      if (event == "conversation" && data != "") print data
-    }
+    /^data: / { payload = substr($0, 7); if (data == "") data = payload; else data = data "\n" payload; next }
+    /^$/ { if (event == "conversation" && data != "") print data; event = ""; data = ""; next }
+    END { if (event == "conversation" && data != "") print data }
   ' "$sse_file" | tail -n 1 > "$out_file"
   jq -e '.messages | length >= 1' "$out_file" >/dev/null
 }
@@ -101,10 +92,30 @@ wait_for_webui() {
   grep -q '"event_bus":"change_bus"' "$EVENT_BUS_JSON"
   curl_with_retry "$BASE/api/events/status" "$EVENT_STATUS_JSON"
   grep -q '"bridge_shape":"opencode_event_v2_bridge_status"' "$EVENT_STATUS_JSON"
-  for marker in "watcher_backend" "watcher_native_binding" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "contained_event_bridge_without_native_subscription" "packages/core/src/filesystem/watcher.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
+  for marker in "watcher_backend" '"watcher_native_binding":true' '"native_filewatcher_active":true' "native_subscription_active" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "watcher_protected_paths" "opencode_native_watcher_source" "packages/core/src/filesystem/watcher.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
+}
+
+trigger_native_watcher_proof() {
+  echo "native watcher proof" > "$NATIVE_WATCH_PATH"
+  sleep 1
+  echo "native watcher proof update" >> "$NATIVE_WATCH_PATH"
+  sleep 1
+  rm -f "$NATIVE_WATCH_PATH"
+  for attempt in $(seq 1 30); do
+    curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
+    if grep -Fq "opencode.native_filewatcher" "$EVENT_BUS_JSON" && grep -Fq "native-watch-proof.txt" "$EVENT_BUS_JSON"; then
+      for marker in '"event_type":"watcher.updated"' "opencode.native_filewatcher" "native-watch-proof.txt" '"watcher_native_binding":true' '"native_filewatcher_active":true' "watcher_event" "packages/core/src/filesystem/watcher.ts"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+      return 0
+    fi
+    sleep 1
+  done
+  echo "::error::native watcher event was not observed" >&2
+  cat "$EVENT_BUS_JSON" >&2 || true
+  return 6
 }
 
 wait_for_webui
+trigger_native_watcher_proof
 
 CONV_ID="$(curl -fsS -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"natural mutable toolpart lifecycle proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$CONV_ID"
@@ -139,9 +150,9 @@ jq -e '[.messages[]?.metadata.mutable_tool_part_updates[]? | select(.before_stat
 
 curl_with_retry "$BASE/api/events/recent" "$EVENT_BUS_JSON"
 jq -e '.count >= 12 and .status.bridge_shape == "opencode_event_v2_bridge_status"' "$EVENT_BUS_JSON" >/dev/null
-for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "file-tool-event-proof.rs" "opencode.apply_patch" "opencode.file_tool" "severity_counts" "diagnostic_count" "max_per_file" "latest_files" "by_type" "by_source"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
+for marker in '"event_bus":"change_bus"' '"event_type":"filesystem.edited"' '"event_type":"watcher.updated"' '"event_type":"lsp.warmup.contained"' '"event_type":"lsp.diagnostics"' "natural-proof-note.txt" "file-tool-event-proof.rs" "opencode.apply_patch" "opencode.file_tool" "opencode.native_filewatcher" "native_filewatcher_active" "severity_counts" "diagnostic_count" "max_per_file" "latest_files" "by_type" "by_source"; do grep -Fq "$marker" "$EVENT_BUS_JSON"; done
 curl_with_retry "$BASE/api/events/status" "$EVENT_STATUS_JSON"
-for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "latest_files" "watcher_backend" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "contained_event_bridge_without_native_subscription" "packages/core/src/filesystem/watcher.ts" "packages/opencode/src/tool/write.ts" "packages/opencode/src/tool/edit.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
+for marker in "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.diagnostics" "latest_files" "watcher_backend" '"watcher_native_binding":true' '"native_filewatcher_active":true' "native_subscription_active" "watcher_subscribe_timeout_ms" "watcher_ignore_patterns" "watcher_protected_paths" "opencode_native_watcher_source" "packages/core/src/filesystem/watcher.ts" "packages/opencode/src/tool/write.ts" "packages/opencode/src/tool/edit.ts"; do grep -Fq "$marker" "$EVENT_STATUS_JSON"; done
 
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/snapshot" -H 'content-type: application/json' -d '{}' >/dev/null
 curl -fsS -X POST "$BASE/api/conversations/$CONV_ID/compact" -H 'content-type: application/json' -d '{"keep_last":2,"auto":false,"overflow":true}' > "$PROOF_DIR/compaction-response.json"
@@ -174,6 +185,6 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "diagnostic files" "diagnostic report_block" "severity_counts" "opencode-lsp-diagnostics-panel" "packages/opencode/src/lsp/diagnostic.ts" "packages/opencode/src/lsp/lsp.ts" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "diagnostic files" "diagnostic report_block" "severity_counts" "opencode-lsp-diagnostics-panel" "packages/opencode/src/lsp/diagnostic.ts" "packages/opencode/src/lsp/lsp.ts" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "native_filewatcher_active" "opencode.native_filewatcher" "native-watch-proof.txt" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
 echo "LIVE WebUI natural benchmark proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG status=$EVENT_STATUS_JSON benchmark=$BENCHMARK_STREAM"
