@@ -117,7 +117,10 @@ impl Orchestrator {
 
 fn build_system_prompt(user_message: &str) -> String {
     let lower = user_message.to_ascii_lowercase();
-    let self_build = lower.contains("build") || lower.contains("fix") || lower.contains("inspect") || lower.contains("patch") || lower.contains("webui");
-    let base = "You are Forge, an OpenCode-style coding agent. Use the available tools for repository work and keep final answers brief.";
-    if self_build { format!("{} For repository work, inspect first, run useful tools, then summarize what happened.", base) } else { base.to_string() }
+    let repo_work = ["repo", "repository", "inspect", "build", "fix", "patch", "webui", "test", "phase", "files", "git"]
+        .iter()
+        .any(|needle| lower.contains(needle));
+    let base = "You are Forge, an OpenCode-style coding agent. Use available tools for repository work, keep file changes low-risk, and keep final answers brief.";
+    if !repo_work { return base.to_string(); }
+    format!("{base} For repository tasks, call tools before answering. Inspect the repo first with repo_info, file_list, file_search, file_read, and bounded shell_command as needed. For multi-phase prompts, complete phases in order, verify file operations by reading or listing files, run a validation command when feasible, and then summarize what changed, tests run, risks, and confidence. Do not pretend to have inspected files or run commands without tool results.")
 }
