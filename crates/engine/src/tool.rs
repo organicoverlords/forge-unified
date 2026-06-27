@@ -1,10 +1,10 @@
 //! Tool execution system with parallel batch support.
 
 use crate::change_bus::{ChangeBus, ChangeBusStatus, ChangeEvent};
-use crate::types::{ToolKind, ToolRequest, ToolResult, ToolConfig};
+use crate::types::{ToolConfig, ToolKind, ToolRequest, ToolResult};
 use anyhow::Result;
-use std::time::Instant;
 use serde_json::{json, Value};
+use std::time::Instant;
 
 pub mod batch;
 pub mod browser;
@@ -106,16 +106,36 @@ impl ToolExecutor {
     }
 }
 
+fn schema(properties: serde_json::Value, required: &[&str], source: &str) -> serde_json::Value {
+    json!({"type":"object","properties":properties,"required":required,"opencode_source":source,"provider_visible":true})
+}
+
+fn tool(name: &str, description: &str, properties: serde_json::Value, required: &[&str], source: &str) -> ToolConfig {
+    ToolConfig { name: name.to_string(), description: format!("{description} OpenCode source: {source}"), parameters: schema(properties, required, source) }
+}
+
 pub fn tool_definitions() -> Vec<ToolConfig> {
     vec![
-        ToolConfig { name: "repo_info".to_string(), description: "Inspect repository identity, branch, remotes, dirty state, and workspace summary before changing files.".to_string(), parameters: json!({"type":"object","properties":{}}) },
-        ToolConfig { name: "file_list".to_string(), description: "List files under a workspace-relative directory with optional depth.".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":5}}}) },
-        ToolConfig { name: "file_glob".to_string(), description: "Find files by glob pattern under an optional workspace-relative directory.".to_string(), parameters: json!({"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string"}},"required":["pattern"]}) },
-        ToolConfig { name: "file_search".to_string(), description: "Search text in workspace files by literal pattern and optional file glob.".to_string(), parameters: json!({"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string"},"file_pattern":{"type":"string"}},"required":["pattern"]}) },
-        ToolConfig { name: "shell_command".to_string(), description: "Run a bounded shell command for repo inspection, validation, tests, or safe diagnostics.".to_string(), parameters: json!({"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1000,"maximum":180000}},"required":["command"]}) },
-        ToolConfig { name: "file_read".to_string(), description: "Read a workspace-relative UTF-8 file.".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}) },
-        ToolConfig { name: "file_write".to_string(), description: "Write content to a workspace-relative file.".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}) },
-        ToolConfig { name: "file_edit".to_string(), description: "Replace exact file text in a workspace-relative file.".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string"},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["path","old_string","new_string"]}) },
-        ToolConfig { name: "file_delete".to_string(), description: "Remove a workspace-relative file.".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}) },
+        tool("repo_info", "Inspect repository identity, branch, remotes, dirty state, and workspace summary before changing files.", json!({}), &[], "packages/opencode/src/session/processor.ts"),
+        tool("file_list", "List files under a workspace-relative directory with optional depth.", json!({"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":5}}), &[], "packages/opencode/src/tool/ls.ts"),
+        tool("file_glob", "Find files by glob pattern under an optional workspace-relative directory.", json!({"pattern":{"type":"string"},"path":{"type":"string"}}), &["pattern"], "packages/opencode/src/tool/glob.ts"),
+        tool("file_search", "Search text in workspace files by literal pattern and optional file glob.", json!({"pattern":{"type":"string"},"path":{"type":"string"},"file_pattern":{"type":"string"}}), &["pattern"], "packages/opencode/src/tool/grep.ts"),
+        tool("file_read", "Read a workspace-relative UTF-8 file.", json!({"path":{"type":"string"}}), &["path"], "packages/opencode/src/tool/read.ts"),
+        tool("file_write", "Write content to a workspace-relative file, then run contained formatter/watcher/LSP receipts.", json!({"path":{"type":"string"},"content":{"type":"string"}}), &["path","content"], "packages/opencode/src/tool/write.ts"),
+        tool("file_edit", "Replace exact file text in a workspace-relative file, preserving OpenCode-style file mutation metadata.", json!({"path":{"type":"string"},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}}), &["path","old_string","new_string"], "packages/opencode/src/tool/edit.ts"),
+        tool("file_delete", "Remove a workspace-relative file and emit watcher/LSP event receipts.", json!({"path":{"type":"string"}}), &["path"], "packages/opencode/src/tool/apply_patch.ts"),
+        tool("apply_patch", "Apply a multi-file patch using an explicit patchText payload, permission metadata, formatter hooks, watcher updates, and LSP diagnostics.", json!({"patchText":{"type":"string","description":"The full patch text that describes all changes to be made"}}), &["patchText"], "packages/opencode/src/tool/apply_patch.ts"),
+        tool("propose_patch", "Prepare a patch for review before approval and application.", json!({"patchText":{"type":"string"},"reason":{"type":"string"}}), &["patchText"], "packages/opencode/src/tool/apply_patch.ts"),
+        tool("shell_command", "Run a bounded shell command for repo inspection, validation, tests, or diagnostics.", json!({"command":{"type":"string"},"cwd":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1000,"maximum":180000}}), &["command"], "packages/opencode/src/tool/bash.ts"),
+        tool("terminal_run", "Run an interactive-terminal style bounded command when the workflow needs terminal semantics.", json!({"command":{"type":"string"},"cwd":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1000,"maximum":180000}}), &["command"], "packages/opencode/src/tool/bash.ts"),
+        tool("task", "Start a delegated subtask with bounded instructions and return a concise result.", json!({"description":{"type":"string"},"prompt":{"type":"string"}}), &["prompt"], "packages/opencode/src/session/processor.ts"),
+        tool("batch_parallel", "Run independent tool requests concurrently with the configured parallelism limit.", json!({"requests":{"type":"array","items":{"type":"object"}}}), &["requests"], "packages/opencode/src/session/processor.ts"),
+        tool("web_fetch", "Fetch a public URL for source inspection when network is allowed.", json!({"url":{"type":"string"}}), &["url"], "packages/opencode/src/tool/webfetch.ts"),
+        tool("web_search", "Search the web for source-backed current information when network is allowed.", json!({"query":{"type":"string"}}), &["query"], "packages/opencode/src/tool/webfetch.ts"),
+        tool("browser_proof", "Capture browser screenshot and optional DOM proof for visible WebUI validation.", json!({"url":{"type":"string"},"width":{"type":"integer"},"height":{"type":"integer"},"capture_dom":{"type":"boolean"}}), &["url"], "packages/opencode/src/session/processor.ts"),
+        tool("vision_review", "Review an image proof with the configured vision provider.", json!({"image_base64":{"type":"string"},"prompt":{"type":"string"}}), &["image_base64"], "packages/opencode/src/session/processor.ts"),
+        tool("graph_build", "Build a workspace code graph for repo understanding.", json!({"path":{"type":"string"}}), &[], "packages/opencode/src/session/processor.ts"),
+        tool("graph_query", "Query the workspace code graph.", json!({"query":{"type":"string"}}), &["query"], "packages/opencode/src/session/processor.ts"),
+        tool("switch_mode", "Switch the conversation mode between chat, explore, plan, and build.", json!({"mode":{"type":"string","enum":["chat","explore","plan","build"]}}), &["mode"], "packages/opencode/src/session/processor.ts"),
     ]
 }
