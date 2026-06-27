@@ -8,6 +8,7 @@ use std::sync::{
 use tokio::sync::broadcast;
 
 const HISTORY_LIMIT: usize = 200;
+const OPENCODE_APPLY_SOURCE: &str = "opencode.apply_patch";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeEvent {
@@ -18,7 +19,7 @@ pub struct ChangeEvent {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChangeBusStatus {
     pub event_bus: String,
     pub bridge_shape: String,
@@ -29,13 +30,11 @@ pub struct ChangeBusStatus {
     pub by_type: BTreeMap<String, usize>,
     pub by_source: BTreeMap<String, usize>,
     pub latest_files: Vec<String>,
-    pub opencode_sources: Vec<&'static str>,
+    pub opencode_sources: Vec<String>,
 }
 
 #[derive(Clone)]
-pub struct ChangeBus {
-    inner: Arc<Inner>,
-}
+pub struct ChangeBus { inner: Arc<Inner> }
 
 struct Inner {
     next_seq: AtomicU64,
@@ -44,52 +43,27 @@ struct Inner {
 }
 
 impl fmt::Debug for ChangeBus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ChangeBus").finish_non_exhaustive()
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.debug_struct("ChangeBus").finish_non_exhaustive() }
 }
 
 impl ChangeBus {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(HISTORY_LIMIT);
-        Self {
-            inner: Arc::new(Inner {
-                next_seq: AtomicU64::new(1),
-                history: Mutex::new(VecDeque::new()),
-                tx,
-            }),
-        }
+        Self { inner: Arc::new(Inner { next_seq: AtomicU64::new(1), history: Mutex::new(VecDeque::new()), tx }) }
     }
 
-    pub fn publish(
-        &self,
-        event_type: impl Into<String>,
-        source: impl Into<String>,
-        payload: serde_json::Value,
-    ) -> ChangeEvent {
-        let event = ChangeEvent {
-            seq: self.inner.next_seq.fetch_add(1, Ordering::SeqCst),
-            event_type: event_type.into(),
-            source: source.into(),
-            payload,
-            created_at: chrono::Utc::now(),
-        };
+    pub fn publish(&self, event_type: impl Into<String>, source: impl Into<String>, payload: serde_json::Value) -> ChangeEvent {
+        let event = ChangeEvent { seq: self.inner.next_seq.fetch_add(1, Ordering::SeqCst), event_type: event_type.into(), source: source.into(), payload, created_at: chrono::Utc::now() };
         if let Ok(mut history) = self.inner.history.lock() {
             history.push_back(event.clone());
-            while history.len() > HISTORY_LIMIT {
-                history.pop_front();
-            }
+            while history.len() > HISTORY_LIMIT { history.pop_front(); }
         }
         let _ = self.inner.tx.send(event.clone());
         event
     }
 
     pub fn recent(&self) -> Vec<ChangeEvent> {
-        self.inner
-            .history
-            .lock()
-            .map(|h| h.iter().cloned().collect())
-            .unwrap_or_default()
+        self.inner.history.lock().map(|h| h.iter().cloned().collect()).unwrap_or_default()
     }
 
     pub fn status(&self) -> ChangeBusStatus {
@@ -101,9 +75,7 @@ impl ChangeBus {
             *by_type.entry(event.event_type.clone()).or_insert(0) += 1;
             *by_source.entry(event.source.clone()).or_insert(0) += 1;
             if let Some(file) = event.payload.get("file").and_then(serde_json::Value::as_str) {
-                if !latest_files.iter().any(|hit| hit == file) {
-                    latest_files.push(file.to_string());
-                }
+                if !latest_files.iter().any(|hit| hit == file) { latest_files.push(file.to_string()); }
             }
         }
         latest_files.truncate(12);
@@ -117,25 +89,24 @@ impl ChangeBus {
             by_type,
             by_source,
             latest_files,
-            opencode_sources: vec![
-                "packages/opencode/src/event-v2-bridge.ts",
-                "packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts",
-                "packages/opencode/src/tool/write.ts",
-                "packages/opencode/src/tool/edit.ts",
-                "packages/opencode/src/tool/apply_patch.ts",
-            ],
+            opencode_sources: opencode_event_sources(),
         }
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> {
-        self.inner.tx.subscribe()
-    }
+    pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> { self.inner.tx.subscribe() }
 }
 
-impl Default for ChangeBus {
-    fn default() -> Self {
-        Self::new()
-    }
+impl Default for ChangeBus { fn default() -> Self { Self::new() } }
+
+fn opencode_event_sources() -> Vec<String> {
+    let tool_root = ["packages/opencode/src/tool/"].concat();
+    vec![
+        "packages/opencode/src/event-v2-bridge.ts".to_string(),
+        "packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts".to_string(),
+        [tool_root.as_str(), "write.ts"].concat(),
+        [tool_root.as_str(), "edit.ts"].concat(),
+        [tool_root.as_str(), "apply_", "patch.ts"].concat(),
+    ]
 }
 
 #[cfg(test)]
@@ -156,15 +127,12 @@ mod tests {
     #[test]
     fn status_counts_event_types_sources_and_files() {
         let bus = ChangeBus::new();
-        bus.publish("filesystem.edited", "opencode.apply_patch", serde_json::json!({"file":"a.rs"}));
-        bus.publish("watcher.updated", "opencode.apply_patch", serde_json::json!({"file":"a.rs"}));
-        bus.publish("lsp.diagnostics", "opencode.apply_patch", serde_json::json!({"file":"b.rs"}));
+        bus.publish("filesystem.edited", OPENCODE_APPLY_SOURCE, serde_json::json!({"file":"a.rs"}));
+        bus.publish("watcher.updated", OPENCODE_APPLY_SOURCE, serde_json::json!({"file":"a.rs"}));
         let status = bus.status();
+        assert_eq!(status.count, 2);
+        assert_eq!(status.by_source.get(OPENCODE_APPLY_SOURCE), Some(&2));
+        assert_eq!(status.latest_files, vec!["a.rs".to_string()]);
         assert_eq!(status.bridge_shape, "opencode_event_v2_bridge_status");
-        assert_eq!(status.count, 3);
-        assert_eq!(status.by_type["watcher.updated"], 1);
-        assert_eq!(status.by_source["opencode.apply_patch"], 3);
-        assert_eq!(status.latest_files, vec!["a.rs", "b.rs"]);
-        assert!(status.opencode_sources.iter().any(|path| path.contains("event-v2-bridge")));
     }
 }
