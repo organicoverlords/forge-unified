@@ -1,6 +1,7 @@
 //! OpenCode-compatible apply_patch parser, edit approval, and mutation entrypoint.
 
 use crate::tool::patch_apply::{apply_file_changes, file_change_metadata, file_change_summary_line, prepare_file_changes, total_diff};
+use crate::tool::patch_events;
 use crate::tool::ToolExecutor;
 use crate::types::{ToolCallId, ToolKind, ToolRequest, ToolResult};
 use anyhow::{anyhow, Result};
@@ -72,7 +73,11 @@ impl ToolExecutor {
             return Ok(apply_patch_failure(request.id, patch_len, err.to_string()));
         }
 
-        let file_events = file_change_events(&files);
+        let file_events = patch_events::file_change_events(&files);
+        let watcher_updates = patch_events::watcher_updates(&files);
+        let filesystem_edits = patch_events::filesystem_edits(&files);
+        let lsp_touches = patch_events::lsp_touches(&files);
+        let diagnostics = patch_events::diagnostics_metadata(&files);
         let output = format!(
             "Success. Updated the following files:\n{}\n{}",
             change_count_summary(summary_lines.len()),
@@ -90,10 +95,14 @@ impl ToolExecutor {
                 ("opencode_source".to_string(), opencode_source()),
                 ("opencode_permission_source".to_string(), opencode_permission_source()),
                 ("opencode_tool_state_source".to_string(), opencode_tool_state_source()),
+                ("opencode_event_source".to_string(), patch_events::opencode_event_source()),
                 ("patch_length".to_string(), serde_json::json!(patch_len)),
                 ("hunk_count".to_string(), serde_json::json!(hunks.len())),
                 ("files".to_string(), serde_json::json!(files)),
                 ("file_events".to_string(), serde_json::json!(file_events)),
+                ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)),
+                ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
+                ("lsp_touches".to_string(), serde_json::json!(lsp_touches)),
                 ("summary_lines".to_string(), serde_json::json!(summary_lines)),
                 ("validated_paths".to_string(), serde_json::json!(validated_paths)),
                 ("permission".to_string(), permission_request.clone()),
@@ -101,7 +110,7 @@ impl ToolExecutor {
                 ("approval_state".to_string(), serde_json::json!({"status": "approved", "approval_id": approval_id, "required_before_apply": true})),
                 ("parsed_hunks".to_string(), serde_json::json!(hunks)),
                 ("diff".to_string(), serde_json::json!(diff)),
-                ("diagnostics".to_string(), serde_json::json!({"status": "not_collected"})),
+                ("diagnostics".to_string(), diagnostics),
                 ("applied".to_string(), serde_json::json!(true)),
             ]),
         })
@@ -318,20 +327,6 @@ fn patch_relative_paths(hunks: &[PatchHunk]) -> Vec<String> {
     hunks.iter().flat_map(|hunk| patch_paths(hunk).into_iter().map(|(_, path)| path.to_string())).collect()
 }
 
-fn file_change_events(files: &[serde_json::Value]) -> Vec<serde_json::Value> {
-    files.iter().map(|file| {
-        let change_type = file.get("type").and_then(serde_json::Value::as_str).unwrap_or("update");
-        let path = file.get("relativePath").and_then(serde_json::Value::as_str).or_else(|| file.get("path").and_then(serde_json::Value::as_str)).unwrap_or("");
-        serde_json::json!({
-            "type": match change_type { "add" => "file.added", "delete" => "file.deleted", "move" => "file.moved", _ => "file.edited" },
-            "path": path, "previousPath": file.get("path").filter(|_| change_type == "move"), "source": "apply_patch",
-            "additions": file.get("additions").cloned().unwrap_or_else(|| serde_json::json!(0)),
-            "deletions": file.get("deletions").cloned().unwrap_or_else(|| serde_json::json!(0)),
-            "bom": file.get("bom").cloned().unwrap_or_else(|| serde_json::json!(false)),
-        })
-    }).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,14 +360,6 @@ mod tests {
         let patch = "*** Begin Patch\n*** Delete File: ../secret.txt\n*** End Patch";
         let hunks = parse_opencode_patch(patch).unwrap();
         assert!(validate_patch_paths(&hunks, ".").unwrap_err().to_string().contains("path escapes workspace"));
-    }
-
-    #[test]
-    fn exposes_file_change_events() {
-        let events = file_change_events(&[serde_json::json!({"type": "move", "path": "old.rs", "relativePath": "new.rs", "additions": 1, "deletions": 1, "bom": false})]);
-        assert_eq!(events[0]["type"], "file.moved");
-        assert_eq!(events[0]["path"], "new.rs");
-        assert_eq!(events[0]["previousPath"], "old.rs");
     }
 
     #[test]
