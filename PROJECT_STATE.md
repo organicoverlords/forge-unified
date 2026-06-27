@@ -5,9 +5,9 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest fully green baseline before this slice: `873c469136c2774d1cecf50ec749b1269e27aace`.
-- Latest browser proof artifact before this slice: GitHub Actions artifact `7924857667` from Live WebUI Feature Sprint run `28290547471`.
-- Current HEAD needs Actions/browser proof before a fresh green claim.
+- Latest fully green baseline: `d052a279d7a5c37b275043ad0e52fb966a0be4eb`.
+- Latest browser proof artifact: GitHub Actions artifact `7924965603` from Live WebUI Feature Sprint run `28290889903`.
+- Next code target: exact OpenCode mutable ToolPart row updates from `packages/opencode/src/session/processor.ts`.
 
 ## Latest source-backed slices
 
@@ -16,9 +16,9 @@ Updated: 2026-06-27
 - `1734ae285237bee4c4bd06a418ecd719a1ccf87a` — durable OpenCode EventV2Bridge-style change bus replay.
 - `d24d8e7183216aa8a50627b1bc280251d9171ee4` — OpenCode session compaction event-type parity.
 - `98b408b0f8f8a132ba7df18617d103ea63d43ce1` — OpenCode ToolStateCompleted attachment parity.
-- This slice — OpenCode SessionProcessor lifecycle stream parity. WebUI SSE now emits source-tagged `tool-lifecycle` receipts plus `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error` metadata for pending, input, running, completed, and error ToolPart transitions.
+- `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity. WebUI SSE emits source-tagged lifecycle receipts for pending, input, running, completed, and error ToolPart transitions.
 
-## OpenCode source references for latest slice
+## OpenCode source references for latest proven slice
 
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — `ensureToolCall`, `updateToolCall`, `completeToolCall`, `failToolCall`, `toolResultOutput`, and stream event handling for tool-input/tool-call/tool-result/tool-error lifecycle.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — `ToolStatePending`, `ToolStateRunning`, `ToolStateCompleted`, `ToolStateError`, `ToolPart`, and completed attachments.
@@ -38,7 +38,6 @@ Updated: 2026-06-27
 
 ## Current gaps
 
-- Current HEAD is not yet workflow/browser-proof green.
 - Live filesystem watcher integration is still receipt-backed rather than OS-watch backed.
 - LSP touch receipts are not yet live diagnostics from a language server process.
 - BOM and formatter parity are still incomplete.
@@ -47,6 +46,6 @@ Updated: 2026-06-27
 
 ## Next targets
 
-1. Check latest Actions for this branch HEAD and fix exact failures.
-2. Inspect browser proof artifacts and screenshot DOM for exact SessionProcessor lifecycle stream receipts.
-3. Continue toward OS-backed watcher/file edited events or exact mutable ToolPart processor parity from OpenCode sources.
+1. Implement exact mutable ToolPart processor parity: update the existing assistant ToolPart row by `callID` when `completeToolCall` / `failToolCall` happens, instead of only appending a separate tool-result message.
+2. Keep browser proof requiring natural WebUI prompts and screenshots.
+3. Continue toward OS-backed watcher/file edited events or live LSP diagnostics from OpenCode sources.
