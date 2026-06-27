@@ -27,8 +27,7 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(workspace_root: String, timeout_ms: u64, max_parallel: usize) -> Self {
-        let change_bus = ChangeBus::new_with_workspace(Some(workspace_root.clone()));
-        change_bus.start_native_watcher(&workspace_root);
+        let change_bus = ChangeBus::new(workspace_root.clone());
         Self { workspace_root, timeout_ms, max_parallel, change_bus }
     }
 
@@ -97,7 +96,7 @@ impl ToolExecutor {
                 object.insert("tool_kind".to_string(), json!(tool_kind.clone()));
                 object.insert("metadata_key".to_string(), json!(key));
             }
-            self.change_bus.publish(event_type, source.clone(), payload)
+            self.change_bus.publish(event_type, &source, payload)
         }).collect()
     }
 
@@ -113,11 +112,5 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
         ToolConfig { name: "file_write".to_string(), description: "Write content to a file".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string","description":"Workspace-relative file path"},"content":{"type":"string","description":"Content to write"}},"required":["path","content"]}) },
         ToolConfig { name: "file_edit".to_string(), description: "Replace exact file text".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string","description":"Workspace-relative file path"},"old_string":{"type":"string","description":"Exact text to replace"},"new_string":{"type":"string","description":"Replacement text"}},"required":["path","old_string","new_string"]}) },
         ToolConfig { name: "file_delete".to_string(), description: "Remove a file at the given path".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string","description":"Workspace-relative file path"}},"required":["path"]}) },
-        ToolConfig { name: "file_list".to_string(), description: "List files and directories".to_string(), parameters: json!({"type":"object","properties":{"path":{"type":"string","description":"Workspace-relative directory path"}},"required":["path"]}) },
-        ToolConfig { name: "file_glob".to_string(), description: "Find files by glob pattern".to_string(), parameters: json!({"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern"}},"required":["pattern"]}) },
-        ToolConfig { name: "file_search".to_string(), description: "Search for text in files".to_string(), parameters: json!({"type":"object","properties":{"query":{"type":"string","description":"Search query"}},"required":["query"]}) },
-        ToolConfig { name: "web_fetch".to_string(), description: "Fetch content from a URL".to_string(), parameters: json!({"type":"object","properties":{"url":{"type":"string","description":"URL to fetch"}},"required":["url"]}) },
-        ToolConfig { name: "shell_command".to_string(), description: "Run a process command".to_string(), parameters: json!({"type":"object","properties":{"command":{"type":"string","description":"Command text"}},"required":["command"]}) },
-        ToolConfig { name: "batch_parallel".to_string(), description: "Run multiple tool calls in parallel".to_string(), parameters: json!({"type":"object","properties":{"requests":{"type":"array","description":"Tool requests to run"}},"required":["requests"]}) },
     ]
 }
