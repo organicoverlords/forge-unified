@@ -5,8 +5,8 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest fully green baseline before this slice: `04d35a5085a89658b158b7ee23f40510d9a949cd`.
-- Latest browser proof artifact before this slice: Live WebUI Feature Sprint run `28297659029`, artifact `7926961624`.
+- Latest fully green baseline before this slice: `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed`.
+- Latest browser proof artifact before this slice: Live WebUI Feature Sprint run `28299351117`, artifact `7927453969`.
 - Current HEAD needs Actions/browser proof before a fresh green claim.
 
 ## Latest source-backed slices
@@ -22,13 +22,14 @@ Updated: 2026-06-27
 - `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation.
 - `e562d783538b884b16558b8a62c4e495423f02b3` — formatter hook proof repaired and fully green.
 - `04d35a5085a89658b158b7ee23f40510d9a949cd` — six-phase natural WebUI repo benchmark path; CI `28297659041`, Build Proof `28297659050`, and Live WebUI Feature Sprint `28297659029` were green with proof artifact `7926961624`.
-- This slice — native OS-backed watcher subscription: Forge starts a native `notify` watcher, records OpenCode watcher status metadata, and publishes live `watcher.updated` add/change/unlink events visible in the event rail.
+- `8da0b7cf6e29c1e63d50042ec00523d4c198e1ed` — live model-backed browser proof on current head; CI `28299351121`, Build Proof `28299351118`, and Live WebUI Feature Sprint `28299351117` were green with proof artifact `7927453969`.
+- This slice — visible OpenCode ToolPart lifecycle rail: live WebUI cards for pending/input/running/completed tool states, `providerExecuted` metadata shape, file-change receipts, EventV2Bridge rows, and screenshot proof requirements.
 
 ## OpenCode source references for latest slice
 
-- `anomalyco/opencode:packages/core/src/filesystem/watcher.ts` — source for backend detection (`windows`, `fs-events`, `inotify`), `SUBSCRIBE_TIMEOUT_MS = 10_000`, native subscription lifecycle, ignore/protected paths, create/update/delete mapping to add/change/unlink, and contained watcher errors.
-- `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — source for publishing watcher activity to an EventV2-style UI-visible event stream.
-- `anomalyco/opencode:packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts` — source for HTTP/SSE event delivery to UI consumers.
+- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — source for `ensureToolCall`, `updateToolCall`, `completeToolCall`, `failToolCall`, same-row ToolPart updates by call ID, `providerExecuted` preservation, and `DOOM_LOOP_THRESHOLD = 3` guard shape.
+- `anomalyco/opencode:packages/schema/src/v1/session.ts` — source for ToolPart, ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError, and ToolStateCompleted attachments.
+- `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — source for publishing UI-visible event receipts.
 
 ## Current behavior
 
@@ -43,28 +44,28 @@ Updated: 2026-06-27
 - `file_write` and `file_edit` run a contained post-write formatter hook. `.rs` files use rustfmt when present; unavailable, spawn-failed, or nonzero formatter exits are recorded instead of failing the edit path.
 - Formatter metadata is visible through ToolResult metadata as `formatter_status` and `opencode_formatter_source`.
 - The WebUI SSE stream carries OpenCode SessionProcessor lifecycle metadata for pending input, input deltas, running tool calls, completed results, and error results.
+- The WebUI now renders those lifecycle states as live ToolPart cards during the stream, with visible `providerExecuted` metadata and OpenCode source metadata behind details.
 - Conversation storage mutates the previous assistant message's matching ToolPart row from running to completed/error and records `opencode_mutable_tool_part_source`.
 - The change bus replays the latest persisted `.forge/change-events.jsonl` events on startup and continues sequence numbers after replay.
 - The tool executor starts a native filesystem watcher for the workspace and keeps its subscription alive while the app is running.
 - Native watcher status exposes backend, active binding, ignore/protected paths, subscribe timeout, and copied OpenCode watcher source path through `/api/events/status`.
 - Native create/update/delete callbacks publish `watcher.updated` events from `opencode.native_filewatcher`, mapped to add/change/unlink.
-- Live WebUI smoke now creates, edits, and deletes `native-watch-proof.txt` and requires that native event to appear in `/api/events/recent` and the browser-captured event rail.
 - `/api/events/status`, `/api/events/recent`, and the activity rail expose OpenCode-style bridge status including durability metadata.
 - Conversation compaction stores a structured summary and recent tail, then publishes exact OpenCode `session.next.compaction.started` / `session.next.compaction.ended` event receipts.
 - Existing session part cards remain: TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, PatchPart.
-- Live WebUI smoke requires the visible OpenCode LSP diagnostics panel and native watcher markers in the event-rail browser proof.
+- Live WebUI smoke now requires a real NIM model proof and then a natural WebUI tool-lifecycle proof screenshot with visible prompt, live ToolPart cards, `providerExecuted`, EventV2Bridge receipts, and human-readable summary.
 
 ## Current gaps
 
 - Current HEAD is not yet workflow/browser-proof green.
-- Native watcher now exists, but deeper OpenCode parity remains: dynamic config-driven watcher ignore entries, separate VCS-directory watch behavior, and exact scoped finalizer semantics are still partial.
+- Full provider-side/providerExecuted tool execution is not implemented; Forge-owned tools explicitly mark `providerExecuted: false` while preserving the OpenCode metadata/delta shape.
+- Native watcher exists, but deeper OpenCode parity remains: dynamic config-driven watcher ignore entries, separate VCS-directory watch behavior, and exact scoped finalizer semantics are still partial.
 - LSP diagnostic report shape and UI are copied, but diagnostics are not yet collected from a live language server process.
 - Formatter hook shape is implemented, but full OpenCode formatter catalog/config/runtime remains partial.
-- Mutable ToolPart row parity is implemented for Forge's conversation snapshots, but OpenCode database-backed part IDs and `providerExecuted` delta updates are still partial.
 - Compaction summary creation is deterministic in Forge; full streamed NIM-backed compaction summary remains incomplete.
 
 ## Next targets
 
 1. Check latest Actions for this branch HEAD and fix exact failures.
-2. Inspect browser proof artifacts and screenshot DOM for the native watcher event and natural benchmark completion.
-3. Continue toward live LSP server/client diagnostics, full formatter catalog/config, deeper OS watcher parity, or NIM-backed compaction from OpenCode sources.
+2. Inspect browser proof artifacts and screenshot DOM for visible ToolPart lifecycle cards and real NIM model proof.
+3. Continue toward full provider-side tool execution, live LSP server/client diagnostics, full formatter catalog/config, deeper watcher parity, or NIM-backed compaction from OpenCode sources.
