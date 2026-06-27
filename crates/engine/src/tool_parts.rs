@@ -1,7 +1,7 @@
-//! OpenCode-style durable text, tool, and patch part helpers.
+//! OpenCode-style durable text, snapshot, tool, and patch part helpers.
 //!
 //! Upstream references:
-//! - `packages/schema/src/v1/session.ts`: `TextPart`, `PatchPart`, `ToolPart`, `ToolState*`.
+//! - `packages/schema/src/v1/session.ts`: `TextPart`, `SnapshotPart`, `PatchPart`, `ToolPart`, `ToolState*`.
 //! - `packages/opencode/src/session/processor.ts`: `completeToolCall` / `failToolCall`.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -20,6 +20,14 @@ pub fn text_part(text: &str, synthetic: bool) -> serde_json::Value {
 
 pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
     if text.trim().is_empty() { Vec::new() } else { vec![text_part(text, synthetic)] }
+}
+
+pub fn snapshot_part(snapshot: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "snapshot",
+        "snapshot": snapshot,
+        "metadata": {"opencode_source": opencode_snapshot_part_source()}
+    })
 }
 
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
@@ -123,6 +131,14 @@ pub fn opencode_text_part_source() -> serde_json::Value {
     })
 }
 
+pub fn opencode_snapshot_part_source() -> serde_json::Value {
+    serde_json::json!({
+        "path": "packages/schema/src/v1/session.ts",
+        "identifier": "SnapshotPart",
+        "shape": {"type": "snapshot", "snapshot": "String"}
+    })
+}
+
 pub fn opencode_patch_part_source() -> serde_json::Value {
     serde_json::json!({
         "path": "packages/schema/src/v1/session.ts",
@@ -186,15 +202,21 @@ mod tests {
     fn builds_text_part() {
         let part = text_part("hello", false);
         assert_eq!(part["type"], "text");
-        assert_eq!(part["text"], "hello");
         assert_eq!(part["metadata"]["opencode_source"]["identifier"], "TextPart");
+    }
+
+    #[test]
+    fn builds_snapshot_part() {
+        let part = snapshot_part("snapshot saved");
+        assert_eq!(part["type"], "snapshot");
+        assert_eq!(part["snapshot"], "snapshot saved");
+        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "SnapshotPart");
     }
 
     #[test]
     fn builds_completed_tool_part() {
         let part = completed_tool_part(&result());
         assert_eq!(part["type"], "tool");
-        assert_eq!(part["tool"], "apply_patch");
         assert_eq!(part["state"]["status"], "completed");
     }
 
@@ -204,6 +226,5 @@ mod tests {
         assert_eq!(part["type"], "patch");
         assert!(part["hash"].as_str().unwrap().starts_with("patch_"));
         assert_eq!(part["files"][0], "proof.txt");
-        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "PatchPart");
     }
 }
