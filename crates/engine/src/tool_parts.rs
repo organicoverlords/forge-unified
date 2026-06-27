@@ -1,7 +1,7 @@
-//! OpenCode-style durable text, snapshot, file, tool, and patch part helpers.
+//! OpenCode-style durable text, reasoning, snapshot, file, tool, and patch part helpers.
 //!
 //! Upstream references:
-//! - `packages/schema/src/v1/session.ts`: `TextPart`, `SnapshotPart`, `FilePart`, `PatchPart`, `ToolPart`, `ToolState*`.
+//! - `packages/schema/src/v1/session.ts`: `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `PatchPart`, `ToolPart`, `ToolState*`.
 //! - `packages/opencode/src/session/processor.ts`: `completeToolCall` / `failToolCall`.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -18,6 +18,37 @@ pub fn text_part(text: &str, synthetic: bool) -> serde_json::Value {
 
 pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
     if text.trim().is_empty() { Vec::new() } else { vec![text_part(text, synthetic)] }
+}
+
+pub fn reasoning_part(text: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "reasoning",
+        "text": text,
+        "time": {"start": 0, "end": 0},
+        "metadata": {
+            "visibility": "public_progress_summary",
+            "private_chain_of_thought": false,
+            "opencode_source": opencode_reasoning_part_source()
+        }
+    })
+}
+
+pub fn reasoning_parts(public_text: &str) -> Vec<serde_json::Value> {
+    let summary = public_progress_summary(public_text);
+    if summary.is_empty() { Vec::new() } else { vec![reasoning_part(&summary)] }
+}
+
+fn public_progress_summary(public_text: &str) -> String {
+    let compact = public_text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.is_empty() { return compact; }
+    let prefix = "Public progress summary: ";
+    let limit = 180usize.saturating_sub(prefix.len());
+    let visible = if compact.chars().count() > limit {
+        format!("{}…", compact.chars().take(limit.saturating_sub(1)).collect::<String>())
+    } else {
+        compact
+    };
+    format!("{prefix}{visible}")
 }
 
 pub fn snapshot_part(snapshot: &str) -> serde_json::Value {
@@ -122,6 +153,10 @@ pub fn opencode_text_part_source() -> serde_json::Value {
     serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "TextPart", "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean"}})
 }
 
+pub fn opencode_reasoning_part_source() -> serde_json::Value {
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "ReasoningPart", "shape": {"type": "reasoning", "text": "String", "metadata": "optional Record<String, Any>", "time": {"start": "NonNegativeInt", "end": "optional NonNegativeInt"}}})
+}
+
 pub fn opencode_snapshot_part_source() -> serde_json::Value {
     serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "SnapshotPart", "shape": {"type": "snapshot", "snapshot": "String"}})
 }
@@ -169,6 +204,14 @@ mod tests {
 
     #[test]
     fn builds_text_part() { assert_eq!(text_part("hello", false)["metadata"]["opencode_source"]["identifier"], "TextPart"); }
+
+    #[test]
+    fn builds_reasoning_part() {
+        let part = reasoning_parts("Created a public summary for the turn.");
+        assert_eq!(part[0]["type"], "reasoning");
+        assert_eq!(part[0]["metadata"]["opencode_source"]["identifier"], "ReasoningPart");
+        assert_eq!(part[0]["metadata"]["visibility"], "public_progress_summary");
+    }
 
     #[test]
     fn builds_snapshot_part() { assert_eq!(snapshot_part("snapshot saved")["metadata"]["opencode_source"]["identifier"], "SnapshotPart"); }
