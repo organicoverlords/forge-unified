@@ -47,7 +47,15 @@ impl Orchestrator {
         let mut round = 0u32;
         let mut total_tool_calls = 0u32;
         let mut total_tool_failures = 0u32;
-        self.conversation_mgr.write().await.add_user_message(&conversation_id, user_message.clone());
+        {
+            let mut mgr = self.conversation_mgr.write().await;
+            if let Some(conv) = mgr.get_mut(&conversation_id) {
+                conv.provider = Some(provider.clone());
+                conv.model = Some(model.clone());
+                conv.updated_at = chrono::Utc::now();
+            }
+            mgr.add_user_message(&conversation_id, user_message.clone());
+        }
 
         while round < max_rounds {
             round += 1;
