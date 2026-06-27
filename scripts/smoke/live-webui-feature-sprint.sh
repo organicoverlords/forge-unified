@@ -96,9 +96,9 @@ cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 step "create full benchmark conversation"
 BENCH_CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"Full six-phase agentic benchmark prompt"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 test -n "$BENCH_CONV_ID"
-jq -Rs '{message: ., max_rounds: 20}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
+jq -Rs '{message: ., max_rounds: 75}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
 
-timeout 600s curl -fsS --connect-timeout 2 --max-time 590 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
+timeout 1200s curl -fsS --connect-timeout 2 --max-time 1190 -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   echo "::error::full benchmark used local/scripted shortcut" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
