@@ -7,11 +7,15 @@
 //! - `packages/opencode/src/session/compaction.ts`: creates compaction parts with auto/overflow/tail metadata.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
+use serde_json::Value;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub fn text_part(text: &str, synthetic: bool) -> serde_json::Value {
-    serde_json::json!({"type": "text", "text": text, "synthetic": synthetic, "time": {"start": 0, "end": 0}, "metadata": {"opencode_source": opencode_text_part_source()}})
+    with_opencode_part_base(
+        serde_json::json!({"type": "text", "text": text, "synthetic": synthetic, "time": {"start": 0, "end": 0}, "metadata": {"opencode_source": opencode_text_part_source()}}),
+        format!("text:{synthetic}:{text}"),
+    )
 }
 
 pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
@@ -19,7 +23,10 @@ pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
 }
 
 pub fn reasoning_part(text: &str) -> serde_json::Value {
-    serde_json::json!({"type": "reasoning", "text": text, "time": {"start": 0, "end": 0}, "metadata": {"visibility": "public_progress_summary", "private_chain_of_thought": false, "opencode_source": opencode_reasoning_part_source()}})
+    with_opencode_part_base(
+        serde_json::json!({"type": "reasoning", "text": text, "time": {"start": 0, "end": 0}, "metadata": {"visibility": "public_progress_summary", "private_chain_of_thought": false, "opencode_source": opencode_reasoning_part_source()}}),
+        format!("reasoning:{text}"),
+    )
 }
 
 pub fn reasoning_parts(public_text: &str) -> Vec<serde_json::Value> {
@@ -37,14 +44,18 @@ fn public_progress_summary(public_text: &str) -> String {
 }
 
 pub fn snapshot_part(snapshot: &str) -> serde_json::Value {
-    serde_json::json!({"type": "snapshot", "snapshot": snapshot, "metadata": {"opencode_source": opencode_snapshot_part_source()}})
+    with_opencode_part_base(
+        serde_json::json!({"type": "snapshot", "snapshot": snapshot, "metadata": {"opencode_source": opencode_snapshot_part_source()}}),
+        format!("snapshot:{snapshot}"),
+    )
 }
 
 pub fn compaction_part(auto: bool, overflow: Option<bool>, tail_start_id: Option<String>) -> serde_json::Value {
+    let seed_tail = tail_start_id.clone().unwrap_or_else(|| "none".to_string());
     let mut part = serde_json::json!({"type": "compaction", "auto": auto, "metadata": {"opencode_source": opencode_compaction_part_source()}});
     if let Some(overflow) = overflow { part["overflow"] = serde_json::json!(overflow); }
     if let Some(tail_start_id) = tail_start_id { part["tail_start_id"] = serde_json::json!(tail_start_id); }
-    part
+    with_opencode_part_base(part, format!("compaction:{auto}:{seed_tail}"))
 }
 
 pub fn file_parts(results: &[ToolResult]) -> Vec<serde_json::Value> { results.iter().flat_map(file_parts_for_result).collect() }
@@ -55,12 +66,15 @@ fn file_parts_for_result(result: &ToolResult) -> Vec<serde_json::Value> {
         let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
         let text = file.get("diff").and_then(serde_json::Value::as_str).unwrap_or_else(|| result.output.as_str());
         let kind = file.get("type").and_then(serde_json::Value::as_str).unwrap_or("update");
-        serde_json::json!({
-            "type": "file", "mime": mime_for(path), "filename": path.rsplit('/').next().unwrap_or(path),
-            "url": format!("workspace://{}", path),
-            "source": {"type": "file", "path": path, "text": {"value": text, "start": 0, "end": text.len()}},
-            "metadata": {"opencode_source": opencode_file_part_source(), "tool": tool_name(&result.kind), "change_type": kind}
-        })
+        with_opencode_part_base(
+            serde_json::json!({
+                "type": "file", "mime": mime_for(path), "filename": path.rsplit('/').next().unwrap_or(path),
+                "url": format!("workspace://{}", path),
+                "source": {"type": "file", "path": path, "text": {"value": text, "start": 0, "end": text.len()}},
+                "metadata": {"opencode_source": opencode_file_part_source(), "tool": tool_name(&result.kind), "change_type": kind}
+            }),
+            format!("file:{}:{}:{}", result.id.clone().0, kind, path),
+        )
     }).collect()
 }
 
@@ -85,19 +99,25 @@ fn mime_for(path: &str) -> &'static str {
 }
 
 pub fn pending_tool_part(call: &ToolRequest) -> serde_json::Value {
-    serde_json::json!({
-        "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
-        "state": {"status": "pending", "input": {}, "raw": call.args.to_string()},
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending"}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
+            "state": {"status": "pending", "input": {}, "raw": call.args.to_string()},
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending"}
+        }),
+        tool_part_seed(&call.id.clone().0.to_string(), tool_name(&call.kind), "pending"),
+    )
 }
 
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
-    serde_json::json!({
-        "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
-        "state": {"status": "running", "input": call.args.clone(), "title": tool_name(&call.kind), "metadata": {}, "time": {"start": 0}},
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running"}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": call.id.clone().0.to_string(), "tool": tool_name(&call.kind),
+            "state": {"status": "running", "input": call.args.clone(), "title": tool_name(&call.kind), "metadata": {}, "time": {"start": 0}},
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running"}
+        }),
+        tool_part_seed(&call.id.clone().0.to_string(), tool_name(&call.kind), "running"),
+    )
 }
 
 pub fn started_tool_lifecycle_parts(call: &ToolRequest) -> Vec<serde_json::Value> {
@@ -115,35 +135,47 @@ pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
     let mut state = serde_json::json!({"status": "completed", "input": tool_input(result), "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}});
     let attachments = file_parts_for_result(result);
     if !attachments.is_empty() { state["attachments"] = serde_json::json!(attachments); }
-    serde_json::json!({
-        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
-        "state": state,
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "completed"}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
+            "state": state,
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "completed"}
+        }),
+        tool_part_seed(&result.id.clone().0.to_string(), tool_name(&result.kind), "completed"),
+    )
 }
 
 pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
-    serde_json::json!({
-        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
-        "state": {"status": "error", "input": tool_input(result), "error": result.error.clone().unwrap_or_else(|| result.output.clone()), "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "error"}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
+            "state": {"status": "error", "input": tool_input(result), "error": result.error.clone().unwrap_or_else(|| result.output.clone()), "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "error"}
+        }),
+        tool_part_seed(&result.id.clone().0.to_string(), tool_name(&result.kind), "error"),
+    )
 }
 
 fn pending_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
-    serde_json::json!({
-        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
-        "state": {"status": "pending", "input": {}, "raw": tool_input(result).to_string()},
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending", "derived_from_result": true}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
+            "state": {"status": "pending", "input": {}, "raw": tool_input(result).to_string()},
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending", "derived_from_result": true}
+        }),
+        tool_part_seed(&result.id.clone().0.to_string(), tool_name(&result.kind), "pending"),
+    )
 }
 
 fn running_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
-    serde_json::json!({
-        "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
-        "state": {"status": "running", "input": tool_input(result), "title": tool_name(&result.kind), "metadata": {}, "time": {"start": 0}},
-        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running", "derived_from_result": true}
-    })
+    with_opencode_part_base(
+        serde_json::json!({
+            "type": "tool", "callID": result.id.clone().0.to_string(), "tool": tool_name(&result.kind),
+            "state": {"status": "running", "input": tool_input(result), "title": tool_name(&result.kind), "metadata": {}, "time": {"start": 0}},
+            "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running", "derived_from_result": true}
+        }),
+        tool_part_seed(&result.id.clone().0.to_string(), tool_name(&result.kind), "running"),
+    )
 }
 
 fn tool_input(result: &ToolResult) -> serde_json::Value {
@@ -155,7 +187,10 @@ pub fn patch_part(result: &ToolResult) -> Option<serde_json::Value> {
     let files = patch_files(result);
     if files.is_empty() { return None; }
     let hash = patch_hash(result, &files);
-    Some(serde_json::json!({"type": "patch", "hash": hash, "files": files, "metadata": {"opencode_source": opencode_patch_part_source()}}))
+    Some(with_opencode_part_base(
+        serde_json::json!({"type": "patch", "hash": hash, "files": files, "metadata": {"opencode_source": opencode_patch_part_source()}}),
+        format!("patch:{}", result.id.clone().0),
+    ))
 }
 
 pub fn patch_parts(results: &[ToolResult]) -> Vec<serde_json::Value> { results.iter().filter_map(patch_part).collect() }
@@ -175,33 +210,60 @@ fn patch_hash(result: &ToolResult, files: &[String]) -> String {
     format!("patch_{:016x}", hasher.finish())
 }
 
+fn tool_part_seed(call_id: &str, tool: &str, stage: &str) -> String { format!("tool:{call_id}:{tool}:{stage}") }
+
+fn with_opencode_part_base(mut part: Value, seed: impl AsRef<str>) -> Value {
+    let seed = seed.as_ref();
+    part["id"] = serde_json::json!(durable_schema_id("prt", seed));
+    part["sessionID"] = serde_json::json!(durable_schema_id("ses", "forge-unified-session"));
+    part["messageID"] = serde_json::json!(durable_schema_id("msg", seed));
+    let source = serde_json::json!({
+        "schema_path": "packages/schema/src/v1/session.ts",
+        "copied_fields": ["id", "sessionID", "messageID"],
+        "part_base_lines": "partBase requires PartID, SessionID, and MessageID on session parts"
+    });
+    if let Some(metadata) = part.get_mut("metadata").and_then(Value::as_object_mut) {
+        metadata.insert("opencode_part_base_source".to_string(), source);
+    } else {
+        part["metadata"] = serde_json::json!({"opencode_part_base_source": source});
+    }
+    part
+}
+
+fn durable_schema_id(prefix: &str, seed: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    prefix.hash(&mut hasher);
+    seed.hash(&mut hasher);
+    format!("{prefix}_forge_{:016x}", hasher.finish())
+}
+
 pub fn opencode_text_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "TextPart", "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean"}})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "TextPart", "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean", "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}})
 }
 
 pub fn opencode_reasoning_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "ReasoningPart", "shape": {"type": "reasoning", "text": "String", "metadata": "optional Record<String, Any>", "time": {"start": "NonNegativeInt", "end": "optional NonNegativeInt"}}})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "ReasoningPart", "shape": {"type": "reasoning", "text": "String", "metadata": "optional Record<String, Any>", "time": {"start": "NonNegativeInt", "end": "optional NonNegativeInt"}, "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}})
 }
 
 pub fn opencode_snapshot_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "SnapshotPart", "shape": {"type": "snapshot", "snapshot": "String"}})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "SnapshotPart", "shape": {"type": "snapshot", "snapshot": "String", "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}})
 }
 
 pub fn opencode_compaction_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "CompactionPart", "shape": {"type": "compaction", "auto": "Boolean", "overflow": "optional Boolean", "tail_start_id": "optional String"}, "runtime_source": "packages/opencode/src/session/compaction.ts:create/process"})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "CompactionPart", "shape": {"type": "compaction", "auto": "Boolean", "overflow": "optional Boolean", "tail_start_id": "optional String", "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}, "runtime_source": "packages/opencode/src/session/compaction.ts:create/process"})
 }
 
 pub fn opencode_file_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "FilePart", "shape": {"type": "file", "mime": "String", "filename": "optional String", "url": "String", "source": "optional FilePartSource"}})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "FilePart", "shape": {"type": "file", "mime": "String", "filename": "optional String", "url": "String", "source": "optional FilePartSource", "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}})
 }
 
 pub fn opencode_patch_part_source() -> serde_json::Value {
-    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "PatchPart", "shape": {"type": "patch", "hash": "String", "files": "Array<String>"}})
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "PatchPart", "shape": {"type": "patch", "hash": "String", "files": "Array<String>", "id": "PartID", "sessionID": "SessionID", "messageID": "MessageID"}})
 }
 
 pub fn opencode_tool_part_source() -> serde_json::Value {
     serde_json::json!({
-        "schema": "packages/schema/src/v1/session.ts:ToolPart/ToolStatePending/ToolStateRunning/ToolStateCompleted/ToolStateError",
+        "schema": "packages/schema/src/v1/session.ts:partBase + ToolPart/ToolStatePending/ToolStateRunning/ToolStateCompleted/ToolStateError",
         "attachments_schema": "packages/schema/src/v1/session.ts:ToolStateCompleted.attachments -> Array<FilePart>",
         "processor": "packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall/failToolCall"
     })
@@ -238,8 +300,19 @@ mod tests {
             metadata: HashMap::from([("title".into(), serde_json::json!("file_write")), ("files".into(), serde_json::json!([{"type":"add", "relativePath": "proof.txt", "path":"proof.txt"}]))]), }
     }
 
+    fn assert_part_base(part: &serde_json::Value) {
+        assert!(part["id"].as_str().unwrap().starts_with("prt_"));
+        assert!(part["sessionID"].as_str().unwrap().starts_with("ses_"));
+        assert!(part["messageID"].as_str().unwrap().starts_with("msg_"));
+        assert_eq!(part["metadata"]["opencode_part_base_source"]["schema_path"], "packages/schema/src/v1/session.ts");
+    }
+
     #[test]
-    fn builds_text_part() { assert_eq!(text_part("hello", false)["metadata"]["opencode_source"]["identifier"], "TextPart"); }
+    fn builds_text_part() {
+        let part = text_part("hello", false);
+        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "TextPart");
+        assert_part_base(&part);
+    }
 
     #[test]
     fn builds_reasoning_part() {
@@ -247,10 +320,15 @@ mod tests {
         assert_eq!(part[0]["type"], "reasoning");
         assert_eq!(part[0]["metadata"]["opencode_source"]["identifier"], "ReasoningPart");
         assert_eq!(part[0]["metadata"]["visibility"], "public_progress_summary");
+        assert_part_base(&part[0]);
     }
 
     #[test]
-    fn builds_snapshot_part() { assert_eq!(snapshot_part("snapshot saved")["metadata"]["opencode_source"]["identifier"], "SnapshotPart"); }
+    fn builds_snapshot_part() {
+        let part = snapshot_part("snapshot saved");
+        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "SnapshotPart");
+        assert_part_base(&part);
+    }
 
     #[test]
     fn builds_compaction_part() {
@@ -259,6 +337,7 @@ mod tests {
         assert_eq!(part["auto"], true);
         assert_eq!(part["tail_start_id"], "message-index-2");
         assert_eq!(part["metadata"]["opencode_source"]["identifier"], "CompactionPart");
+        assert_part_base(&part);
     }
 
     #[test]
@@ -267,6 +346,7 @@ mod tests {
         assert_eq!(parts[0]["type"], "file");
         assert_eq!(parts[0]["filename"], "proof.txt");
         assert_eq!(parts[0]["metadata"]["opencode_source"]["identifier"], "FilePart");
+        assert_part_base(&parts[0]);
     }
 
     #[test]
@@ -275,6 +355,7 @@ mod tests {
         assert_eq!(parts[0]["type"], "file");
         assert_eq!(parts[0]["metadata"]["tool"], "file_write");
         assert_eq!(parts[0]["metadata"]["change_type"], "add");
+        assert_part_base(&parts[0]);
     }
 
     #[test]
@@ -283,6 +364,8 @@ mod tests {
         assert_eq!(part["state"]["status"], "completed");
         assert_eq!(part["state"]["attachments"][0]["filename"], "proof.txt");
         assert!(part["metadata"]["opencode_source"]["attachments_schema"].as_str().unwrap().contains("ToolStateCompleted.attachments"));
+        assert_part_base(&part);
+        assert_part_base(&part["state"]["attachments"][0]);
     }
 
     #[test]
@@ -298,6 +381,7 @@ mod tests {
         assert_eq!(statuses, vec!["pending", "running", "completed"]);
         assert_eq!(parts[2]["state"]["input"]["patchText"], "*** Begin Patch");
         assert!(parts[2]["metadata"]["opencode_source"]["schema"].as_str().unwrap().contains("ToolStatePending"));
+        for part in parts { assert_part_base(&part); }
     }
 
     #[test]
@@ -305,5 +389,15 @@ mod tests {
         let part = patch_part(&result()).unwrap();
         assert_eq!(part["type"], "patch");
         assert!(part["hash"].as_str().unwrap().starts_with("patch_"));
+        assert_part_base(&part);
+    }
+
+    #[test]
+    fn durable_part_base_is_stable_for_same_seed() {
+        let first = text_part("same", false);
+        let second = text_part("same", false);
+        assert_eq!(first["id"], second["id"]);
+        assert_eq!(first["sessionID"], second["sessionID"]);
+        assert_eq!(first["messageID"], second["messageID"]);
     }
 }
