@@ -10,8 +10,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 | OpenCode source | Forge status |
 |---|---|
-| `packages/schema/src/v1/session.ts` | ToolPart lifecycle receipt slice is implemented for pending, running, completed, and error states. TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart remain proofed. |
-| `packages/opencode/src/session/processor.ts` | Forge now emits source-tagged WebUI SSE lifecycle receipts for `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error`, following the OpenCode SessionProcessor path through `ensureToolCall`, `updateToolCall`, `completeToolCall`, and `failToolCall`. Exact mutable part-row storage remains incomplete. |
+| `packages/schema/src/v1/session.ts` | ToolPart lifecycle receipt slice is implemented for pending, running, completed, and error states. TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart remain proofed. Completed ToolParts can carry FilePart attachments. |
+| `packages/opencode/src/session/processor.ts` | Forge now emits source-tagged WebUI SSE lifecycle receipts for `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error`, following `ensureToolCall`, `updateToolCall`, `completeToolCall`, and `failToolCall`. Forge also updates the existing assistant-message ToolPart row by `callID` when a result is recorded, with `mutable_tool_part_updates` receipts. Exact database-backed part IDs and provider-executed deltas remain partial. |
 | `packages/opencode/src/tool/apply_patch.ts` | Patch parsing, approval gate, changed-file summaries, post-edit receipts, watcher update receipts, LSP warmup containment receipts, LSP diagnostic event envelopes, and event-bus status metadata are implemented. Live LSP collection and formatter hooks remain incomplete. |
 | `packages/opencode/src/tool/write.ts` | Used as a source for the post-write sequence: permission gate, write, optional format, `FileSystem.Event.Edited`, `Watcher.Event.Updated`, LSP touch, diagnostics collection, and diagnostic reporting. Forge mirrors this as event status metadata and proof requirements; exact write-tool behavior remains partial. |
 | `packages/opencode/src/tool/edit.ts` | Used as a source for locked edit, post-edit filesystem/watcher publishing, LSP touch, and `LSP.Diagnostic.report` behavior. Forge surfaces the copied event bridge status in API/UI proof; deeper file_edit parity remains. |
@@ -25,6 +25,8 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 - Tool lifecycle receipts include pending, input-start/input-delta/input-end, running, completed, and error stages.
 - Tool lifecycle SSE payloads cite `packages/opencode/src/session/processor.ts` and `packages/schema/src/v1/session.ts`.
+- Tool results now update the existing assistant-message `tool_parts` row for the matching `callID`, mirroring OpenCode SessionProcessor's `session.updatePart` completion/error path.
+- The recorded tool-result message includes `mutable_tool_part_updates`, and the updated assistant message includes `opencode_mutable_tool_part_source`.
 - Patch flow records post-edit receipts after confirmed edits.
 - Session part cards are visible in WebUI proof.
 - The event rail displays filesystem, watcher, LSP warmup containment, and LSP diagnostic event-envelope activity.
@@ -36,7 +38,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 
 ## Not done / do not overclaim
 
-- Exact OpenCode mutable part storage semantics.
+- Database-backed OpenCode part IDs and providerExecuted delta semantics are still partial.
 - Live language-server diagnostics service.
 - Full BOM/formatter equivalence.
 - LLM-streamed compaction summaries through NVIDIA NIM.
