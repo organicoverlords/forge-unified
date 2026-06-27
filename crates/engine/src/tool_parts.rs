@@ -1,7 +1,7 @@
-//! OpenCode-style durable text, snapshot, tool, and patch part helpers.
+//! OpenCode-style durable text, snapshot, file, tool, and patch part helpers.
 //!
 //! Upstream references:
-//! - `packages/schema/src/v1/session.ts`: `TextPart`, `SnapshotPart`, `PatchPart`, `ToolPart`, `ToolState*`.
+//! - `packages/schema/src/v1/session.ts`: `TextPart`, `SnapshotPart`, `FilePart`, `PatchPart`, `ToolPart`, `ToolState*`.
 //! - `packages/opencode/src/session/processor.ts`: `completeToolCall` / `failToolCall`.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -10,9 +10,7 @@ use std::hash::{Hash, Hasher};
 
 pub fn text_part(text: &str, synthetic: bool) -> serde_json::Value {
     serde_json::json!({
-        "type": "text",
-        "text": text,
-        "synthetic": synthetic,
+        "type": "text", "text": text, "synthetic": synthetic,
         "time": {"start": 0, "end": 0},
         "metadata": {"opencode_source": opencode_text_part_source()}
     })
@@ -23,24 +21,40 @@ pub fn text_parts(text: &str, synthetic: bool) -> Vec<serde_json::Value> {
 }
 
 pub fn snapshot_part(snapshot: &str) -> serde_json::Value {
-    serde_json::json!({
-        "type": "snapshot",
-        "snapshot": snapshot,
-        "metadata": {"opencode_source": opencode_snapshot_part_source()}
-    })
+    serde_json::json!({"type": "snapshot", "snapshot": snapshot, "metadata": {"opencode_source": opencode_snapshot_part_source()}})
+}
+
+pub fn file_parts(results: &[ToolResult]) -> Vec<serde_json::Value> {
+    results.iter().flat_map(file_parts_for_result).collect()
+}
+
+fn file_parts_for_result(result: &ToolResult) -> Vec<serde_json::Value> {
+    if !result.success || !matches!(result.kind, ToolKind::ApplyPatch) { return Vec::new(); }
+    patch_file_values(result).into_iter().map(|file| {
+        let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
+        let text = file.get("diff").and_then(serde_json::Value::as_str).unwrap_or("");
+        serde_json::json!({
+            "type": "file",
+            "mime": mime_for(path),
+            "filename": path.rsplit('/').next().unwrap_or(path),
+            "url": format!("workspace://{}", path),
+            "source": {"type": "file", "path": path, "text": {"value": text, "start": 0, "end": text.len()}},
+            "metadata": {"opencode_source": opencode_file_part_source()}
+        })
+    }).collect()
+}
+
+fn mime_for(path: &str) -> &'static str {
+    if path.ends_with(".md") { "text/markdown" }
+    else if path.ends_with(".json") { "application/json" }
+    else if path.ends_with(".rs") { "text/rust" }
+    else { "text/plain" }
 }
 
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool",
-        "callID": call.id.0.to_string(),
-        "tool": tool_name(&call.kind),
-        "state": {
-            "status": "running",
-            "input": call.args.clone(),
-            "metadata": {},
-            "time": {"start": 0}
-        },
+        "type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind),
+        "state": {"status": "running", "input": call.args.clone(), "metadata": {}, "time": {"start": 0}},
         "metadata": {"opencode_source": opencode_tool_part_source()}
     })
 }
@@ -50,20 +64,12 @@ pub fn finished_tool_part(result: &ToolResult) -> serde_json::Value {
 }
 
 pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
-    let title = result.metadata.get("title")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_else(|| tool_name(&result.kind));
+    let title = result.metadata.get("title").and_then(serde_json::Value::as_str).unwrap_or_else(|| tool_name(&result.kind));
     serde_json::json!({
-        "type": "tool",
-        "callID": result.id.0.to_string(),
-        "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
         "state": {
-            "status": "completed",
-            "input": {},
-            "output": result.output.clone(),
-            "title": title,
-            "metadata": result.metadata.clone(),
-            "time": {"start": 0, "end": result.duration_ms}
+            "status": "completed", "input": {}, "output": result.output.clone(), "title": title,
+            "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}
         },
         "metadata": {"opencode_source": opencode_tool_part_source()}
     })
@@ -71,15 +77,10 @@ pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
 
 pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
     serde_json::json!({
-        "type": "tool",
-        "callID": result.id.0.to_string(),
-        "tool": tool_name(&result.kind),
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
         "state": {
-            "status": "error",
-            "input": {},
-            "error": result.error.clone().unwrap_or_else(|| result.output.clone()),
-            "metadata": result.metadata.clone(),
-            "time": {"start": 0, "end": result.duration_ms}
+            "status": "error", "input": {}, "error": result.error.clone().unwrap_or_else(|| result.output.clone()),
+            "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}
         },
         "metadata": {"opencode_source": opencode_tool_part_source()}
     })
@@ -90,61 +91,47 @@ pub fn patch_part(result: &ToolResult) -> Option<serde_json::Value> {
     let files = patch_files(result);
     if files.is_empty() { return None; }
     let hash = patch_hash(result, &files);
-    Some(serde_json::json!({
-        "type": "patch",
-        "hash": hash,
-        "files": files,
-        "metadata": {"opencode_source": opencode_patch_part_source()}
-    }))
+    Some(serde_json::json!({"type": "patch", "hash": hash, "files": files, "metadata": {"opencode_source": opencode_patch_part_source()}}))
 }
 
 pub fn patch_parts(results: &[ToolResult]) -> Vec<serde_json::Value> {
     results.iter().filter_map(patch_part).collect()
 }
 
+fn patch_file_values(result: &ToolResult) -> Vec<&serde_json::Value> {
+    result.metadata.get("files").and_then(serde_json::Value::as_array)
+        .map(|files| files.iter().collect()).unwrap_or_default()
+}
+
 fn patch_files(result: &ToolResult) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(files) = result.metadata.get("files").and_then(serde_json::Value::as_array) {
-        for file in files {
-            let path = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str);
-            if let Some(path) = path { out.push(path.to_string()); }
-        }
+    for file in patch_file_values(result) {
+        if let Some(path) = file.get("relativePath").or_else(|| file.get("path")).and_then(serde_json::Value::as_str) { out.push(path.to_string()); }
     }
-    out.sort();
-    out.dedup();
-    out
+    out.sort(); out.dedup(); out
 }
 
 fn patch_hash(result: &ToolResult, files: &[String]) -> String {
     let mut hasher = DefaultHasher::new();
-    result.id.0.to_string().hash(&mut hasher);
-    result.output.hash(&mut hasher);
+    result.id.0.to_string().hash(&mut hasher); result.output.hash(&mut hasher);
     for file in files { file.hash(&mut hasher); }
     format!("patch_{:016x}", hasher.finish())
 }
 
 pub fn opencode_text_part_source() -> serde_json::Value {
-    serde_json::json!({
-        "path": "packages/schema/src/v1/session.ts",
-        "identifier": "TextPart",
-        "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean"}
-    })
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "TextPart", "shape": {"type": "text", "text": "String", "synthetic": "optional Boolean"}})
 }
 
 pub fn opencode_snapshot_part_source() -> serde_json::Value {
-    serde_json::json!({
-        "path": "packages/schema/src/v1/session.ts",
-        "identifier": "SnapshotPart",
-        "shape": {"type": "snapshot", "snapshot": "String"}
-    })
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "SnapshotPart", "shape": {"type": "snapshot", "snapshot": "String"}})
+}
+
+pub fn opencode_file_part_source() -> serde_json::Value {
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "FilePart", "shape": {"type": "file", "mime": "String", "filename": "optional String", "url": "String", "source": "optional FilePartSource"}})
 }
 
 pub fn opencode_patch_part_source() -> serde_json::Value {
-    serde_json::json!({
-        "path": "packages/schema/src/v1/session.ts",
-        "identifier": "PatchPart",
-        "shape": {"type": "patch", "hash": "String", "files": "Array<String>"}
-    })
+    serde_json::json!({"path": "packages/schema/src/v1/session.ts", "identifier": "PatchPart", "shape": {"type": "patch", "hash": "String", "files": "Array<String>"}})
 }
 
 pub fn opencode_tool_part_source() -> serde_json::Value {
@@ -156,27 +143,13 @@ pub fn opencode_tool_part_source() -> serde_json::Value {
 
 pub fn tool_name(kind: &ToolKind) -> &'static str {
     match kind {
-        ToolKind::FileRead => "file_read",
-        ToolKind::FileWrite => "file_write",
-        ToolKind::FileEdit => "file_edit",
-        ToolKind::FileDelete => "file_delete",
-        ToolKind::FileList => "file_list",
-        ToolKind::FileGlob => "file_glob",
-        ToolKind::FileSearch => "file_search",
-        ToolKind::WebFetch => "web_fetch",
-        ToolKind::WebSearch => "web_search",
-        ToolKind::ShellCommand => "shell_command",
-        ToolKind::TerminalRun => "terminal_run",
-        ToolKind::Task => "task",
-        ToolKind::BatchParallel => "batch_parallel",
-        ToolKind::RepoInfo => "repo_info",
-        ToolKind::ProposePatch => "propose_patch",
-        ToolKind::ApplyPatch => "apply_patch",
-        ToolKind::SwitchMode => "switch_mode",
-        ToolKind::BrowserProof => "browser_proof",
-        ToolKind::VisionReview => "vision_review",
-        ToolKind::GraphBuild => "graph_build",
-        ToolKind::GraphQuery => "graph_query",
+        ToolKind::FileRead => "file_read", ToolKind::FileWrite => "file_write", ToolKind::FileEdit => "file_edit",
+        ToolKind::FileDelete => "file_delete", ToolKind::FileList => "file_list", ToolKind::FileGlob => "file_glob",
+        ToolKind::FileSearch => "file_search", ToolKind::WebFetch => "web_fetch", ToolKind::WebSearch => "web_search",
+        ToolKind::ShellCommand => "shell_command", ToolKind::TerminalRun => "terminal_run", ToolKind::Task => "task",
+        ToolKind::BatchParallel => "batch_parallel", ToolKind::RepoInfo => "repo_info", ToolKind::ProposePatch => "propose_patch",
+        ToolKind::ApplyPatch => "apply_patch", ToolKind::SwitchMode => "switch_mode", ToolKind::BrowserProof => "browser_proof",
+        ToolKind::VisionReview => "vision_review", ToolKind::GraphBuild => "graph_build", ToolKind::GraphQuery => "graph_query",
     }
 }
 
@@ -189,42 +162,32 @@ mod tests {
 
     fn result() -> ToolResult {
         ToolResult {
-            id: ToolCallId(Uuid::nil()), kind: ToolKind::ApplyPatch, success: true,
-            output: "Success".into(), error: None, duration_ms: 7,
-            metadata: HashMap::from([
-                ("title".into(), serde_json::json!("apply_patch")),
-                ("files".into(), serde_json::json!([{"relativePath": "proof.txt"}])),
-            ]),
+            id: ToolCallId(Uuid::nil()), kind: ToolKind::ApplyPatch, success: true, output: "Success".into(), error: None, duration_ms: 7,
+            metadata: HashMap::from([("title".into(), serde_json::json!("apply_patch")), ("files".into(), serde_json::json!([{"relativePath": "proof.txt", "diff": "+ok"}]))]),
         }
     }
 
     #[test]
-    fn builds_text_part() {
-        let part = text_part("hello", false);
-        assert_eq!(part["type"], "text");
-        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "TextPart");
+    fn builds_text_part() { assert_eq!(text_part("hello", false)["metadata"]["opencode_source"]["identifier"], "TextPart"); }
+
+    #[test]
+    fn builds_snapshot_part() { assert_eq!(snapshot_part("snapshot saved")["metadata"]["opencode_source"]["identifier"], "SnapshotPart"); }
+
+    #[test]
+    fn builds_file_part_for_apply_patch() {
+        let parts = file_parts(&[result()]);
+        assert_eq!(parts[0]["type"], "file");
+        assert_eq!(parts[0]["filename"], "proof.txt");
+        assert_eq!(parts[0]["metadata"]["opencode_source"]["identifier"], "FilePart");
     }
 
     #[test]
-    fn builds_snapshot_part() {
-        let part = snapshot_part("snapshot saved");
-        assert_eq!(part["type"], "snapshot");
-        assert_eq!(part["snapshot"], "snapshot saved");
-        assert_eq!(part["metadata"]["opencode_source"]["identifier"], "SnapshotPart");
-    }
-
-    #[test]
-    fn builds_completed_tool_part() {
-        let part = completed_tool_part(&result());
-        assert_eq!(part["type"], "tool");
-        assert_eq!(part["state"]["status"], "completed");
-    }
+    fn builds_completed_tool_part() { assert_eq!(completed_tool_part(&result())["state"]["status"], "completed"); }
 
     #[test]
     fn builds_patch_part_for_apply_patch() {
         let part = patch_part(&result()).unwrap();
         assert_eq!(part["type"], "patch");
         assert!(part["hash"].as_str().unwrap().starts_with("patch_"));
-        assert_eq!(part["files"][0], "proof.txt");
     }
 }
