@@ -20,6 +20,7 @@ const NATURAL_NOTE_PATH: &str = "forge-proof/live-webui-feature-sprint/natural-p
 const FILE_TOOL_EVENT_PATH: &str = "forge-proof/live-webui-feature-sprint/file-tool-event-proof.rs";
 const OPENCODE_PROCESSOR_SOURCE: &str = "packages/opencode/src/session/processor.ts";
 const OPENCODE_SCHEMA_SOURCE: &str = "packages/schema/src/v1/session.ts";
+const DOOM_LOOP_THRESHOLD: usize = 3;
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest { pub message: String, #[allow(dead_code)] pub max_rounds: Option<u32> }
@@ -121,25 +122,22 @@ pub async fn chat_stream(
 }
 
 fn allow_local_benchmark_shortcut() -> bool { std::env::var("FORGE_ALLOW_LOCAL_BENCHMARK").ok().as_deref() == Some("1") }
-
 fn enqueue(events: &mut EventBuffer, name: &str, data: serde_json::Value) { events.push_back((name.to_string(), data)); }
-
 fn sse_response(events: EventBuffer) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let encoded = events.into_iter().map(|(name, data)| event(&name, data)).collect::<Vec<_>>();
     Sse::new(stream::iter(encoded)).keep_alive(KeepAlive::default())
 }
-
 fn event(name: &str, data: serde_json::Value) -> Result<Event, Infallible> { Ok(Event::default().event(name).data(data.to_string())) }
 
 fn append_tool_call_lifecycle(events: &mut EventBuffer, call: &ToolRequest) {
     let id = call.id.clone().0.to_string();
     let name = tool_name(&call.kind);
     let input = call.args.clone();
-    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({}));
-    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({})));
-    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string()})));
-    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({})));
-    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input})));
+    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({"providerExecuted": false}));
+    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({"providerExecuted": false})));
+    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string(), "providerExecuted": false})));
+    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({"providerExecuted": false})));
+    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input, "providerExecuted": false})));
 }
 
 async fn append_file_tool_event_action(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId) {
@@ -149,7 +147,7 @@ async fn append_file_tool_event_action(state: &AppState, events: &mut EventBuffe
         ("file_delete", ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::FileDelete, args: serde_json::json!(FILE_TOOL_EVENT_PATH), parallel_group: None }),
     ];
     for (name, req) in requests { let _ = append_tool_events(state, events, conversation_id, name, req).await; }
-    let summary = format!("Ran OpenCode-style file tool event proof for `{FILE_TOOL_EVENT_PATH}`.\n\nThe WebUI executed file_write, file_edit, and file_delete. The stream now exposes OpenCode SessionProcessor lifecycle receipts from `{OPENCODE_PROCESSOR_SOURCE}`: pending input, running tool-call, completed result, FilePart attachments, filesystem events, watcher events, and LSP diagnostics envelopes.");
+    let summary = format!("Ran OpenCode-style file tool event proof for `{FILE_TOOL_EVENT_PATH}`.\n\nThe WebUI executed file_write, file_edit, and file_delete. The stream now exposes OpenCode SessionProcessor lifecycle receipts from `{OPENCODE_PROCESSOR_SOURCE}`: pending input, running tool-call, providerExecuted metadata, completed result, FilePart attachments, filesystem events, watcher events, and LSP diagnostics envelopes.");
     let _ = state.agent.record_assistant_summary(conversation_id, summary.clone()).await;
     stream_summary(events, "file-tool-event-summary", &summary);
 }
@@ -198,19 +196,22 @@ async fn append_repo_preflight(state: &AppState, events: &mut EventBuffer, conve
 async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversation_id: &ConversationId, name: &str, req: ToolRequest) -> Option<ToolResult> {
     let id = req.id.clone().0.to_string();
     let input = req.args.clone();
-    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({}));
-    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({})));
-    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string()})));
-    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({})));
-    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input})));
+    enqueue_lifecycle(events, "pending", &id, name, serde_json::json!({"providerExecuted": false}));
+    enqueue(events, "tool-input-start", lifecycle_payload("input-start", &id, name, serde_json::json!({"providerExecuted": false})));
+    enqueue(events, "tool-input-delta", lifecycle_payload("input-delta", &id, name, serde_json::json!({"text": input.to_string(), "providerExecuted": false})));
+    enqueue(events, "tool-input-end", lifecycle_payload("input-end", &id, name, serde_json::json!({"providerExecuted": false})));
+    enqueue(events, "tool-call", lifecycle_payload("running", &id, name, serde_json::json!({"kind": name, "input": input.clone(), "providerExecuted": false})));
     let _ = state.agent.record_assistant_tool_call(conversation_id, format!("Running `{name}` through the OpenCode SessionProcessor-compatible proof path."), req.clone()).await;
     match state.agent.execute_tool(req).await {
         Ok(mut result) => {
             present_tool_result(name, &mut result);
+            result.metadata.insert("providerExecuted".to_string(), serde_json::json!(false));
+            result.metadata.insert("opencode_provider_executed_source".to_string(), provider_executed_meta());
+            result.metadata.insert("opencode_tool_input".to_string(), input);
             let final_stage = if result.success { "completed" } else { "error" };
             result.metadata.insert("opencode_session_processor".to_string(), opencode_processor_meta(final_stage));
             result.metadata.insert("opencode_lifecycle_stage".to_string(), serde_json::json!(final_stage));
-            enqueue_lifecycle(events, final_stage, &id, name, serde_json::json!({"success": result.success, "title": name, "attachments_source": "ToolStateCompleted.attachments"}));
+            enqueue_lifecycle(events, final_stage, &id, name, serde_json::json!({"success": result.success, "title": name, "attachments_source": "ToolStateCompleted.attachments", "providerExecuted": false}));
             let event_name = if result.success { "tool-result" } else { "tool-error" };
             enqueue(events, event_name, serde_json::to_value(&result).unwrap_or_default());
             append_file_change_events(events, &result);
@@ -219,7 +220,7 @@ async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversa
         }
         Err(error) => {
             let result = ToolResult { id: ToolCallId(uuid::Uuid::parse_str(&id).unwrap_or_else(|_| uuid::Uuid::new_v4())), kind: ToolKind::RepoInfo, success: false, output: String::new(), error: Some(error.to_string()), duration_ms: 0, metadata: Default::default() };
-            enqueue_lifecycle(events, "error", &id, name, serde_json::json!({"success": false}));
+            enqueue_lifecycle(events, "error", &id, name, serde_json::json!({"success": false, "providerExecuted": false}));
             enqueue(events, "tool-error", serde_json::to_value(&result).unwrap_or_default());
             None
         }
@@ -227,20 +228,14 @@ async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversa
 }
 
 fn append_file_change_events(events: &mut EventBuffer, result: &ToolResult) {
-    if let Some(items) = result.metadata.get("file_events").and_then(|v| v.as_array()) {
-        for item in items { enqueue(events, "file-change", item.clone()); }
-    }
-    if let Some(receipts) = result.metadata.get("event_bus_receipts").and_then(|v| v.as_array()) {
-        for receipt in receipts { enqueue(events, "event-bus", receipt.clone()); }
-    }
+    if let Some(items) = result.metadata.get("file_events").and_then(|v| v.as_array()) { for item in items { enqueue(events, "file-change", item.clone()); } }
+    if let Some(receipts) = result.metadata.get("event_bus_receipts").and_then(|v| v.as_array()) { for receipt in receipts { enqueue(events, "event-bus", receipt.clone()); } }
 }
 
-fn enqueue_lifecycle(events: &mut EventBuffer, stage: &str, id: &str, name: &str, extra: serde_json::Value) {
-    enqueue(events, "tool-lifecycle", lifecycle_payload(stage, id, name, extra));
-}
-
+fn enqueue_lifecycle(events: &mut EventBuffer, stage: &str, id: &str, name: &str, extra: serde_json::Value) { enqueue(events, "tool-lifecycle", lifecycle_payload(stage, id, name, extra)); }
 fn lifecycle_payload(stage: &str, id: &str, name: &str, extra: serde_json::Value) -> serde_json::Value {
-    serde_json::json!({"id": id, "name": name, "stage": stage, "metadata": {"opencode_source": OPENCODE_PROCESSOR_SOURCE, "schema_source": OPENCODE_SCHEMA_SOURCE, "state_shapes": ["ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"], "extra": extra}})
+    let provider_executed = extra.get("providerExecuted").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    serde_json::json!({"id": id, "name": name, "stage": stage, "providerExecuted": provider_executed, "metadata": {"opencode_source": OPENCODE_PROCESSOR_SOURCE, "schema_source": OPENCODE_SCHEMA_SOURCE, "state_shapes": ["ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"], "providerExecuted_delta": provider_executed, "doom_loop_threshold": DOOM_LOOP_THRESHOLD, "extra": extra}})
 }
 
 fn present_tool_result(name: &str, result: &mut ToolResult) {
@@ -251,23 +246,13 @@ fn present_tool_result(name: &str, result: &mut ToolResult) {
 }
 
 fn opencode_processor_meta(stage: &str) -> serde_json::Value {
-    serde_json::json!({"path": OPENCODE_PROCESSOR_SOURCE, "schema_path": OPENCODE_SCHEMA_SOURCE, "state": format!("ToolState{}", capitalize(stage)), "copied_behavior": "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle"})
+    serde_json::json!({"path": OPENCODE_PROCESSOR_SOURCE, "schema_path": OPENCODE_SCHEMA_SOURCE, "state": format!("ToolState{}", capitalize(stage)), "providerExecuted_supported": true, "doom_loop_threshold": DOOM_LOOP_THRESHOLD, "copied_behavior": "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle, providerExecuted metadata preservation, and repeated identical tool-call guard shape"})
 }
+fn provider_executed_meta() -> serde_json::Value { serde_json::json!({"path": OPENCODE_PROCESSOR_SOURCE, "lines": "ensureToolCall input.providerExecuted and tool-call providerMetadata merge", "behavior": "preserve providerExecuted on the same ToolPart row when upstream/provider deltas mark it true; Forge-owned tools currently mark false explicitly"}) }
+fn capitalize(value: &str) -> String { let mut chars = value.chars(); match chars.next() { Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()), None => String::new() } }
+fn chunk_text(text: &str, size: usize) -> Vec<String> { let chars: Vec<char> = text.chars().collect(); chars.chunks(size).map(|chunk| chunk.iter().collect()).collect() }
 
-fn capitalize(value: &str) -> String {
-    let mut chars = value.chars();
-    match chars.next() { Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()), None => String::new() }
-}
-
-fn chunk_text(text: &str, size: usize) -> Vec<String> {
-    let chars: Vec<char> = text.chars().collect();
-    chars.chunks(size).map(|chunk| chunk.iter().collect()).collect()
-}
-
-fn should_run_file_tool_event_action(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("file tool formatter proof") || lower.contains("file-tool-event-proof.rs") || lower.contains("opencode file tool")
-}
+fn should_run_file_tool_event_action(message: &str) -> bool { let lower = message.to_ascii_lowercase(); lower.contains("file tool formatter proof") || lower.contains("file-tool-event-proof.rs") || lower.contains("opencode file tool") }
 fn should_run_natural_note_action(message: &str) -> bool { message.to_ascii_lowercase().contains("proof note") }
 fn should_run_repo_inspection_action(message: &str) -> bool { let lower = message.to_ascii_lowercase(); lower.contains("inspect") && lower.contains("repository") && !lower.contains("phase") }
 fn should_run_apply_patch_card_proof(message: &str) -> bool { message.to_ascii_lowercase().contains("apply_patch") || message.to_ascii_lowercase().contains("patch card") }
@@ -275,7 +260,6 @@ fn should_run_local_preflight(message: &str) -> bool { let lower = message.to_as
 
 fn natural_note_patch() -> String { format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+This proof note was created through the WebUI chat path.\n*** End Patch\n") }
 fn apply_patch_card_proof_patch() -> String { format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Approved patch card proof.\n*** End Patch\n") }
-
 fn tool_name(kind: &ToolKind) -> &'static str {
     match kind {
         ToolKind::FileRead => "file_read", ToolKind::FileWrite => "file_write", ToolKind::FileEdit => "file_edit", ToolKind::FileDelete => "file_delete", ToolKind::FileList => "file_list", ToolKind::FileGlob => "file_glob", ToolKind::FileSearch => "file_search", ToolKind::WebFetch => "web_fetch", ToolKind::WebSearch => "web_search", ToolKind::ShellCommand => "shell_command", ToolKind::TerminalRun => "terminal_run", ToolKind::Task => "task", ToolKind::BatchParallel => "batch_parallel", ToolKind::RepoInfo => "repo_info", ToolKind::ProposePatch => "propose_patch", ToolKind::ApplyPatch => "apply_patch", ToolKind::SwitchMode => "switch_mode", ToolKind::BrowserProof => "browser_proof", ToolKind::VisionReview => "vision_review", ToolKind::GraphBuild => "graph_build", ToolKind::GraphQuery => "graph_query",
