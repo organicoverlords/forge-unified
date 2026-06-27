@@ -1,6 +1,9 @@
 //! Conversation manager — CRUD for conversations with messages.
 
-use crate::tool_parts::{file_parts, finished_tool_part, patch_parts, running_tool_part, snapshot_part, text_parts};
+use crate::tool_parts::{
+    file_parts, finished_tool_part, patch_parts, reasoning_parts, running_tool_part, snapshot_part,
+    text_parts,
+};
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -44,6 +47,7 @@ impl ConversationManager {
         if let Some(conv) = self.conversations.get_mut(id) {
             let (content, mut metadata) = normalize_assistant_content(content);
             metadata.extend(message_text_metadata(&content, true));
+            metadata.extend(message_reasoning_metadata(&content));
             if let Some(calls) = &tool_calls {
                 metadata.insert("tool_parts".to_string(), serde_json::json!(calls.iter().map(running_tool_part).collect::<Vec<_>>()));
             }
@@ -107,6 +111,15 @@ fn message_text_metadata(content: &str, synthetic: bool) -> HashMap<String, serd
     HashMap::from([
         ("text_parts".to_string(), serde_json::json!(parts)),
         ("opencode_text_part_source".to_string(), crate::tool_parts::opencode_text_part_source()),
+    ])
+}
+
+fn message_reasoning_metadata(content: &str) -> HashMap<String, serde_json::Value> {
+    let parts = reasoning_parts(content);
+    if parts.is_empty() { return HashMap::new(); }
+    HashMap::from([
+        ("reasoning_parts".to_string(), serde_json::json!(parts)),
+        ("opencode_reasoning_part_source".to_string(), crate::tool_parts::opencode_reasoning_part_source()),
     ])
 }
 
