@@ -202,11 +202,12 @@ fn opencode_tool_state_source() -> serde_json::Value {
 
 fn edit_permission_request(hunks: &[PatchHunk], files: &[serde_json::Value], diff: String, approved: bool, approval_id: &str) -> serde_json::Value {
     let patterns = patch_relative_paths(hunks);
+    let filepath = patterns.join(", ");
     serde_json::json!({
         "permission": "edit", "required": "edit", "patterns": patterns, "always": ["*"],
         "metadata_ready": true, "interactive": true, "approved": approved,
         "approval_id": approval_id, "status": if approved { "approved" } else { "pending" },
-        "metadata": {"filepath": patterns.join(", "), "diff": diff, "files": files},
+        "metadata": {"filepath": filepath, "diff": diff, "files": files},
         "note": if approved { "Forge applied this patch only after edit approval." } else { "OpenCode asks before applying; Forge now pauses apply_patch until this edit request is approved." }
     })
 }
