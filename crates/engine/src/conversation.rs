@@ -1,6 +1,6 @@
 //! Conversation manager — CRUD for conversations with messages.
 
-use crate::tool_parts::{finished_tool_part, patch_parts, running_tool_part, text_parts};
+use crate::tool_parts::{finished_tool_part, patch_parts, running_tool_part, snapshot_part, text_parts};
 use crate::types::{Conversation, ConversationId, Message, MessageRole, ToolRequest, ToolResult};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -52,6 +52,23 @@ impl ConversationManager {
                 metadata.insert("tool_parts".to_string(), serde_json::json!(calls.iter().map(running_tool_part).collect::<Vec<_>>()));
             }
             conv.messages.push(Message { role: MessageRole::Assistant, content, tool_calls, tool_results: None, metadata });
+            conv.updated_at = chrono::Utc::now();
+        }
+    }
+
+    pub fn add_snapshot_part(&mut self, id: &ConversationId, snapshot: String) {
+        if let Some(conv) = self.conversations.get_mut(id) {
+            let part = snapshot_part(&snapshot);
+            conv.messages.push(Message {
+                role: MessageRole::System,
+                content: snapshot,
+                tool_calls: None,
+                tool_results: None,
+                metadata: HashMap::from([
+                    ("snapshot_parts".to_string(), serde_json::json!([part])),
+                    ("opencode_snapshot_part_source".to_string(), crate::tool_parts::opencode_snapshot_part_source()),
+                ]),
+            });
             conv.updated_at = chrono::Utc::now();
         }
     }
