@@ -159,6 +159,6 @@ curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
 jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
-for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
+for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "diagnostic files" "diagnostic report_block" "severity_counts" "opencode-lsp-diagnostics-panel" "packages/opencode/src/lsp/diagnostic.ts" "packages/opencode/src/lsp/lsp.ts" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
 echo "LIVE WebUI natural event bridge proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG status=$EVENT_STATUS_JSON"
