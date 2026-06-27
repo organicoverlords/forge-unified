@@ -11,7 +11,7 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 | OpenCode source | Forge status |
 |---|---|
 | `packages/opencode/src/tool/apply_patch.ts` | Forge implements patch parsing, approval metadata, changed-file summaries, post-edit receipts, watcher update receipts, LSP touch/warmup receipts, diagnostic report envelopes, and now advertises provider-visible `apply_patch` with `patchText` schema and source metadata. |
-| `packages/opencode/src/session/processor.ts` | Forge emits source-tagged WebUI SSE lifecycle receipts for `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error`; renders live ToolPart lifecycle cards; tracks `providerExecuted` metadata; and now cites this source for provider-visible task/batch/tool stream catalog entries. |
+| `packages/opencode/src/session/processor.ts` | Forge emits source-tagged WebUI SSE lifecycle receipts for `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call`, `tool-result`, and `tool-error`; renders live ToolPart lifecycle cards; tracks `providerExecuted` metadata; cites this source for provider-visible task/batch/tool stream catalog entries; and now interrupts repeated identical tool request batches after the OpenCode `DOOM_LOOP_THRESHOLD` of 3. |
 | `packages/schema/src/v1/session.ts` | ToolPart lifecycle receipt slice is implemented for pending, running, completed, and error states. TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart now include deterministic schema-compatible `id`, `sessionID`, and `messageID` fields. |
 | `packages/schema/src/session-id.ts` | Generated Forge session parts now use `ses_`-prefixed deterministic session IDs to match OpenCode SessionID prefix rules. |
 | `packages/opencode/src/tool/write.ts` / `edit.ts` / `read.ts` | Forge file tools are exposed to providers with source-path metadata and keep copied BOM, formatter, watcher, LSP, and attachment proof behavior. |
@@ -37,12 +37,14 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 - WebUI streams live ToolPart lifecycle cards and an in-chat EventV2Bridge receipt rail.
 - Tool results update the existing assistant-message `tool_parts` row for the matching `callID`.
 - Generated OpenCode-style parts now include deterministic `prt_`, `ses_`, and `msg_` prefixed base fields with source metadata.
+- The orchestrator now detects three consecutive identical tool request batches and safely interrupts the repeated loop with run metadata instead of executing the third duplicate batch.
 - File write/edit operations preserve UTF-8 BOMs and run contained formatter hooks.
 - Native watcher, event bus, LSP diagnostic envelopes, and compaction receipts remain visible and proofed.
 
 ## Not done / do not overclaim
 
 - Current HEAD is not yet same-head workflow/browser-proof green.
+- The doom-loop slice detects and interrupts repeated tool batches, but does not yet implement OpenCode's full interactive `permission.ask({ permission: "doom_loop" ... })` recovery path.
 - Full provider-executed tool execution remains incomplete; Forge-owned tools explicitly mark `providerExecuted: false` while preserving the copied metadata/delta shape.
 - Database-backed OpenCode part persistence remains partial; Forge currently emits deterministic schema-shaped IDs, not OpenCode database rows.
 - Live language-server process/client diagnostics remain incomplete.
@@ -53,8 +55,9 @@ Forge must not claim OpenCode parity from vibes. Every parity claim must cite an
 ## Current highest-priority parity gaps
 
 1. True providerExecuted tool calls from the NIM/provider stream using the advertised catalog.
-2. Live LSP diagnostics from a running language server process.
-3. Full OpenCode formatter catalog/config/runtime beyond rustfmt.
-4. OpenCode prompt/system behavior.
-5. LLM-backed compaction summary generation.
-6. Durable session/message/part persistence beyond current snapshots.
+2. Full OpenCode doom-loop permission question/recovery behavior beyond safe interruption.
+3. Live LSP diagnostics from a running language server process.
+4. Full OpenCode formatter catalog/config/runtime beyond rustfmt.
+5. OpenCode prompt/system behavior.
+6. LLM-backed compaction summary generation.
+7. Durable session/message/part persistence beyond current snapshots.
