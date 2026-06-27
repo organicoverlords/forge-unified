@@ -7,13 +7,268 @@ pub const CHAT_HTML: &str = r##"<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Forge Unified</title>
 <style>
-:root{color-scheme:dark;--bg:#0b1020;--panel:#111a2e;--panel2:#18233a;--text:#edf4ff;--muted:#9fb0d0;--border:#2a3858;--accent:#67e8f9;--ok:#86efac;--danger:#fb7185;--add:#86efac;--edit:#67e8f9;--del:#fb7185;--move:#fde68a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top left,#1e3a5f 0,var(--bg) 42rem);color:var(--text);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,textarea{font:inherit}button{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:12px;padding:.65rem .9rem;cursor:pointer}button.primary{background:var(--accent);color:#04111f;border-color:transparent;font-weight:800}button:disabled{opacity:.55}.app{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);height:100vh}aside{border-right:1px solid var(--border);background:rgba(17,26,46,.9);padding:1rem;display:flex;flex-direction:column;gap:1rem;min-height:0}main{display:grid;grid-template-rows:auto 1fr auto;min-height:0}.brand{display:flex;justify-content:space-between;gap:1rem}h1{font-size:1.2rem;margin:0}.muted,.subtitle{color:var(--muted);font-size:.84rem}.pill{border:1px solid var(--border);border-radius:999px;padding:.22rem .55rem;color:var(--muted);font-size:.78rem}.conv-list{display:flex;flex-direction:column;gap:.45rem;overflow:auto}.conv{text-align:left;border-radius:14px;padding:.75rem}.conv.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(103,232,249,.22) inset}.conv-title{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topbar,.composer{border-color:var(--border);background:rgba(11,16,32,.88);padding:1rem clamp(1rem,3vw,1.5rem)}.topbar{border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:1rem;align-items:center}.composer{border-top:1px solid var(--border)}.messages{padding:1rem clamp(1rem,3vw,1.5rem);overflow:auto;display:flex;flex-direction:column;gap:.8rem;min-height:0}.message{max-width:920px;border:1px solid var(--border);border-radius:18px;padding:.9rem;background:rgba(17,26,46,.84);white-space:pre-wrap;overflow-wrap:anywhere}.message.user{align-self:flex-end;background:rgba(103,232,249,.13);border-color:rgba(103,232,249,.42)}.message.assistant{align-self:flex-start}.message.tool,.message.system{align-self:stretch;max-width:none;background:rgba(24,35,58,.72)}.role{display:flex;justify-content:space-between;color:var(--muted);font-size:.76rem;margin-bottom:.45rem;text-transform:uppercase;letter-spacing:.04em}.tool-card,.patch-card,.snapshot-card,.filepart-card,.reasoning-card,.compaction-card,.approval-card{border:1px solid rgba(134,239,172,.45);border-radius:14px;padding:.75rem;margin-top:.55rem;background:rgba(0,0,0,.18)}.tool-card.running,.approval-card{border-color:rgba(103,232,249,.6)}.tool-card.error,.tool-card.err{border-color:rgba(251,113,133,.65)}.patch-card{border-color:rgba(253,230,138,.65)}.snapshot-card,.reasoning-card,.compaction-card{border-color:rgba(103,232,249,.65)}.filepart-card{border-color:rgba(134,239,172,.65)}.tool-head,.patch-head,.snapshot-head,.filepart-head,.reasoning-head,.compaction-head,.approval-head{display:flex;justify-content:space-between;gap:1rem;font-weight:800;color:var(--ok)}.patch-head{color:var(--move)}.snapshot-head,.reasoning-head,.compaction-head,.approval-head{color:var(--accent)}.filepart-head{color:var(--add)}.tool-card.running .tool-head{color:var(--accent)}.tool-card.error .tool-head,.tool-card.err .tool-head{color:var(--danger)}.tool-output,.patch-output,.snapshot-output,.filepart-output,.reasoning-output,.compaction-output,.approval-output{margin-top:.55rem;color:#d9e7ff}.tool-card details,.patch-card details,.snapshot-card details,.filepart-card details,.reasoning-card details,.compaction-card details,.approval-card details,.text-parts{margin-top:.55rem;color:var(--muted)}summary{cursor:pointer}pre{margin:.5rem 0 0;padding:.75rem;border-radius:12px;background:#050914;overflow:auto;max-height:11rem;color:#d9e7ff}.file-events{display:grid;gap:.45rem;margin-top:.65rem}.file-card{border:1px solid var(--border);border-radius:12px;background:rgba(5,9,20,.74);padding:.65rem;display:grid;gap:.35rem}.file-card.add{border-color:rgba(134,239,172,.55)}.file-card.edit{border-color:rgba(103,232,249,.55)}.file-card.delete{border-color:rgba(251,113,133,.6)}.file-card.move{border-color:rgba(253,230,138,.6)}.file-title{display:flex;gap:.5rem;align-items:center;font-weight:800}.file-badge{border-radius:999px;padding:.1rem .45rem;background:rgba(255,255,255,.08);font-size:.74rem}.file-card.add .file-badge{color:var(--add)}.file-card.edit .file-badge{color:var(--edit)}.file-card.delete .file-badge{color:var(--del)}.file-card.move .file-badge{color:var(--move)}.file-path{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}.file-meta{color:var(--muted);font-size:.78rem}.composer-inner{display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:end}textarea{width:100%;min-height:4.5rem;max-height:12rem;resize:vertical;border-radius:16px;border:1px solid var(--border);color:var(--text);background:rgba(17,26,46,.92);padding:.85rem}.toast{position:fixed;right:1rem;bottom:1rem;display:none;background:#09111f;border:1px solid var(--border);border-radius:16px;padding:.8rem .9rem}.toast.show{display:block}@media(max-width:780px){.app{grid-template-columns:1fr}aside{max-height:36vh;border-right:0;border-bottom:1px solid var(--border)}.composer-inner{grid-template-columns:1fr}}
+:root{
+  color-scheme:dark;
+  --bg:#070708;
+  --bg-soft:#0d0d10;
+  --panel:rgba(24,24,27,.72);
+  --panel-strong:rgba(32,32,36,.82);
+  --panel-hover:rgba(42,42,47,.86);
+  --text:#f4f4f5;
+  --muted:#a1a1aa;
+  --quiet:#71717a;
+  --border:rgba(255,255,255,.10);
+  --border-strong:rgba(255,255,255,.16);
+  --accent:#d6a84f;
+  --accent-soft:rgba(214,168,79,.14);
+  --accent-ring:rgba(214,168,79,.42);
+  --ok:#8fd18f;
+  --danger:#f48a99;
+  --add:#8fd18f;
+  --edit:#a8c7ff;
+  --del:#f48a99;
+  --move:#e8c16f;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 52% -12%,rgba(214,168,79,.16),transparent 34rem),
+    radial-gradient(circle at 12% 14%,rgba(255,255,255,.045),transparent 28rem),
+    linear-gradient(180deg,#0c0c0f 0%,var(--bg) 52%,#050506 100%);
+  color:var(--text);
+  font:15px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:-.01em;
+}
+button,textarea{font:inherit}
+button{
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.045);
+  color:var(--text);
+  border-radius:14px;
+  padding:.64rem .85rem;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,transform .16s ease;
+}
+button:hover{background:rgba(255,255,255,.075);border-color:var(--border-strong)}
+button:active{transform:translateY(1px)}
+button.primary{
+  background:linear-gradient(180deg,#e1bd64,#c49437);
+  color:#111;
+  border-color:transparent;
+  font-weight:750;
+  box-shadow:0 0 0 1px rgba(255,255,255,.14) inset,0 10px 28px rgba(214,168,79,.18);
+}
+button:disabled{opacity:.45;cursor:not-allowed}
+.app{
+  display:grid;
+  grid-template-columns:minmax(230px,300px) minmax(0,1fr);
+  height:100vh;
+  isolation:isolate;
+}
+aside{
+  border-right:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(18,18,21,.78),rgba(8,8,10,.72));
+  backdrop-filter:blur(18px);
+  padding:1rem;
+  display:flex;
+  flex-direction:column;
+  gap:.9rem;
+  min-height:0;
+}
+main{
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  min-height:0;
+  position:relative;
+}
+main:before{
+  content:"";
+  position:absolute;
+  inset:4rem 7vw auto 7vw;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent-ring),transparent);
+  pointer-events:none;
+}
+.brand{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
+h1{font-size:1rem;margin:0;font-weight:650;letter-spacing:-.02em}
+.muted,.subtitle{color:var(--muted);font-size:.82rem}
+.pill{
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:.2rem .52rem;
+  color:var(--accent);
+  background:var(--accent-soft);
+  font-size:.74rem;
+}
+.conv-list{display:flex;flex-direction:column;gap:.45rem;overflow:auto;padding-right:.12rem}
+.conv{text-align:left;border-radius:14px;padding:.72rem;background:rgba(255,255,255,.025)}
+.conv.active{border-color:var(--accent-ring);background:var(--accent-soft);box-shadow:0 0 0 1px rgba(214,168,79,.1) inset}
+.conv-title{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar{
+  border-bottom:1px solid var(--border);
+  background:rgba(8,8,10,.58);
+  backdrop-filter:blur(18px);
+  padding:.9rem clamp(1rem,3vw,1.5rem);
+  display:flex;
+  justify-content:space-between;
+  gap:1rem;
+  align-items:center;
+}
+.topbar strong{font-weight:680}
+.topbar:before{
+  content:"Forge ✦";
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  top:.9rem;
+  color:#f4f4f5;
+  font-weight:520;
+  letter-spacing:.01em;
+}
+.messages{
+  padding:1.15rem clamp(1rem,5vw,3rem) 1.5rem;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:.95rem;
+  min-height:0;
+}
+.message{
+  width:min(940px,100%);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:1rem 1.05rem;
+  background:var(--panel);
+  box-shadow:0 18px 50px rgba(0,0,0,.24),0 1px 0 rgba(255,255,255,.04) inset;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.message.user{
+  align-self:center;
+  background:rgba(255,255,255,.055);
+  border-color:var(--border-strong);
+}
+.message.assistant{align-self:center;border-color:rgba(214,168,79,.16)}
+.message.tool,.message.system{align-self:center;max-width:940px;background:rgba(18,18,21,.78)}
+.role{
+  display:flex;
+  justify-content:space-between;
+  color:var(--quiet);
+  font-size:.72rem;
+  margin-bottom:.45rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.tool-card,.patch-card,.snapshot-card,.filepart-card,.reasoning-card,.compaction-card,.approval-card{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:.8rem;
+  margin-top:.65rem;
+  background:rgba(0,0,0,.20);
+}
+.approval-card,.tool-card.running{border-color:var(--accent-ring);background:linear-gradient(180deg,rgba(214,168,79,.09),rgba(0,0,0,.18))}
+.tool-card.error,.tool-card.err{border-color:rgba(244,138,153,.5)}
+.patch-card{border-color:rgba(232,193,111,.42)}
+.snapshot-card,.reasoning-card,.compaction-card{border-color:rgba(168,199,255,.28)}
+.filepart-card{border-color:rgba(143,209,143,.38)}
+.tool-head,.patch-head,.snapshot-head,.filepart-head,.reasoning-head,.compaction-head,.approval-head{
+  display:flex;
+  justify-content:space-between;
+  gap:1rem;
+  font-weight:720;
+  color:var(--ok);
+}
+.patch-head{color:var(--move)}
+.snapshot-head,.reasoning-head,.compaction-head,.approval-head{color:var(--accent)}
+.filepart-head{color:var(--add)}
+.tool-card.running .tool-head{color:var(--accent)}
+.tool-card.error .tool-head,.tool-card.err .tool-head{color:var(--danger)}
+.tool-output,.patch-output,.snapshot-output,.filepart-output,.reasoning-output,.compaction-output,.approval-output{margin-top:.55rem;color:#e4e4e7}
+.tool-card details,.patch-card details,.snapshot-card details,.filepart-card details,.reasoning-card details,.compaction-card details,.approval-card details,.text-parts{margin-top:.6rem;color:var(--muted)}
+summary{cursor:pointer}
+pre{
+  margin:.5rem 0 0;
+  padding:.75rem;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background:#050506;
+  overflow:auto;
+  max-height:12rem;
+  color:#dedee3;
+  font-family:var(--mono);
+  font-size:.8rem;
+}
+.file-events{display:grid;gap:.45rem;margin-top:.65rem}
+.file-card{
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(255,255,255,.035);
+  padding:.65rem;
+  display:grid;
+  gap:.35rem;
+}
+.file-card.add{border-color:rgba(143,209,143,.42)}
+.file-card.edit{border-color:rgba(168,199,255,.42)}
+.file-card.delete{border-color:rgba(244,138,153,.5)}
+.file-card.move{border-color:rgba(232,193,111,.5)}
+.file-title{display:flex;gap:.5rem;align-items:center;font-weight:700}
+.file-badge{border-radius:999px;padding:.1rem .45rem;background:rgba(255,255,255,.07);font-size:.72rem}
+.file-card.add .file-badge{color:var(--add)}
+.file-card.edit .file-badge{color:var(--edit)}
+.file-card.delete .file-badge{color:var(--del)}
+.file-card.move .file-badge{color:var(--move)}
+.file-path{font-family:var(--mono);overflow-wrap:anywhere}
+.file-meta{color:var(--muted);font-size:.78rem}
+.composer{
+  border-top:1px solid var(--border);
+  background:rgba(8,8,10,.72);
+  backdrop-filter:blur(18px);
+  padding:1rem clamp(1rem,5vw,3rem) 1.1rem;
+}
+.composer-inner{
+  width:min(940px,100%);
+  margin:0 auto;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:.75rem;
+  align-items:end;
+}
+.composer>.subtitle{width:min(940px,100%);margin:.55rem auto 0;color:var(--quiet)}
+textarea{
+  width:100%;
+  min-height:4.25rem;
+  max-height:12rem;
+  resize:vertical;
+  border-radius:18px;
+  border:1px solid var(--border-strong);
+  color:var(--text);
+  background:rgba(255,255,255,.045);
+  padding:.9rem 1rem;
+  outline:none;
+}
+textarea:focus{border-color:var(--accent-ring);box-shadow:0 0 0 3px rgba(214,168,79,.10)}
+.toast{position:fixed;right:1rem;bottom:1rem;display:none;background:#101013;border:1px solid var(--border);border-radius:16px;padding:.8rem .9rem;box-shadow:0 18px 45px rgba(0,0,0,.35)}
+.toast.show{display:block}
+@media(max-width:860px){.app{grid-template-columns:1fr}aside{max-height:34vh;border-right:0;border-bottom:1px solid var(--border)}.topbar:before{display:none}.composer-inner{grid-template-columns:1fr}.messages{padding-inline:1rem}}
 </style>
 </head>
-<body>
+<body data-theme="opencode-codex-dark" data-proof="modern-dark-ui-pass">
 <div class="app">
-<aside><div class="brand"><div><h1>Forge Unified</h1><div class="subtitle">Chat-first coding app MVP.</div></div><span class="pill" id="health-pill">checking</span></div><button id="new-conversation" class="primary">New conversation</button><div class="muted"><strong id="conversation-count">0</strong> conversations · <strong id="message-count">0</strong> messages</div><div class="conv-list" id="conversation-list"></div></aside>
-<main><div class="topbar"><div><strong id="chat-title">No conversation selected</strong><div class="subtitle" id="chat-subtitle">Persistent chat id appears here.</div></div><div><button id="refresh">Refresh</button> <button id="snapshot" disabled>Save snapshot</button> <button id="compact" disabled>Compact</button> <button id="graph">Graph</button></div></div><section class="messages" id="messages" aria-live="polite"></section><div class="composer"><div class="composer-inner"><label><span class="subtitle">Message</span><textarea id="message-input" placeholder="Ask Forge to inspect files, edit code, or create a proof note." disabled></textarea></label><button id="send" class="primary" disabled>Send</button></div><div class="subtitle">OpenCode TextPart · ReasoningPart · SnapshotPart · CompactionPart · FilePart · ToolPart · PatchPart cards · edit approvals</div></div></main>
+<aside>
+  <div class="brand"><div><h1>Forge Unified</h1><div class="subtitle">OpenCode-style builder workspace.</div></div><span class="pill" id="health-pill">checking</span></div>
+  <button id="new-conversation" class="primary">New conversation</button>
+  <div class="muted"><strong id="conversation-count">0</strong> conversations · <strong id="message-count">0</strong> messages</div>
+  <div class="conv-list" id="conversation-list"></div>
+</aside>
+<main>
+  <div class="topbar"><div><strong id="chat-title">No conversation selected</strong><div class="subtitle" id="chat-subtitle">Persistent chat id appears here.</div></div><div><button id="refresh">Refresh</button> <button id="snapshot" disabled>Save snapshot</button> <button id="compact" disabled>Compact</button> <button id="graph">Graph</button></div></div>
+  <section class="messages" id="messages" aria-live="polite"></section>
+  <div class="composer"><div class="composer-inner"><label><span class="subtitle">Message</span><textarea id="message-input" placeholder="Ask Forge to inspect files, edit code, or create a proof note." disabled></textarea></label><button id="send" class="primary" disabled>Send</button></div><div class="subtitle">OpenCode TextPart · ReasoningPart · SnapshotPart · CompactionPart · FilePart · ToolPart · PatchPart cards · edit approvals · opencode-codex-dark-ui</div></div>
+</main>
 </div><div class="toast" id="toast"></div>
 <script>
 const state={conversations:[],activeId:null,activeConversation:null,busy:false,streamAssistant:null};const $=id=>document.getElementById(id);
