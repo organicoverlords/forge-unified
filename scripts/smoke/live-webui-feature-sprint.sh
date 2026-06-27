@@ -66,7 +66,23 @@ curl_with_retry() {
 latest_conversation_from_sse() {
   local sse_file="$1"
   local out_file="$2"
-  awk 'prev == "event: conversation" { sub(/^data: /, ""); print } { prev = $0 }' "$sse_file" | tail -n 1 > "$out_file"
+  awk '
+    BEGIN { event = ""; data = "" }
+    /^event: / { event = substr($0, 8); next }
+    /^data: / {
+      payload = substr($0, 7)
+      if (data == "") data = payload; else data = data "\n" payload
+      next
+    }
+    /^$/ {
+      if (event == "conversation" && data != "") print data
+      event = ""; data = ""
+      next
+    }
+    END {
+      if (event == "conversation" && data != "") print data
+    }
+  ' "$sse_file" | tail -n 1 > "$out_file"
   jq -e '.messages | length >= 1' "$out_file" >/dev/null
 }
 
