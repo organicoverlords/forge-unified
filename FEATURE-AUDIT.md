@@ -7,8 +7,8 @@ PR: #3 into `master`
 
 ## Latest proven code baseline before this docs sync
 
-Latest fully green code HEAD: `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7`
-Latest ReasoningPart source/proof code HEAD before docs sync: `d880f839a44b7ad551e47e95bc9cd1b1987d60ae`
+Latest fully green code HEAD: `a0efdb6372cd92ac6b579bd152f009bb3debefbd`
+Latest CompactionPart source/proof code HEAD before docs sync: `bd118d718e01469445fafaf266527b97511bbba5`
 
 Latest fully green baselines:
 
@@ -20,8 +20,9 @@ Latest fully green baselines:
 | `e160fa4bf9326c26d5731e9fb474574a4d068b2f` | success | success | success | Compact repo inspection output with raw metadata preserved |
 | `b7b0e7eb88570900ad8e3252d8190004342678fd` | success | success | success | OpenCode `SnapshotPart` persistence |
 | `c3f15e4a5ac9c84fb07a6a49ec87118c97c4c3e7` | success | success | success | OpenCode `FilePart` persistence |
+| `a0efdb6372cd92ac6b579bd152f009bb3debefbd` | success | success | success | OpenCode `ReasoningPart` persistence |
 
-The latest ReasoningPart docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
+The latest CompactionPart docs-updated HEAD after this sync still needs its own Actions check before merge/green claims.
 
 ## Source-first OpenCode rule
 
@@ -32,7 +33,7 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 ## Implemented / real enough to claim
 
 - Root page serves a bundled single-page MVP chat UI.
-- UI can create conversations, select conversations, send messages, display messages/tool events, and open graph view.
+- UI can create conversations, select conversations, send messages, display messages/tool events, save snapshots, request compaction, and open graph view.
 - Provider configs include NIM and OpenAI-compatible providers.
 - Runtime state selects the first enabled provider/model from config.
 - Tool schema generation and tool-call conversion are wired.
@@ -50,8 +51,8 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 - Normal prompt `Please create a short proof note for this WebUI sprint.` creates a real proof note through `apply_patch`, persists the tool result, and returns a human summary.
 - Normal prompt `Please inspect this repository and summarize what you find.` runs real `repo_info` and `file_list` tools and returns a human summary.
 - Repo-inspection tool cards now show compact visible output (`Repository status`, `Top-level repository entries`) while preserving raw JSON in `metadata.raw_output`.
-- OpenCode-style `TextPart`, `SnapshotPart`, `FilePart`, `ToolPart`, and `PatchPart` persistence/rendering are proven green through `c3f15e4`.
-- The new ReasoningPart slice persists safe public `reasoning_parts` on assistant messages and renders `OpenCode ReasoningPart` / `ReasoningPart metadata`; latest docs head must pass Actions before green claim.
+- OpenCode-style `TextPart`, `ReasoningPart`, `SnapshotPart`, `FilePart`, `ToolPart`, and `PatchPart` persistence/rendering are proven green through `a0efdb6`.
+- The new CompactionPart slice persists `compaction_parts`, exposes `/api/conversations/:id/compact`, and renders `OpenCode CompactionPart` / `CompactionPart metadata`; latest docs head must pass Actions before green claim.
 - CI and Build Proof enforce a hard 500-line source file limit through `scripts/ci/check-file-lines.sh`.
 - The graphify CLI oversized source was split into `crates/unifiedgraph/src/cli.rs` and a compact `crates/unifiedgraph/src/main.rs`; the gate is kept real, not weakened.
 
@@ -65,18 +66,19 @@ Canonical parity tracker: `OPENCODE-PARITY.md`.
 - Benchmark adapter is shallow and not yet the full artifact-backed contract.
 - WebUI cards are cleaner, and session parts are visible/durable enough for proof, but this is not full OpenCode session storage parity.
 - `ReasoningPart` is only a safe public progress summary. It must not expose hidden/private chain-of-thought.
+- `CompactionPart` is a durable request marker and optional local pruning path, not full OpenCode LLM compaction summary/replay/autocontinue parity.
 
 ## Highest-priority next work
 
-1. Check latest Actions for the docs-updated ReasoningPart HEAD and fix any real failures.
+1. Check latest Actions for the docs-updated CompactionPart HEAD and fix any real failures.
 2. Implement real edit permission gating for `apply_patch` from OpenCode source.
 3. Implement full durable OpenCode-style `ToolPart` lifecycle parity: pending, running, completed, error.
 4. Implement watcher/file edited events and LSP diagnostics for patch changes.
 5. Keep all checked source files under 500 lines by splitting before monoliths form.
 6. Rewrite Forge's system prompt from studied OpenCode prompt behavior, not invented wording.
 7. Add durable session/message/part persistence.
-8. Add context compaction parity.
-9. Implement `AgentPart`, `CompactionPart`, or `RetryPart` only when backed by a real Forge behavior/proof path.
+8. Complete context compaction parity beyond the request marker.
+9. Implement `AgentPart` or `RetryPart` only when backed by a real Forge behavior/proof path.
 
 ## Claim rule
 
