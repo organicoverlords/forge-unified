@@ -88,8 +88,8 @@ for marker in 'event: tool-lifecycle' 'event: tool-input-start' 'event: tool-inp
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$TOOL_CONV_ID" > "$TOOL_CONVERSATION_JSON"
 for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_tool_part_updates' 'same ToolPart row updated by callID' 'ToolStateCompleted.attachments' 'file-tool-event-proof.rs'; do grep -Fq "$marker" "$TOOL_CONVERSATION_JSON"; done
 
-step "browser proof $MODEL_ID"
-timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR"
+step "browser proof tool lifecycle"
+timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
 for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
 
 echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID model=$MODEL_ID screenshot=$PROOF_DIR/webui.png event_rail=$PROOF_DIR/event-rail.png" > "$PROOF_DIR/live-proof-status.txt"
