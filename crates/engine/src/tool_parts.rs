@@ -2,7 +2,7 @@
 //!
 //! Upstream references:
 //! - `packages/schema/src/v1/session.ts`: session part schemas.
-//! - `packages/opencode/src/session/processor.ts`: `completeToolCall` / `failToolCall`.
+//! - `packages/opencode/src/session/processor.ts`: pending/running/completed/error tool part lifecycle.
 //! - `packages/opencode/src/session/compaction.ts`: creates compaction parts with auto/overflow/tail metadata.
 
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -70,19 +70,67 @@ fn mime_for(path: &str) -> &'static str {
     if path.ends_with(".md") { "text/markdown" } else if path.ends_with(".json") { "application/json" } else if path.ends_with(".rs") { "text/rust" } else { "text/plain" }
 }
 
+pub fn pending_tool_part(call: &ToolRequest) -> serde_json::Value {
+    serde_json::json!({
+        "type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind),
+        "state": {"status": "pending", "input": {}, "raw": call.args.to_string()},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending"}
+    })
+}
+
 pub fn running_tool_part(call: &ToolRequest) -> serde_json::Value {
-    serde_json::json!({"type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind), "state": {"status": "running", "input": call.args.clone(), "metadata": {}, "time": {"start": 0}}, "metadata": {"opencode_source": opencode_tool_part_source()}})
+    serde_json::json!({
+        "type": "tool", "callID": call.id.0.to_string(), "tool": tool_name(&call.kind),
+        "state": {"status": "running", "input": call.args.clone(), "title": tool_name(&call.kind), "metadata": {}, "time": {"start": 0}},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running"}
+    })
+}
+
+pub fn started_tool_lifecycle_parts(call: &ToolRequest) -> Vec<serde_json::Value> {
+    vec![pending_tool_part(call), running_tool_part(call)]
 }
 
 pub fn finished_tool_part(result: &ToolResult) -> serde_json::Value { if result.success { completed_tool_part(result) } else { error_tool_part(result) } }
 
+pub fn finished_tool_lifecycle_parts(result: &ToolResult) -> Vec<serde_json::Value> {
+    vec![pending_tool_part_from_result(result), running_tool_part_from_result(result), finished_tool_part(result)]
+}
+
 pub fn completed_tool_part(result: &ToolResult) -> serde_json::Value {
     let title = result.metadata.get("title").and_then(serde_json::Value::as_str).unwrap_or_else(|| tool_name(&result.kind));
-    serde_json::json!({"type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind), "state": {"status": "completed", "input": {}, "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}}, "metadata": {"opencode_source": opencode_tool_part_source()}})
+    serde_json::json!({
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "state": {"status": "completed", "input": tool_input(result), "output": result.output.clone(), "title": title, "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "completed"}
+    })
 }
 
 pub fn error_tool_part(result: &ToolResult) -> serde_json::Value {
-    serde_json::json!({"type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind), "state": {"status": "error", "input": {}, "error": result.error.clone().unwrap_or_else(|| result.output.clone()), "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}}, "metadata": {"opencode_source": opencode_tool_part_source()}})
+    serde_json::json!({
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "state": {"status": "error", "input": tool_input(result), "error": result.error.clone().unwrap_or_else(|| result.output.clone()), "metadata": result.metadata.clone(), "time": {"start": 0, "end": result.duration_ms}},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "error"}
+    })
+}
+
+fn pending_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
+    serde_json::json!({
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "state": {"status": "pending", "input": {}, "raw": tool_input(result).to_string()},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "pending", "derived_from_result": true}
+    })
+}
+
+fn running_tool_part_from_result(result: &ToolResult) -> serde_json::Value {
+    serde_json::json!({
+        "type": "tool", "callID": result.id.0.to_string(), "tool": tool_name(&result.kind),
+        "state": {"status": "running", "input": tool_input(result), "title": tool_name(&result.kind), "metadata": {}, "time": {"start": 0}},
+        "metadata": {"opencode_source": opencode_tool_part_source(), "lifecycle_stage": "running", "derived_from_result": true}
+    })
+}
+
+fn tool_input(result: &ToolResult) -> serde_json::Value {
+    result.metadata.get("opencode_tool_input").cloned().unwrap_or_else(|| serde_json::json!({}))
 }
 
 pub fn patch_part(result: &ToolResult) -> Option<serde_json::Value> {
@@ -139,7 +187,10 @@ pub fn opencode_patch_part_source() -> serde_json::Value {
 }
 
 pub fn opencode_tool_part_source() -> serde_json::Value {
-    serde_json::json!(["packages/schema/src/v1/session.ts:ToolPart/ToolStateRunning/ToolStateCompleted/ToolStateError", "packages/opencode/src/session/processor.ts:completeToolCall/failToolCall"])
+    serde_json::json!({
+        "schema": "packages/schema/src/v1/session.ts:ToolPart/ToolStatePending/ToolStateRunning/ToolStateCompleted/ToolStateError",
+        "processor": "packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall/failToolCall"
+    })
 }
 
 pub fn tool_name(kind: &ToolKind) -> &'static str {
@@ -163,7 +214,7 @@ mod tests {
 
     fn result_with_applied(applied: bool) -> ToolResult {
         ToolResult { id: ToolCallId(Uuid::nil()), kind: ToolKind::ApplyPatch, success: true, output: "Success".into(), error: None, duration_ms: 7,
-            metadata: HashMap::from([("title".into(), serde_json::json!("apply_patch")), ("applied".into(), serde_json::json!(applied)), ("files".into(), serde_json::json!([{"relativePath": "proof.txt", "diff": "+ok"}]))]), }
+            metadata: HashMap::from([("title".into(), serde_json::json!("apply_patch")), ("applied".into(), serde_json::json!(applied)), ("opencode_tool_input".into(), serde_json::json!({"patchText": "*** Begin Patch"})), ("files".into(), serde_json::json!([{"relativePath": "proof.txt", "diff": "+ok"}]))]), }
     }
 
     fn result() -> ToolResult { result_with_applied(true) }
@@ -206,7 +257,13 @@ mod tests {
     }
 
     #[test]
-    fn builds_completed_tool_part() { assert_eq!(completed_tool_part(&result())["state"]["status"], "completed"); }
+    fn builds_full_tool_lifecycle_parts() {
+        let parts = finished_tool_lifecycle_parts(&result());
+        let statuses: Vec<_> = parts.iter().map(|p| p["state"]["status"].as_str().unwrap()).collect();
+        assert_eq!(statuses, vec!["pending", "running", "completed"]);
+        assert_eq!(parts[2]["state"]["input"]["patchText"], "*** Begin Patch");
+        assert!(parts[2]["metadata"]["opencode_source"]["schema"].as_str().unwrap().contains("ToolStatePending"));
+    }
 
     #[test]
     fn builds_patch_part_for_apply_patch() {
