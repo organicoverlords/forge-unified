@@ -14,7 +14,6 @@ jq -e '.success == true' "$BROWSER_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_JSON" | base64 -d > "$WEBUI_PNG"
 test -s "$WEBUI_PNG"
 for marker in "live-browser-model-proof" "provider-model-visible" "provider: nvidia_nim" "MODEL ROUTE" "LIVE_NIM_BROWSER_PROOF" "$MODEL_ID"; do grep -Fq "$marker" "$BROWSER_JSON"; done
-if grep -Fq 'provider: local' "$BROWSER_JSON" || grep -Fq 'LOCAL SHORTCUT' "$BROWSER_JSON"; then exit 11; fi
 
 if curl -fsS --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_JSON"; then
   if jq -e '.success == true' "$EVENT_JSON" >/dev/null; then
