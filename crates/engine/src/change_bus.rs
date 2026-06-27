@@ -11,6 +11,7 @@ use tokio::sync::broadcast;
 const HISTORY_LIMIT: usize = 200;
 const OPENCODE_APPLY_SOURCE: &str = "opencode.apply_patch";
 const DURABLE_LOG_PATH: &str = ".forge/change-events.jsonl";
+const WATCHER_SUBSCRIBE_TIMEOUT_MS: usize = 10_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeEvent {
@@ -35,6 +36,11 @@ pub struct ChangeBusStatus {
     pub durable: bool,
     pub durable_log_path: Option<String>,
     pub durable_replay_count: usize,
+    pub watcher_backend: Option<&'static str>,
+    pub watcher_native_binding: bool,
+    pub watcher_subscribe_timeout_ms: usize,
+    pub watcher_ignore_patterns: Vec<&'static str>,
+    pub watcher_status: &'static str,
     pub opencode_sources: Vec<String>,
 }
 
@@ -116,6 +122,11 @@ impl ChangeBus {
             durable: self.inner.durable_log.is_some(),
             durable_log_path: self.inner.durable_log.as_ref().map(|path| path.display().to_string()),
             durable_replay_count: self.inner.durable_replay_count,
+            watcher_backend: watcher_backend(),
+            watcher_native_binding: false,
+            watcher_subscribe_timeout_ms: WATCHER_SUBSCRIBE_TIMEOUT_MS,
+            watcher_ignore_patterns: watcher_ignore_patterns(),
+            watcher_status: "contained_event_bridge_without_native_subscription",
             opencode_sources: opencode_event_sources(),
         }
     }
@@ -154,11 +165,21 @@ fn append_durable_event(path: &PathBuf, event: &ChangeEvent) {
     }
 }
 
+fn watcher_backend() -> Option<&'static str> {
+    if cfg!(target_os = "windows") { Some("windows") }
+    else if cfg!(target_os = "macos") { Some("fs-events") }
+    else if cfg!(target_os = "linux") { Some("inotify") }
+    else { None }
+}
+
+fn watcher_ignore_patterns() -> Vec<&'static str> { vec![".git", "target", "node_modules"] }
+
 fn opencode_event_sources() -> Vec<String> {
     let tool_root = ["packages/opencode/src/tool/"].concat();
     vec![
         "packages/opencode/src/event-v2-bridge.ts".to_string(),
         "packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts".to_string(),
+        "packages/core/src/filesystem/watcher.ts".to_string(),
         [tool_root.as_str(), "write.ts"].concat(),
         [tool_root.as_str(), "edit.ts"].concat(),
         [tool_root.as_str(), "apply_", "patch.ts"].concat(),
@@ -190,6 +211,8 @@ mod tests {
         assert_eq!(status.by_source.get(OPENCODE_APPLY_SOURCE), Some(&2));
         assert_eq!(status.latest_files, vec!["a.rs".to_string()]);
         assert_eq!(status.bridge_shape, "opencode_event_v2_bridge_status");
+        assert_eq!(status.watcher_subscribe_timeout_ms, WATCHER_SUBSCRIBE_TIMEOUT_MS);
+        assert!(status.watcher_ignore_patterns.contains(&".git"));
     }
 
     #[test]
