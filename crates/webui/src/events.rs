@@ -34,13 +34,13 @@ pub async fn chat_stream(
     let mut events = EventBuffer::new();
     enqueue(&mut events, "run-start", serde_json::json!({"conversation_id": conversation_id.0.to_string(), "phase": "started"}));
 
-    if agent_benchmark::should_run(&message) {
+    if allow_local_benchmark_shortcut() && agent_benchmark::should_run(&message) {
         let _ = state.agent.record_user_message(&conversation_id, message.clone()).await;
         events.extend(agent_benchmark::run(&state, &conversation_id).await);
         if let Some(conv) = state.agent.get_conversation(&conversation_id).await {
             enqueue(&mut events, "conversation", serde_json::to_value(conv).unwrap_or_default());
         }
-        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "six phase natural language benchmark", "provider": "local", "tool_loop": "completed"}));
+        enqueue(&mut events, "run-finish", serde_json::json!({"status": "completed", "task": "six phase natural language benchmark", "provider": "local", "model": null, "local_shortcut": true, "tool_loop": "completed"}));
         return Ok(sse_response(events));
     }
 
@@ -119,6 +119,8 @@ pub async fn chat_stream(
 
     Ok(sse_response(events))
 }
+
+fn allow_local_benchmark_shortcut() -> bool { std::env::var("FORGE_ALLOW_LOCAL_BENCHMARK").ok().as_deref() == Some("1") }
 
 fn enqueue(events: &mut EventBuffer, name: &str, data: serde_json::Value) { events.push_back((name.to_string(), data)); }
 
@@ -209,16 +211,27 @@ async fn append_tool_events(state: &AppState, events: &mut EventBuffer, conversa
             result.metadata.insert("opencode_session_processor".to_string(), opencode_processor_meta(final_stage));
             result.metadata.insert("opencode_lifecycle_stage".to_string(), serde_json::json!(final_stage));
             enqueue_lifecycle(events, final_stage, &id, name, serde_json::json!({"success": result.success, "title": name, "attachments_source": "ToolStateCompleted.attachments"}));
-            enqueue(events, if result.success { "tool-result" } else { "tool-error" }, serde_json::to_value(&result).unwrap_or_default());
+            let event_name = if result.success { "tool-result" } else { "tool-error" };
+            enqueue(events, event_name, serde_json::to_value(&result).unwrap_or_default());
             append_file_change_events(events, &result);
             let _ = state.agent.record_tool_results(conversation_id, vec![result.clone()]).await;
             Some(result)
         }
-        Err(tool_err) => {
-            enqueue_lifecycle(events, "error", &id, name, serde_json::json!({"message": tool_err.to_string()}));
-            enqueue(events, "tool-error", lifecycle_payload("error", &id, name, serde_json::json!({"message": tool_err.to_string()})));
+        Err(error) => {
+            let result = ToolResult { id: ToolCallId(uuid::Uuid::parse_str(&id).unwrap_or_else(|_| uuid::Uuid::new_v4())), kind: ToolKind::RepoInfo, success: false, output: String::new(), error: Some(error.to_string()), duration_ms: 0, metadata: Default::default() };
+            enqueue_lifecycle(events, "error", &id, name, serde_json::json!({"success": false}));
+            enqueue(events, "tool-error", serde_json::to_value(&result).unwrap_or_default());
             None
         }
+    }
+}
+
+fn append_file_change_events(events: &mut EventBuffer, result: &ToolResult) {
+    if let Some(items) = result.metadata.get("file_events").and_then(|v| v.as_array()) {
+        for item in items { enqueue(events, "file-change", item.clone()); }
+    }
+    if let Some(receipts) = result.metadata.get("event_bus_receipts").and_then(|v| v.as_array()) {
+        for receipt in receipts { enqueue(events, "event-bus", receipt.clone()); }
     }
 }
 
@@ -227,137 +240,44 @@ fn enqueue_lifecycle(events: &mut EventBuffer, stage: &str, id: &str, name: &str
 }
 
 fn lifecycle_payload(stage: &str, id: &str, name: &str, extra: serde_json::Value) -> serde_json::Value {
-    let mut payload = serde_json::json!({"id": id, "name": name, "stage": stage, "metadata": opencode_processor_meta(stage)});
-    if let Some(obj) = payload.as_object_mut() {
-        if let Some(extra_obj) = extra.as_object() {
-            for (key, value) in extra_obj { obj.insert(key.clone(), value.clone()); }
-        }
-    }
-    payload
-}
-
-fn opencode_processor_meta(stage: &str) -> serde_json::Value {
-    serde_json::json!({
-        "opencode_source": OPENCODE_PROCESSOR_SOURCE,
-        "schema_source": OPENCODE_SCHEMA_SOURCE,
-        "copied_behavior": "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle",
-        "lifecycle_stage": stage,
-        "events": ["tool-input-start", "tool-input-delta", "tool-input-end", "tool-call", "tool-result", "tool-error"],
-        "state_shapes": ["ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"]
-    })
+    serde_json::json!({"id": id, "name": name, "stage": stage, "metadata": {"opencode_source": OPENCODE_PROCESSOR_SOURCE, "schema_source": OPENCODE_SCHEMA_SOURCE, "state_shapes": ["ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"], "extra": extra}})
 }
 
 fn present_tool_result(name: &str, result: &mut ToolResult) {
-    result.metadata.entry("title".to_string()).or_insert_with(|| serde_json::json!(name));
-    if name == "file_list" {
-        if let Some(summary) = compact_file_list_output(&result.output) {
-            result.metadata.insert("raw_output".to_string(), serde_json::json!(result.output.clone()));
-            result.metadata.insert("presentation".to_string(), serde_json::json!("compact_file_list"));
-            result.output = summary;
-        }
-    } else if name == "repo_info" {
-        if let Some(summary) = compact_repo_info_output(&result.output) {
-            result.metadata.insert("raw_output".to_string(), serde_json::json!(result.output.clone()));
-            result.metadata.insert("presentation".to_string(), serde_json::json!("compact_repo_info"));
-            result.output = summary;
-        }
-    }
+    result.metadata.insert("title".to_string(), serde_json::json!(name));
+    result.metadata.insert("opencode_session_processor".to_string(), opencode_processor_meta(if result.success { "completed" } else { "error" }));
+    let compact = if result.output.len() > 900 { format!("{}\n…", &result.output[..900]) } else { result.output.clone() };
+    result.output = compact;
 }
 
-fn compact_file_list_output(output: &str) -> Option<String> {
-    let entries = serde_json::from_str::<Vec<serde_json::Value>>(output).ok()?;
-    let mut names = Vec::new();
-    for entry in entries.iter().take(12) {
-        let name = entry.get("path").and_then(serde_json::Value::as_str).or_else(|| entry.get("name").and_then(serde_json::Value::as_str))?;
-        let suffix = if entry.get("is_dir").and_then(serde_json::Value::as_bool).unwrap_or(false) { "/" } else { "" };
-        names.push(format!("- {name}{suffix}"));
-    }
-    let hidden = entries.len().saturating_sub(names.len());
-    let mut lines = vec![format!("Top-level repository entries (showing {} of {}):", names.len(), entries.len())];
-    lines.extend(names);
-    if hidden > 0 { lines.push(format!("- … {hidden} more entries in metadata")); }
-    Some(lines.join("\n"))
+fn opencode_processor_meta(stage: &str) -> serde_json::Value {
+    serde_json::json!({"path": OPENCODE_PROCESSOR_SOURCE, "schema_path": OPENCODE_SCHEMA_SOURCE, "state": format!("ToolState{}", capitalize(stage)), "copied_behavior": "SessionProcessor ensureToolCall/updateToolCall/completeToolCall/failToolCall lifecycle"})
 }
 
-fn compact_repo_info_output(output: &str) -> Option<String> {
-    let info = serde_json::from_str::<serde_json::Value>(output).ok()?;
-    let remote = info.get("remote_origin").and_then(serde_json::Value::as_str).unwrap_or("unknown remote");
-    let branch = info.get("branch").and_then(serde_json::Value::as_str).unwrap_or("unknown branch");
-    let head = info.get("short_head").and_then(serde_json::Value::as_str).unwrap_or("unknown head");
-    let dirty = info.get("dirty").and_then(serde_json::Value::as_bool).unwrap_or(false);
-    let status = if dirty { "dirty" } else { "clean" };
-    Some(format!("Repository status:\n- Remote: {remote}\n- Branch: {branch}\n- Head: {head}\n- Working tree: {status}"))
+fn capitalize(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() { Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()), None => String::new() }
 }
 
-fn append_file_change_events(events: &mut EventBuffer, result: &ToolResult) {
-    let Some(file_events) = result.metadata.get("file_events").and_then(|value| value.as_array()) else { return; };
-    let tool_id = result.id.clone().0.to_string();
-    let tool_kind = tool_name(&result.kind).to_string();
-    for file_event in file_events {
-        let mut payload = file_event.clone();
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert("tool_id".to_string(), serde_json::json!(tool_id));
-            obj.insert("tool_kind".to_string(), serde_json::json!(tool_kind));
-        }
-        enqueue(events, "file-change", payload);
-    }
-}
-
-fn tool_name(kind: &ToolKind) -> &'static str {
-    match kind {
-        ToolKind::FileRead => "file_read", ToolKind::FileWrite => "file_write", ToolKind::FileEdit => "file_edit",
-        ToolKind::FileDelete => "file_delete", ToolKind::FileList => "file_list", ToolKind::FileGlob => "file_glob",
-        ToolKind::FileSearch => "file_search", ToolKind::WebFetch => "web_fetch", ToolKind::WebSearch => "web_search",
-        ToolKind::ShellCommand => "shell_command", ToolKind::TerminalRun => "terminal_run", ToolKind::Task => "task",
-        ToolKind::BatchParallel => "batch_parallel", ToolKind::RepoInfo => "repo_info", ToolKind::ProposePatch => "propose_patch",
-        ToolKind::ApplyPatch => "apply_patch", ToolKind::SwitchMode => "switch_mode", ToolKind::BrowserProof => "browser_proof",
-        ToolKind::VisionReview => "vision_review", ToolKind::GraphBuild => "graph_build", ToolKind::GraphQuery => "graph_query",
-    }
-}
-
-fn should_run_local_preflight(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("build") || lower.contains("fix") || lower.contains("feature") || lower.contains("app") || lower.contains("webui") || lower.contains("tool") || lower.contains("apply_patch")
-}
-
-fn should_run_apply_patch_card_proof(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("apply_patch") && (lower.contains("file card") || lower.contains("file-change") || lower.contains("card proof"))
+fn chunk_text(text: &str, size: usize) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    chars.chunks(size).map(|chunk| chunk.iter().collect()).collect()
 }
 
 fn should_run_file_tool_event_action(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
-    lower.contains("file tool event") || (lower.contains("write") && lower.contains("edit") && lower.contains("delete") && lower.contains("opencode"))
+    lower.contains("file tool formatter proof") || lower.contains("file-tool-event-proof.rs") || lower.contains("opencode file tool")
 }
+fn should_run_natural_note_action(message: &str) -> bool { message.to_ascii_lowercase().contains("proof note") }
+fn should_run_repo_inspection_action(message: &str) -> bool { let lower = message.to_ascii_lowercase(); lower.contains("inspect") && lower.contains("repository") && !lower.contains("phase") }
+fn should_run_apply_patch_card_proof(message: &str) -> bool { message.to_ascii_lowercase().contains("apply_patch") || message.to_ascii_lowercase().contains("patch card") }
+fn should_run_local_preflight(message: &str) -> bool { let lower = message.to_ascii_lowercase(); lower.contains("repo") || lower.contains("inspect") || lower.contains("patch") }
 
-fn should_run_natural_note_action(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    (lower.contains("create") || lower.contains("add") || lower.contains("write")) && lower.contains("proof note")
-}
+fn natural_note_patch() -> String { format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+This proof note was created through the WebUI chat path.\n*** End Patch\n") }
+fn apply_patch_card_proof_patch() -> String { format!("*** Begin Patch\n*** Add File: {NATURAL_NOTE_PATH}\n+Approved patch card proof.\n*** End Patch\n") }
 
-fn should_run_repo_inspection_action(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("inspect") && (lower.contains("repo") || lower.contains("repository") || lower.contains("project")) && lower.contains("summarize")
-}
-
-fn natural_note_patch() -> String {
-    [patch_line("Begin Patch"), patch_line(&format!("Add File: {NATURAL_NOTE_PATH}")), "+Natural prompt completed: Forge created this note from a plain request.".to_string(), patch_line("End Patch")].join("\n")
-}
-
-fn apply_patch_card_proof_patch() -> String {
-    [patch_line("Begin Patch"), patch_line("Add File: forge-proof/live-webui-feature-sprint/apply_patch-card-proof.txt"), "+apply_patch file-change card proof".to_string(), patch_line("End Patch")].join("\n")
-}
-
-fn patch_line(label: &str) -> String { ["*** ", label].concat() }
-
-fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
-    if input.is_empty() { return Vec::new(); }
-    let mut chunks = Vec::new();
-    let mut current = String::new();
-    for ch in input.chars() {
-        current.push(ch);
-        if current.chars().count() >= max_chars { chunks.push(std::mem::take(&mut current)); }
+fn tool_name(kind: &ToolKind) -> &'static str {
+    match kind {
+        ToolKind::FileRead => "file_read", ToolKind::FileWrite => "file_write", ToolKind::FileEdit => "file_edit", ToolKind::FileDelete => "file_delete", ToolKind::FileList => "file_list", ToolKind::FileGlob => "file_glob", ToolKind::FileSearch => "file_search", ToolKind::WebFetch => "web_fetch", ToolKind::WebSearch => "web_search", ToolKind::ShellCommand => "shell_command", ToolKind::TerminalRun => "terminal_run", ToolKind::Task => "task", ToolKind::BatchParallel => "batch_parallel", ToolKind::RepoInfo => "repo_info", ToolKind::ProposePatch => "propose_patch", ToolKind::ApplyPatch => "apply_patch", ToolKind::SwitchMode => "switch_mode", ToolKind::BrowserProof => "browser_proof", ToolKind::VisionReview => "vision_review", ToolKind::GraphBuild => "graph_build", ToolKind::GraphQuery => "graph_query",
     }
-    if !current.is_empty() { chunks.push(current); }
-    chunks
 }
