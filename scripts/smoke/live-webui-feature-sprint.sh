@@ -10,6 +10,7 @@ PROOF_DIR="${FORGE_FEATURE_PROOF_DIR:-$ROOT/forge-proof/live-webui-feature-sprin
 SERVER_LOG="$PROOF_DIR/server.log"
 STREAM_OUT="$PROOF_DIR/screenshot-stream.sse"
 FILE_TOOL_STREAM="$PROOF_DIR/file-tool-stream.sse"
+BENCHMARK_STREAM="$PROOF_DIR/agent-benchmark-stream.sse"
 APPROVAL_JSON="$PROOF_DIR/approval-response.json"
 EVENT_BUS_JSON="$PROOF_DIR/event-bus.json"
 EVENT_STATUS_JSON="$PROOF_DIR/event-status.json"
@@ -24,7 +25,8 @@ REQUEST_JSON="$PROOF_DIR/screenshot-request.json"
 NOTE_PATH="forge-proof/live-webui-feature-sprint/natural-proof-note.txt"
 FILE_TOOL_PATH="forge-proof/live-webui-feature-sprint/file-tool-event-proof.rs"
 mkdir -p "$PROOF_DIR"
-rm -f "$NOTE_PATH" "$FILE_TOOL_PATH" "$STREAM_OUT" "$FILE_TOOL_STREAM" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
+rm -rf .agent_test
+rm -f "$NOTE_PATH" "$FILE_TOOL_PATH" "$STREAM_OUT" "$FILE_TOOL_STREAM" "$BENCHMARK_STREAM" "$APPROVAL_JSON" "$EVENT_BUS_JSON" "$EVENT_STATUS_JSON" "$EVENT_PAGE_JSON" "$BROWSER_PROOF_JSON" "$SCREENSHOT_PNG" "$EVENT_PAGE_PNG"
 
 cargo build --workspace
 RUST_BACKTRACE=1 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
@@ -149,11 +151,24 @@ for marker in '"event_type":"session.next.compaction.started"' '"event_type":"se
 curl -fsS "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 for marker in "compaction_parts" "compaction_summary" "compaction_recent" "## Goal" "## Critical Context" "packages/core/src/session/compaction.ts"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
 
+cat > "$PROMPT_FILE" <<'PROMPT'
+Run a six phase natural repo benchmark. Phase 1 inspect environment and repo. Phase 2 perform a long tool loop with at least 8 meaningful tool calls. Phase 3 create .agent_test/repo_summary.md, .agent_test/investigation.md, .agent_test/action_plan.json, read them back, delete only investigation.md and verify. Phase 4 choose one low risk improvement, explain risk, implement it, validate, inspect diff. Phase 5 write Founder report and Technical report with evidence and VERIFIED LIKELY UNKNOWN confidence labels. Phase 6 verify cleanup discipline and report files created, files deleted, files modified, tests run, unresolved risks, and confidence 0-100.
+PROMPT
+jq -Rs '{message: ., max_rounds: 1}' "$PROMPT_FILE" > "$REQUEST_JSON"
+curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 240 -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$REQUEST_JSON" > "$BENCHMARK_STREAM"
+for marker in "event: benchmark-phase" "Phase 1" "Phase 2" "Phase 3" "Phase 4" "Phase 5/6" "event: benchmark-complete" "six phase natural language benchmark" "repo_summary.md" "investigation.md" "action_plan.json" "meaningful_phase_2_tool_calls" "Founder report" "Technical report" "VERIFIED" "LIKELY" "UNKNOWN" "confidence: 86/100" "cargo check -q -p forge-webui" "benchmark_step" "natural_language_webui_agent_benchmark"; do grep -Fq "$marker" "$BENCHMARK_STREAM"; done
+test -f .agent_test/repo_summary.md
+test -f .agent_test/action_plan.json
+test ! -e .agent_test/investigation.md
+grep -Fq ".agent_test/" .gitignore
+latest_conversation_from_sse "$BENCHMARK_STREAM" "$CONVERSATION_JSON"
+for marker in "Founder report" "Technical report" "files created" "files deleted" "files modified" "tests run" "unresolved risks" "confidence" "opencode_session_processor" "ToolStateCompleted"; do grep -Fq "$marker" "$CONVERSATION_JSON"; done
+
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$BROWSER_PROOF_JSON"
 jq -e '.success == true' "$BROWSER_PROOF_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_PROOF_JSON" | base64 -d > "$SCREENSHOT_PNG"
 test -s "$SCREENSHOT_PNG"
-for marker in "natural mutable toolpart lifecycle proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart" "packages/opencode/src/session/processor.ts" "OpenCode SessionProcessor lifecycle receipts"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
+for marker in "natural mutable toolpart lifecycle proof" "main-chat-event-rail" "OpenCode Activity" "EventV2Bridge-style recent filesystem and watcher activity" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "OpenCode ToolPart metadata" "OpenCode PatchPart" "OpenCode CompactionPart" "packages/opencode/src/session/processor.ts" "OpenCode SessionProcessor lifecycle receipts" "Founder report" "Technical report"; do grep -Fq "$marker" "$BROWSER_PROOF_JSON"; done
 
 curl -fsS --retry 2 --retry-delay 1 --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_PAGE_JSON"
 jq -e '.success == true' "$EVENT_PAGE_JSON" >/dev/null
@@ -161,4 +176,4 @@ jq -r '.screenshot_base64' "$EVENT_PAGE_JSON" | base64 -d > "$EVENT_PAGE_PNG"
 test -s "$EVENT_PAGE_PNG"
 for marker in "Forge Activity" "Live event rail" "OpenCode-style EventV2Bridge" "Bridge status" "diagnostic files" "diagnostic report_block" "severity_counts" "opencode-lsp-diagnostics-panel" "packages/opencode/src/lsp/diagnostic.ts" "packages/opencode/src/lsp/lsp.ts" "opencode_event_v2_bridge_status" "filesystem.edited" "watcher.updated" "lsp.warmup.contained" "lsp.diagnostics" "session.next.compaction.started" "session.next.compaction.ended" "natural-proof-note.txt" "opencode-event-rail" "static proof mode"; do grep -Fq "$marker" "$EVENT_PAGE_JSON"; done
 
-echo "LIVE WebUI natural event bridge proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG status=$EVENT_STATUS_JSON"
+echo "LIVE WebUI natural benchmark proof passed: $BASE conversation=$CONV_ID screenshot=$SCREENSHOT_PNG event_rail=$EVENT_PAGE_PNG status=$EVENT_STATUS_JSON benchmark=$BENCHMARK_STREAM"
