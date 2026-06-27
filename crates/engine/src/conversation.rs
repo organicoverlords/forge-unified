@@ -99,8 +99,8 @@ impl ConversationManager {
         conv.messages.push(Message { role: MessageRole::System, content: summary.clone(), tool_calls: None, tool_results: None, metadata });
         let compacted = before > keep_last;
         if compacted {
-            let mut kept: Vec<Message> = conv.messages.iter().filter(|m| m.role == MessageRole::System).cloned().collect();
-            kept.extend(conv.messages.iter().take(before).skip(tail_index).filter(|m| m.role != MessageRole::System).cloned());
+            let mut kept: Vec<Message> = conv.messages.iter().filter(|m| matches!(&m.role, MessageRole::System)).cloned().collect();
+            kept.extend(conv.messages.iter().take(before).skip(tail_index).filter(|m| !matches!(&m.role, MessageRole::System)).cloned());
             conv.messages = kept;
         }
         conv.updated_at = chrono::Utc::now();
@@ -136,7 +136,7 @@ impl ConversationManager {
     pub fn compact(&mut self, id: &ConversationId, keep_last: usize) {
         if let Some(conv) = self.conversations.get_mut(id) {
             if conv.messages.len() > keep_last {
-                let system_msgs: Vec<_> = conv.messages.iter().filter(|m| m.role == MessageRole::System).cloned().collect();
+                let system_msgs: Vec<_> = conv.messages.iter().filter(|m| matches!(&m.role, MessageRole::System)).cloned().collect();
                 let tail: Vec<_> = conv.messages.iter().rev().take(keep_last).cloned().collect();
                 conv.messages = system_msgs; conv.messages.extend(tail.into_iter().rev()); conv.updated_at = chrono::Utc::now();
             }
@@ -145,8 +145,8 @@ impl ConversationManager {
 }
 
 fn build_compaction_summary(messages: &[Message]) -> String {
-    let goal = messages.iter().find(|m| m.role == MessageRole::User).map(|m| one_line(&m.content, 180)).filter(|s| !s.is_empty()).unwrap_or_else(|| "(none)".to_string());
-    let done = messages.iter().filter(|m| matches!(m.role, MessageRole::Assistant | MessageRole::Tool)).filter_map(done_bullet).take(6).collect::<Vec<_>>();
+    let goal = messages.iter().find(|m| matches!(&m.role, MessageRole::User)).map(|m| one_line(&m.content, 180)).filter(|s| !s.is_empty()).unwrap_or_else(|| "(none)".to_string());
+    let done = messages.iter().filter(|m| matches!(&m.role, MessageRole::Assistant | MessageRole::Tool)).filter_map(done_bullet).take(6).collect::<Vec<_>>();
     let blocked = messages.iter().filter_map(blocker_bullet).take(4).collect::<Vec<_>>();
     let files = messages.iter().flat_map(relevant_files).take(8).collect::<Vec<_>>();
     format!(
@@ -159,7 +159,7 @@ fn build_compaction_summary(messages: &[Message]) -> String {
 }
 
 fn serialize_message_for_compaction(message: &Message) -> String {
-    let label = match message.role { MessageRole::User => "[User]", MessageRole::Assistant => "[Assistant]", MessageRole::Tool => "[Tool result]", MessageRole::System => "[System update]" };
+    let label = match &message.role { MessageRole::User => "[User]", MessageRole::Assistant => "[Assistant]", MessageRole::Tool => "[Tool result]", MessageRole::System => "[System update]" };
     if message.content.trim().is_empty() && message.tool_results.is_none() { return String::new(); }
     let mut parts = Vec::new();
     if !message.content.trim().is_empty() { parts.push(format!("{}: {}", label, one_line(&message.content, 900))); }
@@ -172,7 +172,7 @@ fn serialize_message_for_compaction(message: &Message) -> String {
 }
 
 fn done_bullet(message: &Message) -> Option<String> {
-    match message.role {
+    match &message.role {
         MessageRole::Assistant if !message.content.trim().is_empty() => Some(format!("- {}", one_line(&message.content, 180))),
         MessageRole::Tool => message.tool_results.as_ref().and_then(|results| results.iter().find(|r| r.success)).map(|r| format!("- Tool {:?} completed: {}", r.kind, one_line(&r.output, 160))),
         _ => None,
