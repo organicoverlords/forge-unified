@@ -1,7 +1,6 @@
 #![allow(warnings, clippy::all)]
 
-//! Forge WebUI — axum HTTP server with REST API for the chat-first UI.
-
+pub mod change_events;
 pub mod chat_ui;
 pub mod events;
 pub mod routes;
@@ -20,7 +19,7 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/api/health", get(routes::health))
-        .route("/api/events/recent", get(routes::recent_events))
+        .route("/api/events/recent", get(change_events::recent_events))
         .route("/api/conversations", get(routes::list_conversations))
         .route("/api/conversations", post(routes::create_conversation))
         .route("/api/conversations/:id", get(routes::get_conversation))
@@ -42,7 +41,6 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .with_state(state)
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http());
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Forge WebUI listening on {}", addr);
     axum::serve(listener, app).await?;
