@@ -23,9 +23,11 @@ Updated: 2026-06-27
 
 The formatter-hook implementation was source-backed and compile/test clean, but the proof script failed because it checked file-tool conversation metadata from a follow-up `/api/conversations/{id}` response after the WebUI stream. The failure artifact showed the actual natural-language SSE stream already contained formatter/BOM metadata and the final streamed conversation event, while the later GET response was stale.
 
+The first extraction patch still failed because it assumed `data:` immediately followed `event: conversation`. The current fix parses full SSE blocks and tolerates standard SSE fields between `event:` and `data:` before selecting the final streamed conversation payload.
+
 Fix copied/retained proof behavior:
 
-- The proof now extracts the final `event: conversation` payload from the WebUI SSE stream after the file-tool prompt.
+- The proof now extracts the final `event: conversation` payload from the WebUI SSE stream after the file-tool prompt using block-aware SSE parsing.
 - The proof still uses a natural-language WebUI prompt.
 - The proof still requires formatter metadata, BOM metadata, mutable ToolPart updates, FilePart attachments, watcher/LSP/event-bus receipts, compaction proof, and screenshots.
 - Failed workflows were not rerun blindly; the deterministic proof extraction issue was patched first.
@@ -82,7 +84,7 @@ Still incomplete / do not overclaim:
 
 ## Next source-backed targets
 
-1. Check Actions for the current proof-extraction fix HEAD.
+1. Check Actions for the current robust SSE proof parser HEAD.
 2. If Rust compile/test fails, inspect the exact job logs; do not rerun deterministic failures blindly.
 3. If WebUI smoke fails, inspect the proof artifact and `server.log` first.
 4. Inspect proof artifact screenshots and DOM after green.
