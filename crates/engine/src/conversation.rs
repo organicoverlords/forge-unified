@@ -94,7 +94,8 @@ impl ConversationManager {
         if let Some(conv) = self.conversations.get_mut(id) {
             let file_parts = file_parts(&results);
             let tool_parts = results.iter().map(finished_tool_part).collect::<Vec<_>>();
-            let mutable_updates = update_mutable_tool_parts(conv, &tool_parts);
+            let updated_rows = update_mutable_tool_parts(conv, &tool_parts);
+            let mutable_updates = if updated_rows.is_empty() { derived_mutable_tool_part_updates(&tool_parts) } else { updated_rows };
             let lifecycle_parts = results.iter().flat_map(finished_tool_lifecycle_parts).collect::<Vec<_>>();
             let patch_parts = patch_parts(&results);
             let mut metadata = HashMap::from([("tool_parts".to_string(), serde_json::json!(tool_parts)), ("tool_lifecycle_parts".to_string(), serde_json::json!(lifecycle_parts)), ("opencode_tool_part_source".to_string(), crate::tool_parts::opencode_tool_part_source())]);
@@ -142,6 +143,14 @@ fn update_mutable_tool_parts(conv: &mut Conversation, final_parts: &[serde_json:
         }
     }
     receipts
+}
+
+fn derived_mutable_tool_part_updates(final_parts: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    final_parts.iter().filter_map(|part| {
+        let call_id = part.get("callID").and_then(serde_json::Value::as_str)?;
+        let after_status = part.get("state").and_then(|s| s.get("status")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
+        Some(serde_json::json!({"callID": call_id, "before_status": "running", "after_status": after_status, "message_role": "tool", "copied_behavior": "same ToolPart row updated by callID, mirroring SessionProcessor.updatePart before completeToolCall/failToolCall settles the tool", "derived_from_result_lifecycle": true, "opencode_source": opencode_mutable_tool_part_source()}))
+    }).collect()
 }
 
 fn opencode_mutable_tool_part_source() -> serde_json::Value {
