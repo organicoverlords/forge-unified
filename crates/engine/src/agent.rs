@@ -39,7 +39,7 @@ impl Agent {
     }
 
     pub async fn chat(&self, id: &ConversationId, message: String) -> Result<RunRecord> {
-        self.chat_with_max_rounds(id, message, 45).await
+        self.chat_with_max_rounds(id, message, 75).await
     }
 
     pub async fn chat_with_max_rounds(&self, id: &ConversationId, message: String, max_rounds: u32) -> Result<RunRecord> {
