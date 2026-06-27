@@ -5,8 +5,8 @@ Updated: 2026-06-27
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest fully green baseline before this slice: `2680e673645ced1a799b3a5053885b11996301e0`.
-- Latest browser proof artifact before this slice: GitHub Actions artifact `7925391830` from Live WebUI Feature Sprint run `28292308525`.
+- Latest fully green baseline before this slice: `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114`.
+- Latest browser proof artifact before this slice: Live WebUI Feature Sprint run `28293331147`.
 - Current HEAD needs Actions/browser proof before a fresh green claim.
 
 ## Latest source-backed slices
@@ -19,13 +19,15 @@ Updated: 2026-06-27
 - `d052a279d7a5c37b275043ad0e52fb966a0be4eb` — OpenCode SessionProcessor lifecycle stream parity. WebUI SSE emits source-tagged lifecycle receipts for pending, input, running, completed, and error ToolPart transitions.
 - `c3b826d7136298c7bb7d62ba30e11fd12cfeff70` — OpenCode watcher status and local mutable ToolPart proof path; CI, Build Proof, and Live WebUI Feature Sprint green.
 - `2680e673645ced1a799b3a5053885b11996301e0` — OpenCode LSP diagnostic report shape; CI, Build Proof, and Live WebUI Feature Sprint green.
-- This slice — OpenCode FileMutation BOM preservation. Forge file_write/file_edit now preserve an existing/input UTF-8 BOM and emit at most one BOM, with `bom`, `bom_preserved`, `bom_strategy`, and `packages/core/src/file-mutation.ts` metadata required by WebUI proof.
+- `d2ecc6a4e9ca89a05fb7d8551b9a1b1c938bf114` — OpenCode FileMutation BOM preservation; CI, Build Proof, and Live WebUI Feature Sprint green.
+- This slice — OpenCode Format.file hook shape for file_write/file_edit. Forge runs a contained formatter hook after write/edit, applies rustfmt for `.rs` when available, records `formatter_status` / `opencode_formatter_source`, and resyncs BOM after formatter mutation.
 
 ## OpenCode source references for latest slice
 
-- `anomalyco/opencode:packages/core/src/file-mutation.ts` — `writeTextPreservingBom`, `splitBom`, `joinBom`, and `hasUtf8Bom`: preserve existing/input UTF-8 BOM and emit at most one BOM.
-- `anomalyco/opencode:packages/opencode/src/tool/write.ts` — write tool path that uses the file mutation behavior before publishing edit events.
-- `anomalyco/opencode:packages/opencode/src/tool/edit.ts` — edit tool path that uses the file mutation behavior before publishing watcher/LSP diagnostics.
+- `anomalyco/opencode:packages/opencode/src/format/index.ts` — `Format.file(filepath)` matches formatters by extension, runs command processes, returns false when no formatter is configured, and contains spawn/nonzero failures.
+- `anomalyco/opencode:packages/opencode/src/tool/write.ts` — after write, OpenCode calls `format.file(filepath)`, then `Bom.syncFile` when formatting ran, then publishes file/watcher events.
+- `anomalyco/opencode:packages/opencode/src/tool/edit.ts` — edit path uses the same post-write formatter and BOM-sync behavior before watcher/LSP diagnostics.
+- `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving text mutation remains the source for final byte normalization.
 
 ## Current behavior
 
@@ -36,6 +38,8 @@ Updated: 2026-06-27
 - LSP diagnostics receipts include OpenCode-shaped `severity_counts`, `diagnostic_count`, `max_per_file`, `report_block`, `report_emitted`, and `lsp_client_status` fields.
 - Normal file tools (`file_write`, `file_edit`, `file_delete`) emit OpenCode-style file/watch/LSP receipts and attach FilePart entries to their completed ToolPart state.
 - `file_write` and `file_edit` preserve existing/input UTF-8 BOMs and strip duplicate leading BOMs before writing at most one BOM.
+- `file_write` and `file_edit` now run a contained post-write formatter hook. `.rs` files use rustfmt when present; unavailable, spawn-failed, or nonzero formatter exits are recorded instead of failing the edit path.
+- Formatter metadata is visible through ToolResult metadata as `formatter_status` and `opencode_formatter_source`.
 - The WebUI SSE stream carries OpenCode SessionProcessor lifecycle metadata for pending input, input deltas, running tool calls, completed results, and error results.
 - Conversation storage mutates the previous assistant message's matching ToolPart row from running to completed/error and records `opencode_mutable_tool_part_source`.
 - The change bus replays the latest persisted `.forge/change-events.jsonl` events on startup and continues sequence numbers after replay.
@@ -48,12 +52,12 @@ Updated: 2026-06-27
 - Current HEAD is not yet workflow/browser-proof green.
 - Live filesystem watcher integration is still receipt-backed rather than OS-watch backed.
 - LSP diagnostic report shape is copied, but diagnostics are not yet collected from a live language server process.
-- Formatter hooks after write/edit remain incomplete.
+- Formatter hook shape is implemented, but full OpenCode formatter catalog/config/runtime remains partial.
 - Mutable ToolPart row parity is implemented for Forge's conversation snapshots, but OpenCode database-backed part IDs and `providerExecuted` delta updates are still partial.
 - Compaction summary creation is deterministic in Forge; full streamed NIM-backed compaction summary remains incomplete.
 
 ## Next targets
 
 1. Check latest Actions for this branch HEAD and fix exact failures.
-2. Inspect browser proof artifacts and screenshot DOM for exact BOM/file mutation metadata.
-3. Continue toward formatter hooks, real LSP service/client process, OS-backed watcher/file edited events, or NIM-backed compaction from OpenCode sources.
+2. Inspect browser proof artifacts and screenshot DOM for exact formatter metadata.
+3. Continue toward full formatter catalog/config, real LSP service/client process, OS-backed watcher/file edited events, or NIM-backed compaction from OpenCode sources.
