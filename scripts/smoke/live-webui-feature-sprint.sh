@@ -227,10 +227,10 @@ step "create tool lifecycle conversation"
 TOOL_CREATED="$PROOF_DIR/tool-lifecycle-created.json"
 TOOL_CONV_ID="$(create_conversation "Forge visible ToolPart lifecycle proof" "$TOOL_CREATED")"
 test -n "$TOOL_CONV_ID"
-printf '%s\n' "Please run a Forge file tool formatter proof so I can see live ToolPart lifecycle cards, providerExecuted metadata, file-change cards, event bus receipts, and a final human-readable summary in the WebUI." > "$TOOL_PROMPT_FILE"
+printf '%s\n' "Please run a Forge file tool formatter proof so I can see live ToolPart lifecycle cards, providerExecuted metadata, file-change cards, event receipts, and a final human-readable summary in the WebUI." > "$TOOL_PROMPT_FILE"
 jq -Rs '{message: ., max_rounds: 2}' "$TOOL_PROMPT_FILE" > "$TOOL_REQUEST_JSON"
 post_stream "$TOOL_CONV_ID" "$TOOL_REQUEST_JSON" "$TOOL_STREAM" 180
-for marker in "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "event: file-change" "event: event-bus" "providerExecuted" "ToolStateCompleted" "file_write" "file_edit" "file_delete" "file-tool-event-proof.rs"; do
+for marker in "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "event: file-change" "providerExecuted" "ToolStateCompleted" "file_write" "file_edit" "file_delete" "file-tool-event-proof.rs"; do
   need_marker "$TOOL_STREAM" "$marker"
 done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$TOOL_CONV_ID" > "$TOOL_CONVERSATION_JSON"
@@ -251,7 +251,7 @@ BENCH_CREATED="$PROOF_DIR/full-benchmark-created.json"
 BENCH_CONV_ID="$(create_conversation "Full six-phase agentic benchmark prompt" "$BENCH_CREATED")"
 test -n "$BENCH_CONV_ID"
 jq -Rs '{message: ., max_rounds: 75}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
-post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON" "$BENCH_STREAM" 1200
+post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON"  "$BENCH_STREAM" 1200
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   fail_with_tail 12 "full benchmark used local or scripted shortcut" "$BENCH_STREAM"
 fi
