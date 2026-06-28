@@ -52,7 +52,6 @@ impl ToolExecutor {
             ToolKind::ShellCommand => self.execute_shell(request).await,
             ToolKind::TerminalRun => self.execute_terminal(request).await,
             ToolKind::Task => self.execute_task(request).await,
-            ToolKind::TodoWrite => self.execute_todo_write(request).await,
             ToolKind::BatchParallel => self.execute_batch_parallel(request).await,
             ToolKind::RepoInfo => self.execute_repo_info(request).await,
             ToolKind::ProposePatch => self.execute_propose_patch(request).await,
