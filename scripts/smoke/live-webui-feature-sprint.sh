@@ -165,6 +165,17 @@ write_status() {
   printf 'workflow_checker=%s\n' "$WORKFLOW_JSON" >> "$out"
 }
 
+write_benchmark_diagnostics() {
+  curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON" || true
+  if [ -s "$BENCH_CONVERSATION_JSON" ] && [ -s "$BENCH_STREAM" ]; then
+    python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json" || true
+    python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$WORKFLOW_JSON" || true
+  else
+    printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$PROOF_DIR/full-benchmark-checker.json"
+    printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$WORKFLOW_JSON"
+  fi
+}
+
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
 
@@ -260,7 +271,14 @@ BENCH_CONV_ID="$(create_conversation "Full six-phase agentic benchmark prompt" "
 test -n "$BENCH_CONV_ID"
 step "full benchmark budget: max_rounds=$BENCH_MAX_ROUNDS timeout=${BENCH_TIMEOUT_SECONDS}s"
 jq -Rs --argjson max_rounds "$BENCH_MAX_ROUNDS" '{message: ., max_rounds: $max_rounds}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
+set +e
 post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON" "$BENCH_STREAM" "$BENCH_TIMEOUT_SECONDS"
+BENCH_RC=$?
+set -e
+write_benchmark_diagnostics
+if [ "$BENCH_RC" -ne 0 ]; then
+  fail_with_tail 15 "full benchmark stream did not finish before timeout; partial conversation and checkers were preserved" "$BENCH_STREAM"
+fi
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   fail_with_tail 12 "full benchmark used local or scripted shortcut" "$BENCH_STREAM"
 fi
@@ -273,7 +291,6 @@ done
 if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel|todo_write' "$BENCH_STREAM"; then
   fail_with_tail 14 "full benchmark did not use advertised provider tools" "$BENCH_STREAM"
 fi
-curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
 assert_conversation_nim "$BENCH_CONVERSATION_JSON"
 python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json"
 jq -e '.passed == true' "$PROOF_DIR/full-benchmark-checker.json" >/dev/null
