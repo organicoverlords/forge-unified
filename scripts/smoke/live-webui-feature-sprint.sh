@@ -22,7 +22,7 @@ TOOL_CONVERSATION_JSON="$PROOF_DIR/tool-lifecycle-conversation.json"
 TOOL_STREAM="$PROOF_DIR/tool-lifecycle-stream.sse"
 BENCH_CONVERSATION_JSON="$PROOF_DIR/full-benchmark-conversation.json"
 BENCH_STREAM="$PROOF_DIR/full-benchmark-stream.sse"
-OPENCODE_WORKFLOW_JSON="$PROOF_DIR/opencode-workflow-checker.json"
+WORKFLOW_JSON="$PROOF_DIR/opencode-workflow-checker.json"
 PROMPT_FILE="$PROOF_DIR/live-model-prompt.txt"
 TOOL_PROMPT_FILE="$PROOF_DIR/tool-lifecycle-prompt.txt"
 BENCH_PROMPT_FILE="scripts/smoke/full-agentic-benchmark-prompt.txt"
@@ -32,37 +32,36 @@ BENCH_REQUEST_JSON="$PROOF_DIR/full-benchmark-request.json"
 STEP_LOG="$PROOF_DIR/live-proof-steps.log"
 : > "$STEP_LOG"
 
-step() {
-  echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$STEP_LOG"
+step() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" | tee -a "$STEP_LOG"; }
+
+fail_with_tail() {
+  local code="$1"
+  local msg="$2"
+  local file="${3:-}"
+  echo "::error::$msg" >&2
+  if [ -n "$file" ] && [ -f "$file" ]; then
+    tail -n 200 "$file" >&2 || true
+  fi
+  exit "$code"
 }
 
 need_marker() {
   local file="$1"
   local marker="$2"
-  if ! grep -Fq -- "$marker" "$file"; then
-    echo "::error::missing marker '$marker' in $file" >&2
-    tail -n 200 "$file" >&2 || true
-    exit 20
-  fi
+  grep -Fq -- "$marker" "$file" || fail_with_tail 20 "missing marker '$marker' in $file" "$file"
 }
 
-need_any_regex() {
+need_regex() {
   local file="$1"
   local pattern="$2"
-  if ! grep -Eiq -- "$pattern" "$file"; then
-    echo "::error::missing regex '$pattern' in $file" >&2
-    tail -n 200 "$file" >&2 || true
-    exit 21
-  fi
+  grep -Eiq -- "$pattern" "$file" || fail_with_tail 21 "missing regex '$pattern' in $file" "$file"
 }
 
 reject_marker() {
   local file="$1"
   local marker="$2"
   if grep -Fq -- "$marker" "$file"; then
-    echo "::error::forbidden marker '$marker' found in $file" >&2
-    tail -n 200 "$file" >&2 || true
-    exit 22
+    fail_with_tail 22 "forbidden marker '$marker' found in $file" "$file"
   fi
 }
 
@@ -70,7 +69,9 @@ create_conversation() {
   local title="$1"
   local out="$2"
   python3 - "$title" "$out" "$BASE" <<'PY'
-import json, subprocess, sys
+import json
+import subprocess
+import sys
 
 title, out, base = sys.argv[1:]
 payload = json.dumps({"title": title})
@@ -87,18 +88,21 @@ print(data.get("id", ""))
 PY
 }
 
-model_id_from_conversation() {
-  python3 - "$1" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as fh:
+json_field() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+path, field = sys.argv[1:]
+with open(path, encoding="utf-8") as fh:
     data = json.load(fh)
-print(data.get("model", ""))
+print(data.get(field, ""))
 PY
 }
 
 assert_conversation_nim() {
   python3 - "$1" <<'PY'
-import json, sys
+import json
+import sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
 messages = data.get("messages") or []
@@ -111,10 +115,11 @@ PY
 
 assert_tool_catalog() {
   python3 - "$1" <<'PY'
-import json, sys
+import json
+import sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
-names = data.get("names") or []
+names = set(data.get("names") or [])
 required = {"apply_patch", "task", "todo_write", "batch_parallel"}
 if data.get("catalog") != "forge_provider_tool_catalog":
     raise SystemExit("tool catalog marker mismatch")
@@ -128,18 +133,28 @@ if missing:
 PY
 }
 
+post_stream() {
+  local conv_id="$1"
+  local request_json="$2"
+  local out="$3"
+  local timeout_seconds="$4"
+  timeout "$timeout_seconds" curl -fsS --connect-timeout 2 --max-time "$((timeout_seconds - 10))" \
+    -X POST "$BASE/api/conversations/$conv_id/chat/stream" \
+    -H "content-type: application/json" \
+    -H "accept: text/event-stream" \
+    --data-binary "@$request_json" > "$out"
+}
+
 write_status() {
   local out="$1"
-  {
-    echo "nim_conversation=$CONV_ID"
-    echo "tool_conversation=$TOOL_CONV_ID"
-    echo "benchmark_conversation=$BENCH_CONV_ID"
-    echo "model=$MODEL_ID"
-    echo "benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png"
-    echo "event_rail=$PROOF_DIR/event-rail.png"
-    echo "tool_catalog=$TOOL_CATALOG_JSON"
-    echo "workflow_checker=$OPENCODE_WORKFLOW_JSON"
-  } > "$out"
+  printf 'nim_conversation=%s\n' "$CONV_ID" > "$out"
+  printf 'tool_conversation=%s\n' "$TOOL_CONV_ID" >> "$out"
+  printf 'benchmark_conversation=%s\n' "$BENCH_CONV_ID" >> "$out"
+  printf 'model=%s\n' "$MODEL_ID" >> "$out"
+  printf 'benchmark_screenshot=%s\n' "$PROOF_DIR/full-benchmark-webui.png" >> "$out"
+  printf 'event_rail=%s\n' "$PROOF_DIR/event-rail.png" >> "$out"
+  printf 'tool_catalog=%s\n' "$TOOL_CATALOG_JSON" >> "$out"
+  printf 'workflow_checker=%s\n' "$WORKFLOW_JSON" >> "$out"
 }
 
 step "cargo build forge-app"
@@ -148,8 +163,8 @@ timeout 480s cargo build -p forge-app
 step "start webui"
 SERVER_BIN="$ROOT/target/debug/forge"
 test -x "$SERVER_BIN"
-echo "command: $SERVER_BIN --host 127.0.0.1 --port $PORT" > "$PROOF_DIR/server-command.txt"
-RUST_BACKTRACE=1 "$SERVER_BIN" --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
+printf 'command: %s --host 127.0.0.1 --port %s\n' "$SERVER_BIN" "$PORT" > "$PROOF_DIR/server-command.txt"
+RUST_BACKTRACE=1 "$SERVER_BIN" --host 127.0.0.1 --port "$PORT" > "$SERVER_LOG" 2>&1 &
 PID=$!
 cleanup() {
   kill "$PID" >/dev/null 2>&1 || true
@@ -165,39 +180,20 @@ for attempt in $(seq 1 180); do
     break
   fi
   if ! kill -0 "$PID" >/dev/null 2>&1; then
-    echo "::error::webui process exited before health became ready on attempt $attempt" >&2
-    tail -n 220 "$SERVER_LOG" >&2 || true
-    exit 1
+    fail_with_tail 1 "webui process exited before health became ready on attempt $attempt" "$SERVER_LOG"
   fi
   sleep 1
 done
-if [ "$HEALTH_OK" != 1 ]; then
-  echo "::error::webui health never became ready after 180s" >&2
-  tail -n 220 "$SERVER_LOG" >&2 || true
-  exit 1
-fi
+[ "$HEALTH_OK" = "1" ] || fail_with_tail 1 "webui health never became ready after 180s" "$SERVER_LOG"
 
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
-for marker in \
-  "Forge Unified" \
-  "provider-model-visible" \
-  "live-browser-model-proof" \
-  "providerExecuted-visible" \
-  "apply_patch-visible"
-do
+for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "providerExecuted-visible" "apply_patch-visible"; do
   need_marker "$PROOF_DIR/index.html" "$marker"
 done
 
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$TOOL_CATALOG_JSON"
 assert_tool_catalog "$TOOL_CATALOG_JSON"
-for marker in \
-  "forge_provider_tool_catalog" \
-  "provider_visible" \
-  "patchText" \
-  "todo_write" \
-  "batch_parallel" \
-  "apply_patch"
-do
+for marker in "forge_provider_tool_catalog" "provider_visible" "patchText" "todo_write" "batch_parallel" "apply_patch"; do
   need_marker "$TOOL_CATALOG_JSON" "$marker"
 done
 reject_marker "$TOOL_CATALOG_JSON" "packages/opencode/"
@@ -207,96 +203,44 @@ step "create NIM conversation"
 CONV_CREATED="$PROOF_DIR/live-model-created.json"
 CONV_ID="$(create_conversation "live NIM browser model proof" "$CONV_CREATED")"
 test -n "$CONV_ID"
-cat > "$PROMPT_FILE" <<'PROMPT'
-Reply with LIVE_NIM_BROWSER_PROOF and one short sentence.
-PROMPT
+printf '%s\n' "Reply with LIVE_NIM_BROWSER_PROOF and one short sentence." > "$PROMPT_FILE"
 jq -Rs '{message: ., max_rounds: 2}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
 step "model chat stream"
-timeout 180s curl -fsS --connect-timeout 2 --max-time 170 \
-  -X POST "$BASE/api/conversations/$CONV_ID/chat/stream" \
-  -H "content-type: application/json" \
-  -H "accept: text/event-stream" \
-  --data-binary "@$REQUEST_JSON" > "$MODEL_STREAM"
+post_stream "$CONV_ID" "$REQUEST_JSON" "$MODEL_STREAM" 180
 
-step "assert model stream"
 if grep -Fq '"provider":"local"' "$MODEL_STREAM" || grep -Fq 'event: benchmark-phase' "$MODEL_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$MODEL_STREAM"; then
-  echo "::error::local or scripted proof path detected" >&2
-  tail -n 160 "$MODEL_STREAM" >&2 || true
-  exit 8
+  fail_with_tail 8 "local or scripted proof path detected" "$MODEL_STREAM"
 fi
 if grep -Fq 'event: provider-error' "$MODEL_STREAM"; then
-  echo "::error::provider error during live model proof" >&2
-  tail -n 160 "$MODEL_STREAM" >&2 || true
-  exit 9
+  fail_with_tail 9 "provider error during live model proof" "$MODEL_STREAM"
 fi
-for marker in \
-  'event: run-finish' \
-  'event: text-delta' \
-  '"provider":"nvidia_nim"' \
-  '"model":"' \
-  'LIVE_NIM_BROWSER_PROOF'
-do
+for marker in "event: run-finish" "event: text-delta" '"provider":"nvidia_nim"' '"model":"' "LIVE_NIM_BROWSER_PROOF"; do
   need_marker "$MODEL_STREAM" "$marker"
 done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 assert_conversation_nim "$CONVERSATION_JSON"
-MODEL_ID="$(model_id_from_conversation "$CONVERSATION_JSON")"
+MODEL_ID="$(json_field "$CONVERSATION_JSON" model)"
 test -n "$MODEL_ID"
 
 step "create tool lifecycle conversation"
 TOOL_CREATED="$PROOF_DIR/tool-lifecycle-created.json"
 TOOL_CONV_ID="$(create_conversation "Forge visible ToolPart lifecycle proof" "$TOOL_CREATED")"
 test -n "$TOOL_CONV_ID"
-cat > "$TOOL_PROMPT_FILE" <<'PROMPT'
-Please run a Forge file tool formatter proof so I can see live ToolPart lifecycle cards, providerExecuted metadata, file-change cards, event bus receipts, and a final human-readable summary in the WebUI.
-PROMPT
+printf '%s\n' "Please run a Forge file tool formatter proof so I can see live ToolPart lifecycle cards, providerExecuted metadata, file-change cards, event bus receipts, and a final human-readable summary in the WebUI." > "$TOOL_PROMPT_FILE"
 jq -Rs '{message: ., max_rounds: 2}' "$TOOL_PROMPT_FILE" > "$TOOL_REQUEST_JSON"
-
-timeout 180s curl -fsS --connect-timeout 2 --max-time 170 \
-  -X POST "$BASE/api/conversations/$TOOL_CONV_ID/chat/stream" \
-  -H "content-type: application/json" \
-  -H "accept: text/event-stream" \
-  --data-binary "@$TOOL_REQUEST_JSON" > "$TOOL_STREAM"
-for marker in \
-  'event: tool-lifecycle' \
-  'event: tool-input-start' \
-  'event: tool-input-delta' \
-  'event: tool-input-end' \
-  'event: tool-call' \
-  'event: tool-result' \
-  'event: file-change' \
-  'event: event-bus' \
-  'providerExecuted' \
-  'ToolStateCompleted' \
-  'file_write' \
-  'file_edit' \
-  'file_delete' \
-  'file-tool-event-proof.rs'
-do
+post_stream "$TOOL_CONV_ID" "$TOOL_REQUEST_JSON" "$TOOL_STREAM" 180
+for marker in "event: tool-lifecycle" "event: tool-input-start" "event: tool-input-delta" "event: tool-input-end" "event: tool-call" "event: tool-result" "event: file-change" "event: event-bus" "providerExecuted" "ToolStateCompleted" "file_write" "file_edit" "file_delete" "file-tool-event-proof.rs"; do
   need_marker "$TOOL_STREAM" "$marker"
 done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$TOOL_CONV_ID" > "$TOOL_CONVERSATION_JSON"
-for marker in \
-  'providerExecuted' \
-  'mutable_tool_part_updates' \
-  'same ToolPart row updated by callID' \
-  'ToolStateCompleted.attachments' \
-  'file-tool-event-proof.rs'
-do
+for marker in "providerExecuted" "mutable_tool_part_updates" "same ToolPart row updated by callID" "ToolStateCompleted.attachments" "file-tool-event-proof.rs"; do
   need_marker "$TOOL_CONVERSATION_JSON" "$marker"
 done
 
 step "browser proof tool lifecycle"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in \
-  'Please run a Forge file tool formatter proof' \
-  'providerExecuted' \
-  'file_write' \
-  'file_edit' \
-  'file_delete' \
-  'apply_patch'
-do
+for marker in "Please run a Forge file tool formatter proof" "providerExecuted" "file_write" "file_edit" "file_delete" "apply_patch"; do
   need_marker "$PROOF_DIR/browser-proof.json" "$marker"
 done
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/tool-lifecycle-browser-proof.json"
@@ -307,80 +251,33 @@ BENCH_CREATED="$PROOF_DIR/full-benchmark-created.json"
 BENCH_CONV_ID="$(create_conversation "Full six-phase agentic benchmark prompt" "$BENCH_CREATED")"
 test -n "$BENCH_CONV_ID"
 jq -Rs '{message: ., max_rounds: 75}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
-
-timeout 1200s curl -fsS --connect-timeout 2 --max-time 1190 \
-  -X POST "$BASE/api/conversations/$BENCH_CONV_ID/chat/stream" \
-  -H "content-type: application/json" \
-  -H "accept: text/event-stream" \
-  --data-binary "@$BENCH_REQUEST_JSON" > "$BENCH_STREAM"
+post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON" "$BENCH_STREAM" 1200
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
-  echo "::error::full benchmark used local/scripted shortcut" >&2
-  tail -n 200 "$BENCH_STREAM" >&2 || true
-  exit 12
+  fail_with_tail 12 "full benchmark used local or scripted shortcut" "$BENCH_STREAM"
 fi
 if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
-  echo "::error::provider error during full benchmark prompt" >&2
-  tail -n 200 "$BENCH_STREAM" >&2 || true
-  exit 13
+  fail_with_tail 13 "provider error during full benchmark prompt" "$BENCH_STREAM"
 fi
-for marker in \
-  'event: run-finish' \
-  '"provider":"nvidia_nim"' \
-  '"model":"' \
-  'event: tool-call' \
-  'event: tool-result'
-do
+for marker in "event: run-finish" '"provider":"nvidia_nim"' '"model":"' "event: tool-call" "event: tool-result" "file_write" "file_read" "file_delete" ".agent_test/repo_summary.md" ".agent_test/investigation.md" ".agent_test/action_plan.json" "PROJECT_STATE.md"; do
   need_marker "$BENCH_STREAM" "$marker"
 done
 if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel|todo_write' "$BENCH_STREAM"; then
-  echo "::error::full benchmark did not use advertised provider tools" >&2
-  tail -n 200 "$BENCH_STREAM" >&2 || true
-  exit 14
+  fail_with_tail 14 "full benchmark did not use advertised provider tools" "$BENCH_STREAM"
 fi
-for marker in \
-  'file_write' \
-  'file_read' \
-  'file_delete' \
-  '.agent_test/repo_summary.md' \
-  '.agent_test/investigation.md' \
-  '.agent_test/action_plan.json' \
-  'PROJECT_STATE.md'
-do
-  need_marker "$BENCH_STREAM" "$marker"
-done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
 assert_conversation_nim "$BENCH_CONVERSATION_JSON"
 python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json"
-python3 - "$PROOF_DIR/full-benchmark-checker.json" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as fh:
-    data = json.load(fh)
-if data.get("passed") is not True:
-    raise SystemExit("full benchmark checker did not pass")
-PY
-python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$OPENCODE_WORKFLOW_JSON"
-python3 - "$OPENCODE_WORKFLOW_JSON" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as fh:
-    data = json.load(fh)
-if data.get("passed") is not True:
-    raise SystemExit("workflow checker did not pass")
-PY
+jq -e '.passed == true' "$PROOF_DIR/full-benchmark-checker.json" >/dev/null
+python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$WORKFLOW_JSON"
+jq -e '.passed == true' "$WORKFLOW_JSON" >/dev/null
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in \
-  'Full six-phase agentic benchmark prompt' \
-  'Phase 1' \
-  'Phase 2' \
-  'apply_patch' \
-  '.agent_test/repo_summary.md' \
-  '.agent_test/action_plan.json'
-do
+for marker in "Full six-phase agentic benchmark prompt" "Phase 1" "Phase 2" "apply_patch" ".agent_test/repo_summary.md" ".agent_test/action_plan.json"; do
   need_marker "$PROOF_DIR/browser-proof.json" "$marker"
 done
-need_any_regex "$PROOF_DIR/browser-proof.json" 'Founder report|Founder Report'
-need_any_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Report'
+need_regex "$PROOF_DIR/browser-proof.json" 'Founder report|Founder Report'
+need_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Report'
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 write_status "$PROOF_DIR/live-proof-status.txt"
