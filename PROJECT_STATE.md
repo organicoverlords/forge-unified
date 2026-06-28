@@ -5,14 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: `b0e316d2655fb2d6a16ce4de9dbfcf9d1b378995`
+- Current repair HEAD before this state update: `e47a2d8463f955e673eabe83403094c666d22272`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest inspected current-head workflow set before this update: Build Proof `28330704599`, CI `28330704602`, Live WebUI Feature Sprint `28330704615`, all in progress on `6c69fe1e11c495b058253bc5305e64c3979ed842`.
-- Latest failure diagnosis retained from prior failed head: real WebUI/NVIDIA NIM reached provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`; the checker failures centered on missing exact path/command evidence in final reporting and claim verification.
-- Latest repair: `crates/engine/src/orchestrator.rs` now writes a path/command-aware final evidence digest for forced finalization. Each tool evidence line includes `kind`, `success`, `path`, `command`, `error`, and bounded output, and run metadata records `forge_final_evidence_digest`.
-- Latest proof docs: `docs/generated/proof/final-evidence-digest-path-command-20260628T1745Z.md` plus this state update.
+- Latest inspected same-head workflow set for `77e331114181a9c0bf92c5b3e405e6d0385ae36a`: CI `28330840313` success, Build Proof `28330840323` success, Live WebUI Feature Sprint `28330840331` failure.
+- Latest failed Live WebUI artifact: `7937155412`, digest `sha256:ff760f222324abb2af13331adb893e4ff89381bfd3eec5cbf75bcae210316ad1`.
+- Latest failure diagnosis: real WebUI/NVIDIA NIM reached provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`, emitted 28 tool-call events and 28 tool-result events, passed the workflow checker, and failed only `phase2_confidence_labels_in_answer` because the final prose omitted the exact uppercase confidence labels.
+- Latest repair: `scripts/smoke/full-agentic-benchmark-prompt.txt` now forces the final answer to start with an exact `confidence` block containing `VERIFIED`, `LIKELY`, and `UNKNOWN`, and adds a final self-check before sending.
+- Latest proof doc: `docs/generated/proof/live-benchmark-confidence-label-contract-20260628T1858Z.md`.
 - Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
@@ -39,16 +40,16 @@ Proof requirements satisfied by the older accepted artifact:
 - Normalized `/` and empty file paths to workspace root for repo-scoped file tools.
 - Added clean no-tools finalization from a compact evidence digest when the model exhausts tool rounds.
 - Added provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
-- Added deterministic `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
+- Added deterministic base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
 - Added a repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
-- Added a structured doom-loop permission envelope: `permission: doom_loop`, `patterns`, `always`, `ruleset`, `input`, and `recent_tool_signatures`.
+- Added a structured doom-loop permission envelope.
 - Added ToolPart-style result metadata for completed/failed tool states: status, title, call id, timing, output shape, and error fields.
 - Added normalized attachment metadata for successful file/patch tool results.
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
 - Added provider-visible independence guards to the live proof harness for `/api/tools`.
 - Replaced the fragile live proof harness tail with a shorter quote-safe script after the same-head run failed at EOF quote parsing on line 393.
-- Removed OpenCode source paths and `opencode_*` metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
+- Removed upstream source paths and upstream-prefixed metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
 - Added live conversation snapshot streaming in `crates/webui/src/events_live.rs` so long natural-language WebUI/NIM runs expose conversation, ToolPart, tool-result, file-change, and text evidence while the run is still executing.
 - Tightened the full benchmark prompt contract so the live WebUI run asks the model for the same tool-backed evidence and report labels that the checker verifies.
 - Added tolerant batch_parallel request normalization for explicit and one-key shorthand tool call shapes.
@@ -59,12 +60,13 @@ Proof requirements satisfied by the older accepted artifact:
 - Full benchmark prompt now explicitly prevents the doom-loop/internal-search path that blocked Phase 3.
 - Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
 - Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
+- Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
 
 ## OpenCode source anchors retained in developer docs only
 
-- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, same-call ToolPart update semantics, `completeToolCall`, `failToolCall`, `toolResultOutput`, normalized `attachments`, `DOOM_LOOP_THRESHOLD`, recent ToolPart repeated-call comparison, `permission.ask({ permission: "doom_loop", ... })`, and interrupted tool cleanup metadata.
-- `anomalyco/opencode:packages/schema/src/v1/session.ts` — `partBase`, ToolPart / ToolState / FilePart schema shape.
-- `anomalyco/opencode:packages/schema/src/session-id.ts` — `SessionID` prefix semantics.
+- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, provider-executed state, same-call ToolPart update semantics, complete/fail tool-call handling, tool-result output, normalized attachments, repeated-call comparison, and interrupted tool cleanup metadata.
+- `anomalyco/opencode:packages/schema/src/v1/session.ts` — part base, ToolPart, ToolState, and FilePart schema shape.
+- `anomalyco/opencode:packages/schema/src/session-id.ts` — SessionID prefix semantics.
 - `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — EventV2Bridge receipt behavior.
 - `anomalyco/opencode:packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — tool catalog behavior anchors.
 
@@ -83,7 +85,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after the final-evidence-digest repair.
+- The current live proof attempt needs same-head CI/Build Proof/Live WebUI results after the confidence-label contract repair.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
