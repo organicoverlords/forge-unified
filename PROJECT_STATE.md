@@ -5,30 +5,27 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD before this state update: `e47a2d8463f955e673eabe83403094c666d22272`
-- Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
-- Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
-- Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest inspected same-head workflow set for `77e331114181a9c0bf92c5b3e405e6d0385ae36a`: CI `28330840313` success, Build Proof `28330840323` success, Live WebUI Feature Sprint `28330840331` failure.
-- Latest failed Live WebUI artifact: `7937155412`, digest `sha256:ff760f222324abb2af13331adb893e4ff89381bfd3eec5cbf75bcae210316ad1`.
-- Latest failure diagnosis: real WebUI/NVIDIA NIM reached provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`, emitted 28 tool-call events and 28 tool-result events, passed the workflow checker, and failed only `phase2_confidence_labels_in_answer` because the final prose omitted the exact uppercase confidence labels.
-- Latest repair: `scripts/smoke/full-agentic-benchmark-prompt.txt` now forces the final answer to start with an exact `confidence` block containing `VERIFIED`, `LIKELY`, and `UNKNOWN`, and adds a final self-check before sending.
-- Latest proof doc: `docs/generated/proof/live-benchmark-confidence-label-contract-20260628T1858Z.md`.
+- Current checked HEAD before latest manifest-checker update: `6de537bc881c66348301dfb18ff50914e110eff0`
+- Latest same-head workflows for `6de537bc881c66348301dfb18ff50914e110eff0`: CI `28333513946` success, Build Proof `28333513947` success, Live WebUI Feature Sprint `28333513957` success.
+- Latest accepted live proof artifact: Live WebUI Feature Sprint artifact `7937929953`, digest `sha256:2196d93ea90df5b65b14f11d6c345edfc738bc7be22e8eec34412af3f6f61da2`.
+- Latest accepted proof branch/head: `mvp/nim-freellmapi-router-20260626` / `6de537bc881c66348301dfb18ff50914e110eff0`.
+- Latest proof status: same-head WebUI/NVIDIA NIM full benchmark proof is accepted for `6de537bc881c66348301dfb18ff50914e110eff0`.
+- Latest source-backed hardening slice after the accepted proof: added `scripts/smoke/check-live-webui-proof-manifest.py` to validate uploaded proof directories before accepting future green runs.
+- Latest proof doc: `docs/generated/proof/live-proof-manifest-checker-20260628T1950Z.md`.
 - Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on the previous accepted proof head.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `6de537bc881c66348301dfb18ff50914e110eff0`.
 
-Proof requirements satisfied by the older accepted artifact:
+Proof requirements satisfied by artifact `7937929953`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
-- The run uses real `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`.
+- The run uses real `nvidia_nim` with model recorded in conversation/stream artifacts.
 - The full benchmark stream contains real `tool-call` and `tool-result` events.
-- The inspected proof contains 35 tool calls and 35 tool results.
 - Browser proof includes `Full six-phase agentic benchmark prompt`, `Phase 1`, `Phase 2`, `Founder report`, and `Technical report`.
-- Artifact includes `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
+- Artifact includes `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `full-benchmark-checker.json`, `opencode-workflow-checker.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
 
 ## Latest implementation changes
 
@@ -61,6 +58,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
 - Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
 - Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
+- Added `scripts/smoke/check-live-webui-proof-manifest.py` so future proof acceptance checks required screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, and absence of local/upstream identity shortcuts.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -84,8 +82,7 @@ Proof requirements satisfied by the older accepted artifact:
 
 ## Current gaps / do not overclaim
 
-- Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt needs same-head CI/Build Proof/Live WebUI results after the confidence-label contract repair.
+- The accepted same-head proof is for `6de537bc881c66348301dfb18ff50914e110eff0`; the manifest-checker commit needs its own same-head workflow run before claiming proof on that newer head.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
