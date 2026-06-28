@@ -5,14 +5,13 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current checked HEAD before latest manifest-checker update: `6de537bc881c66348301dfb18ff50914e110eff0`
-- Latest same-head workflows for `6de537bc881c66348301dfb18ff50914e110eff0`: CI `28333513946` success, Build Proof `28333513947` success, Live WebUI Feature Sprint `28333513957` success.
-- Latest accepted live proof artifact: Live WebUI Feature Sprint artifact `7937929953`, digest `sha256:2196d93ea90df5b65b14f11d6c345edfc738bc7be22e8eec34412af3f6f61da2`.
-- Latest accepted proof branch/head: `mvp/nim-freellmapi-router-20260626` / `6de537bc881c66348301dfb18ff50914e110eff0`.
-- Latest proof status: same-head WebUI/NVIDIA NIM full benchmark proof is accepted for `6de537bc881c66348301dfb18ff50914e110eff0`.
-- Latest source-backed hardening slice after the accepted proof: added `scripts/smoke/check-live-webui-proof-manifest.py` to validate uploaded proof directories before accepting future green runs.
-- Latest proof doc: `docs/generated/proof/live-proof-manifest-checker-20260628T1950Z.md`.
-- Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
+- Current repair HEAD before this state update: `d7bc4e1d5e618ac20f425b13c89a4b8fa6676ef9`
+- Latest failed same-head workflow set for previous head `009137bf1760144ce841efb8d4975a368afed50a`: CI `28333950469` failure due Smoke Test, Build Proof `28333950465` success, Live WebUI Feature Sprint `28333950462` failure.
+- Latest failed Live WebUI artifact: `7938035145`, digest `sha256:2f7b85d30a0ae06793b64cea216155e653c0fd1873d74d5be49c658fe36c2174`.
+- Failure diagnosis: real WebUI/NVIDIA NIM ran with provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, and produced real tool evidence, but the final assistant text missed required final-report labels and did not satisfy the full benchmark checker.
+- Latest repair: `scripts/smoke/full-agentic-benchmark-prompt.txt` now explicitly rejects blank/JSON/tool-call final output and requires a Markdown self-check containing the exact final report labels.
+- Latest proof doc: `docs/generated/proof/live-benchmark-final-answer-self-check-20260628T2050Z.md`.
+- Latest accepted proof remains the prior same-head WebUI/NVIDIA NIM full benchmark proof for `6de537bc881c66348301dfb18ff50914e110eff0`; do not claim latest-head parity until same-head workflows pass.
 
 ## Accepted live full benchmark proof
 
@@ -59,6 +58,7 @@ Proof requirements satisfied by artifact `7937929953`:
 - Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
 - Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
 - Added `scripts/smoke/check-live-webui-proof-manifest.py` so future proof acceptance checks required screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, and absence of local/upstream identity shortcuts.
+- Full benchmark prompt now explicitly rejects blank/JSON/tool-call final output and requires a Markdown final self-check for exact labels before sending.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -82,7 +82,7 @@ Proof requirements satisfied by artifact `7937929953`:
 
 ## Current gaps / do not overclaim
 
-- The accepted same-head proof is for `6de537bc881c66348301dfb18ff50914e110eff0`; the manifest-checker commit needs its own same-head workflow run before claiming proof on that newer head.
+- The accepted same-head proof is for `6de537bc881c66348301dfb18ff50914e110eff0`; the latest final-answer self-check repair needs its own same-head workflow run before claiming proof on that newer head.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
