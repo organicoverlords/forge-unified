@@ -5,16 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after live conversation snapshot streaming repair.
+- Current repair HEAD: pending workflow proof after live benchmark answer-contract repair.
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `88796c89eeb2a3ab89d4702c12186848a3fde5d2`; same-head CI `28323689775`, Build Proof `28323689784`, and Live WebUI Feature Sprint `28323689781` failed.
-- Latest failure diagnosis: Live WebUI job `83909953124` compiled `forge-app`, started the WebUI, completed smaller NIM and tool lifecycle stages, then timed out during the full six-phase benchmark stream with `curl: (28) Operation timed out after 470002 milliseconds with 9028 bytes received`; the follow-up checker failed because the full benchmark conversation/stream artifacts were incomplete.
-- Latest repair: `crates/webui/src/events_live.rs` now emits `conversation-snapshot` and deduplicated ToolPart/tool-result/file-change/text events every 15 seconds while the long agent run is still executing, instead of waiting for `agent.chat_with_max_rounds(...).await` to return before surfacing tool evidence.
-- Harness budget update: `.github/workflows/live-webui-feature-sprint.yml` now uses `FORGE_BENCH_MAX_ROUNDS=36` and `FORGE_BENCH_TIMEOUT_SECONDS=900` so the real NIM run has enough wall-clock room while still bounding the workflow.
-- Latest proof doc: `docs/generated/proof/live-conversation-snapshot-streaming-20260628T1355Z.md`.
-- Latest parity slice retained: Forge follows OpenCode behavior references for mutable ToolPart session updates and provider-executed ToolPart lifecycle state, but OpenCode source paths remain in developer docs/proof notes rather than provider-visible Forge runtime outputs.
+- Latest failed inspected HEAD before this update: `edf8350e38365332f61f47ab0715c42036b5b3e8`; same-head CI `28325465152`, Build Proof `28325465142`, and Live WebUI Feature Sprint `28325465129` failed.
+- Latest failure diagnosis: Live WebUI job `83914593454` reached the full benchmark with real `nvidia_nim` model `deepseek-ai/deepseek-v4-flash`, 77 tool-call events, 71 tool-result events, and 40 persisted tool results, but the checker rejected the final answer because it missed required evidence/report contract items.
+- Latest repair: `scripts/smoke/full-agentic-benchmark-prompt.txt` now has a proof-critical checklist requiring real `Cargo.toml` file-read evidence, repo-map evidence, validation-command evidence, exact confidence/risk/final-summary labels, Founder report below 180 words, and Technical report sections before final reporting.
+- Latest proof doc: `docs/generated/proof/live-benchmark-answer-contract-20260628T1446Z.md`.
+- Latest parity slice retained: Forge follows OpenCode behavior references for explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
 
@@ -51,6 +50,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Replaced the fragile live proof harness tail with a shorter quote-safe script after the same-head run failed at EOF quote parsing on line 393.
 - Removed OpenCode source paths and `opencode_*` metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
 - Added live conversation snapshot streaming in `crates/webui/src/events_live.rs` so long natural-language WebUI/NIM runs expose conversation, ToolPart, tool-result, file-change, and text evidence while the run is still executing.
+- Tightened the full benchmark prompt contract so the live WebUI run asks the model for the same tool-backed evidence and report labels that the checker verifies.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -75,7 +75,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after the snapshot streaming repair.
+- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after the benchmark answer-contract repair.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
