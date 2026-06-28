@@ -27,6 +27,7 @@ STEP_LOG="$PROOF_DIR/live-proof-steps.log"
 : > "$STEP_LOG"
 
 step() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$STEP_LOG"; }
+need_marker() { local file="$1"; local marker="$2"; grep -Fq -- "$marker" "$file"; }
 
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
@@ -59,10 +60,10 @@ if [ "$HEALTH_OK" != 1 ]; then
   exit 1
 fi
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
-for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible" "opencode-provider-tool-catalog" "apply_patch-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
+for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible" "opencode-provider-tool-catalog" "apply_patch-visible"; do need_marker "$PROOF_DIR/index.html" "$marker"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$TOOL_CATALOG_JSON"
 jq -e '.catalog == "opencode_provider_tool_catalog" and .provider_visible == true and .tool_count >= 20 and (.names | index("apply_patch")) and (.names | index("task")) and (.names | index("todo_write")) and (.names | index("batch_parallel"))' "$TOOL_CATALOG_JSON" >/dev/null
-for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "packages/opencode/src/tool/todo.ts" "provider_visible" "patchText" "todo_write"; do grep -Fq "$marker" "$TOOL_CATALOG_JSON"; done
+for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "packages/opencode/src/tool/todo.ts" "provider_visible" "patchText" "todo_write"; do need_marker "$TOOL_CATALOG_JSON" "$marker"; done
 
 step "create NIM conversation"
 CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"live NIM browser model proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -86,7 +87,11 @@ if grep -Fq 'event: provider-error' "$MODEL_STREAM"; then
   tail -n 160 "$MODEL_STREAM" >&2 || true
   exit 9
 fi
-for marker in 'event: run-finish' 'event: text-delta' '"provider":"nvidia_nim"' '"model":"' 'LIVE_NIM_BROWSER_PROOF'; do grep -Fq "$marker" "$MODEL_STREAM"; done
+need_marker "$MODEL_STREAM" 'event: run-finish'
+need_marker "$MODEL_STREAM" 'event: text-delta'
+need_marker "$MODEL_STREAM" '"provider":"nvidia_nim"'
+need_marker "$MODEL_STREAM" '"model":"'
+need_marker "$MODEL_STREAM" 'LIVE_NIM_BROWSER_PROOF'
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$CONVERSATION_JSON" >/dev/null
 MODEL_ID="$(jq -r '.model' "$CONVERSATION_JSON")"
@@ -100,13 +105,13 @@ PROMPT
 jq -Rs '{message: ., max_rounds: 2}' "$TOOL_PROMPT_FILE" > "$TOOL_REQUEST_JSON"
 
 timeout 180s curl -fsS --connect-timeout 2 --max-time 170 -X POST "$BASE/api/conversations/$TOOL_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$TOOL_REQUEST_JSON" > "$TOOL_STREAM"
-for marker in 'event: tool-lifecycle' 'event: tool-input-start' 'event: tool-input-delta' 'event: tool-input-end' 'event: tool-call' 'event: tool-result' 'event: file-change' 'event: event-bus' 'providerExecuted' 'providerExecuted_delta' 'doom_loop_threshold' 'opencode_provider_executed_source' 'ToolStateCompleted' 'file_write' 'file_edit' 'file_delete' 'file-tool-event-proof.rs'; do grep -Fq "$marker" "$TOOL_STREAM"; done
+for marker in 'event: tool-lifecycle' 'event: tool-input-start' 'event: tool-input-delta' 'event: tool-input-end' 'event: tool-call' 'event: tool-result' 'event: file-change' 'event: event-bus' 'providerExecuted' 'providerExecuted_delta' 'doom_loop_threshold' 'opencode_provider_executed_source' 'ToolStateCompleted' 'file_write' 'file_edit' 'file_delete' 'file-tool-event-proof.rs'; do need_marker "$TOOL_STREAM" "$marker"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$TOOL_CONV_ID" > "$TOOL_CONVERSATION_JSON"
-for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_tool_part_updates' 'same ToolPart row updated by callID' 'ToolStateCompleted.attachments' 'file-tool-event-proof.rs'; do grep -Fq "$marker" "$TOOL_CONVERSATION_JSON"; done
+for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_tool_part_updates' 'same ToolPart row updated by callID' 'ToolStateCompleted.attachments' 'file-tool-event-proof.rs'; do need_marker "$TOOL_CONVERSATION_JSON" "$marker"; done
 
 step "browser proof tool lifecycle"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof' 'OpenCode Tool Catalog' 'apply_patch'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Please run an OpenCode file tool formatter proof' 'opencode-live-toolpart' 'providerExecuted' 'OpenCode ToolPart lifecycle metadata' 'EventV2Bridge receipts' 'file_write' 'file_edit' 'file_delete' 'Ran OpenCode-style file tool event proof' 'OpenCode Tool Catalog' 'apply_patch'; do need_marker "$PROOF_DIR/browser-proof.json" "$marker"; done
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/tool-lifecycle-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 
@@ -126,13 +131,13 @@ if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 13
 fi
-for marker in 'event: run-finish' '"provider":"nvidia_nim"' '"model":"' 'event: tool-call' 'event: tool-result'; do grep -Fq "$marker" "$BENCH_STREAM"; done
+for marker in 'event: run-finish' '"provider":"nvidia_nim"' '"model":"' 'event: tool-call' 'event: tool-result'; do need_marker "$BENCH_STREAM" "$marker"; done
 if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel|todo_write' "$BENCH_STREAM"; then
   echo "::error::full benchmark did not use advertised provider tools" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 14
 fi
-for marker in 'file_write' 'file_read' 'file_delete' '.agent_test/repo_summary.md' '.agent_test/investigation.md' '.agent_test/action_plan.json' 'PROJECT_STATE.md'; do grep -Fq "$marker" "$BENCH_STREAM"; done
+for marker in 'file_write' 'file_read' 'file_delete' '.agent_test/repo_summary.md' '.agent_test/investigation.md' '.agent_test/action_plan.json' 'PROJECT_STATE.md'; do need_marker "$BENCH_STREAM" "$marker"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$BENCH_CONVERSATION_JSON" >/dev/null
 jq -e '
@@ -148,14 +153,14 @@ jq -e '
   ([results[] | select(.kind == "Task" and (.metadata.tool_alias // "") == "todo_write" and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "Task" and ((.metadata.tool_alias // "") != "todo_write") and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "BatchParallel" and .success == true)] | length) >= 1 and
-  ([results[] | select((.kind == "FileEdit" or .kind == "FileWrite") and (path(.) | startswith(".agent_test/") | not) and .success == true)] | length) >= 1 and
+  ([results[] | select((.kind == "FileEdit" or .kind == "FileWrite") and ((path(.) | startswith(".agent_test/")) | not) and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "ShellCommand" and ((.metadata.command // "") | test("git diff|git status|cargo check|cargo test|bash -n"; "i")) and .success == true)] | length) >= 1
 ' "$BENCH_CONVERSATION_JSON" >/dev/null
 python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$OPENCODE_WORKFLOW_JSON"
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'OpenCode Tool Catalog' 'apply_patch' '.agent_test/repo_summary.md' '.agent_test/action_plan.json'; do grep -Fq "$marker" "$PROOF_DIR/browser-proof.json"; done
+for marker in 'Full six-phase agentic benchmark prompt' 'Phase 1' 'Phase 2' 'OpenCode Tool Catalog' 'apply_patch' '.agent_test/repo_summary.md' '.agent_test/action_plan.json'; do need_marker "$PROOF_DIR/browser-proof.json" "$marker"; done
 grep -Eiq 'Founder report|Founder Report' "$PROOF_DIR/browser-proof.json"
 grep -Eiq 'Technical report|Technical Report' "$PROOF_DIR/browser-proof.json"
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
