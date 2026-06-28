@@ -8,8 +8,11 @@ Updated: 2026-06-28
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `1ed62be3c68e7eb402505afba552e18f6352ca39`; same-head CI `28306664889`, Build Proof `28306664881`, and Live WebUI Feature Sprint `28306664885` failed.
-- Latest repair: the live WebUI proof harness now starts the already-built `target/debug/forge` binary directly, records `server-command.txt`, waits up to 180 seconds for `/api/health`, and prints server logs on startup failure.
+- Latest failed inspected HEAD before this update: `f7a4cdc6f24a9327eeca4dc07adda903512dc041`; same-head CI `28307685432`, Build Proof `28307685436`, and Live WebUI Feature Sprint `28307685427` failed.
+- Latest failure diagnosis: the app compiled, but `scripts/smoke/live-webui-feature-sprint.sh` failed at shell parse time with `line 91: syntax error near unexpected token '('`, so no full benchmark artifacts were produced.
+- Latest repair: the live WebUI proof harness now uses explicit marker assertions for the model stream and fixes the jq non-agent-test path predicate parentheses.
+- Latest parity slice: `crates/engine/src/orchestrator.rs` now records an OpenCode-style doom-loop permission envelope before interrupting repeated identical tool requests.
+- Latest proof doc: `docs/generated/proof/opencode-doom-loop-permission-envelope-20260628T0146Z.md`.
 
 ## Accepted live full benchmark proof
 
@@ -37,7 +40,9 @@ Proof requirements satisfied by the older accepted artifact:
 - Added OpenCode-style provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
 - Added deterministic OpenCode-style `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
 - Added an OpenCode-style repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
+- Added a structured OpenCode-style doom-loop permission envelope: `permission: doom_loop`, `patterns`, `always`, `ruleset`, `input`, `recent_tool_signatures`, and upstream source metadata.
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
+- Repaired the live proof harness shell marker/predicate parsing after the failed `f7a4cdc6...` run.
 
 ## OpenCode source anchors retained
 
@@ -54,7 +59,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
 - Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, and schema-compatible part base fields.
-- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops while preserving an explicit OpenCode source marker.
+- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops while preserving an explicit OpenCode source marker and permission-envelope metadata.
 - Native watcher publishes `watcher.started` and live `watcher.updated` events.
 - LSP diagnostic envelopes and report blocks are visible in the event rail, but live language-server collection remains incomplete.
 - Conversation compaction emits OpenCode `session.next.compaction.started` and `session.next.compaction.ended` receipts.
@@ -62,8 +67,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The startup repair is proof-harness work, not an OpenCode parity feature claim.
-- The doom-loop guard is detection/interruption only; it does not yet ask the OpenCode-style permission question to continue.
+- The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side OpenCode processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
 - Full OpenCode formatter catalog/config/runtime remains partial.
@@ -73,7 +77,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Next targets
 
 1. Prove the latest HEAD with same-head CI, Build Proof, and Live WebUI Feature Sprint.
-2. If startup is green, continue the full OpenCode doom-loop permission question/recovery path.
+2. If startup and parser fixes are green, continue interactive OpenCode doom-loop allow/deny recovery UI.
 3. Prove provider-selected tool results visibly carry provider metadata and schema-compatible part IDs in WebUI screenshots/DOM.
 4. Continue live LSP diagnostics.
 5. Continue full formatter registry/config/runtime parity.
