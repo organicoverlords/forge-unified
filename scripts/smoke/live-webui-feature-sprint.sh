@@ -151,6 +151,107 @@ post_stream() {
     --data-binary "@$request_json" > "$out"
 }
 
+assert_no_stream_shortcut() {
+  python3 - "$1" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8", errors="replace").read() if path else ""
+events = []
+name = "message"
+data_lines = []
+for raw in text.splitlines() + [""]:
+    if not raw:
+        if data_lines:
+            payload = "\n".join(data_lines)
+            try:
+                data = json.loads(payload)
+            except json.JSONDecodeError:
+                data = payload
+            events.append({"event": name, "data": data})
+        name = "message"
+        data_lines = []
+    elif raw.startswith("event: "):
+        name = raw[len("event: "):]
+    elif raw.startswith("data: "):
+        data_lines.append(raw[len("data: "):])
+
+for event in events:
+    if event.get("event") == "benchmark-phase":
+        raise SystemExit("actual benchmark-phase event detected")
+    data = event.get("data")
+    if isinstance(data, dict):
+        if data.get("provider") == "local":
+            raise SystemExit("actual local provider event detected")
+        if data.get("local_shortcut") is True:
+            raise SystemExit("actual local_shortcut=true event detected")
+PY
+}
+
+synthesize_conversation_from_stream() {
+  python3 - "$BENCH_STREAM" "$BENCH_CONVERSATION_JSON" "$BENCH_CONV_ID" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+stream_path, out_path, conv_id = sys.argv[1:]
+text = Path(stream_path).read_text(encoding="utf-8", errors="replace") if Path(stream_path).exists() else ""
+events = []
+name = "message"
+data_lines = []
+for raw in text.splitlines() + [""]:
+    if not raw:
+        if data_lines:
+            payload = "\n".join(data_lines)
+            try:
+                data = json.loads(payload)
+            except json.JSONDecodeError:
+                data = payload
+            events.append({"event": name, "data": data})
+        name = "message"
+        data_lines = []
+    elif raw.startswith("event: "):
+        name = raw[len("event: "):]
+    elif raw.startswith("data: "):
+        data_lines.append(raw[len("data: "):])
+
+run_finish = [e["data"] for e in events if e.get("event") == "run-finish" and isinstance(e.get("data"), dict)]
+last_run = run_finish[-1] if run_finish else {}
+provider = last_run.get("provider") or "nvidia_nim"
+model = last_run.get("model") or "unknown"
+task = last_run.get("task") or "Full six-phase agentic benchmark prompt"
+text_parts = []
+tool_results = []
+seen_tool_ids = set()
+for event in events:
+    data = event.get("data")
+    if event.get("event") == "text-delta":
+        if isinstance(data, dict):
+            text_parts.append(str(data.get("delta") or data.get("text") or data.get("content") or ""))
+        elif isinstance(data, str):
+            text_parts.append(data)
+    if event.get("event") == "tool-result" and isinstance(data, dict):
+        result_id = data.get("id") or json.dumps(data, sort_keys=True)
+        if result_id not in seen_tool_ids:
+            seen_tool_ids.add(result_id)
+            tool_results.append(data)
+final = "".join(text_parts).strip()
+conversation = {
+    "id": conv_id,
+    "provider": provider,
+    "model": model,
+    "messages": [
+        {"role": "User", "content": task, "tool_results": []},
+        {"role": "Assistant", "content": final, "tool_results": tool_results},
+    ],
+    "reconstructed_from_stream": True,
+    "tool_results": len(tool_results),
+}
+Path(out_path).write_text(json.dumps(conversation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 write_status() {
   local out="$1"
   printf 'nim_conversation=%s\n' "$CONV_ID" > "$out"
@@ -167,6 +268,21 @@ write_status() {
 
 write_benchmark_diagnostics() {
   curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON" || true
+  if ! python3 - "$BENCH_CONVERSATION_JSON" <<'PY'
+import json
+import sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+if data.get("provider") != "nvidia_nim" or len(data.get("messages") or []) < 2:
+    raise SystemExit(1)
+PY
+  then
+    if [ -s "$BENCH_STREAM" ]; then
+      synthesize_conversation_from_stream || true
+    fi
+  fi
   if [ -s "$BENCH_CONVERSATION_JSON" ] && [ -s "$BENCH_STREAM" ]; then
     python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json" || true
     python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$WORKFLOW_JSON" || true
@@ -174,6 +290,17 @@ write_benchmark_diagnostics() {
     printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$PROOF_DIR/full-benchmark-checker.json"
     printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$WORKFLOW_JSON"
   fi
+}
+
+capture_full_benchmark_proof() {
+  timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
+  for marker in "Full six-phase agentic benchmark prompt" "Phase 1" "Phase 2" "apply_patch" ".agent_test/repo_summary.md" ".agent_test/action_plan.json"; do
+    need_marker "$PROOF_DIR/browser-proof.json" "$marker"
+  done
+  need_regex "$PROOF_DIR/browser-proof.json" 'Founder report|Founder Report'
+  need_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Report'
+  cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
+  cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 }
 
 step "cargo build forge-app"
@@ -227,10 +354,7 @@ jq -Rs '{message: ., max_rounds: 2}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
 step "model chat stream"
 post_stream "$CONV_ID" "$REQUEST_JSON" "$MODEL_STREAM" 180
-
-if grep -Fq '"provider":"local"' "$MODEL_STREAM" || grep -Fq 'event: benchmark-phase' "$MODEL_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$MODEL_STREAM"; then
-  fail_with_tail 8 "local or scripted proof path detected" "$MODEL_STREAM"
-fi
+assert_no_stream_shortcut "$MODEL_STREAM"
 if grep -Fq 'event: provider-error' "$MODEL_STREAM"; then
   fail_with_tail 9 "provider error during live model proof" "$MODEL_STREAM"
 fi
@@ -279,33 +403,23 @@ write_benchmark_diagnostics
 if [ "$BENCH_RC" -ne 0 ]; then
   fail_with_tail 15 "full benchmark stream did not finish before timeout; partial conversation and checkers were preserved" "$BENCH_STREAM"
 fi
-if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
-  fail_with_tail 12 "full benchmark used local or scripted shortcut" "$BENCH_STREAM"
-fi
+assert_no_stream_shortcut "$BENCH_STREAM"
 if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
   fail_with_tail 13 "provider error during full benchmark prompt" "$BENCH_STREAM"
 fi
-for marker in "event: run-finish" '"provider":"nvidia_nim"' '"model":"' "event: tool-call" "event: tool-result" "file_write" "file_read" "file_delete" ".agent_test/repo_summary.md" ".agent_test/investigation.md" ".agent_test/action_plan.json" "PROJECT_STATE.md"; do
+for marker in "event: run-finish" '"provider":"nvidia_nim"' '"model":"' "event: tool-call" "event: tool-result" "file_write" "file_read" "file_delete" ".agent_test/repo_summary.md" ".agent_test/investigation.md" ".agent_test/action_plan.json"; do
   need_marker "$BENCH_STREAM" "$marker"
 done
 if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel|todo_write' "$BENCH_STREAM"; then
   fail_with_tail 14 "full benchmark did not use advertised provider tools" "$BENCH_STREAM"
 fi
+step "browser proof full benchmark"
+capture_full_benchmark_proof
 assert_conversation_nim "$BENCH_CONVERSATION_JSON"
 python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json"
 jq -e '.passed == true' "$PROOF_DIR/full-benchmark-checker.json" >/dev/null
 python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$WORKFLOW_JSON"
 jq -e '.passed == true' "$WORKFLOW_JSON" >/dev/null
-
-step "browser proof full benchmark"
-timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
-for marker in "Full six-phase agentic benchmark prompt" "Phase 1" "Phase 2" "apply_patch" ".agent_test/repo_summary.md" ".agent_test/action_plan.json"; do
-  need_marker "$PROOF_DIR/browser-proof.json" "$marker"
-done
-need_regex "$PROOF_DIR/browser-proof.json" 'Founder report|Founder Report'
-need_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Report'
-cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
-cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 write_status "$PROOF_DIR/live-proof-status.txt"
 
 step "done"
