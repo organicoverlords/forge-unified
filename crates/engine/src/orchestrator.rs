@@ -103,7 +103,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope")), ("opencode_tool_state_result_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall state envelopes"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -180,6 +180,46 @@ fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<se
     result.metadata.insert("provider_executed".to_string(), serde_json::json!(true));
     result.metadata.insert("opencode_provider_executed_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall"));
     if let Some(input) = input { result.metadata.entry("opencode_tool_input".to_string()).or_insert(input); }
+    annotate_opencode_tool_state(result);
+}
+
+fn annotate_opencode_tool_state(result: &mut ToolResult) {
+    let status = if result.success { "completed" } else { "error" };
+    let title = opencode_tool_title(&result.kind, result.success);
+    result.metadata.insert("opencode_tool_state_status".to_string(), serde_json::json!(status));
+    result.metadata.insert("opencode_tool_state_title".to_string(), serde_json::json!(title));
+    result.metadata.insert("opencode_tool_call_id".to_string(), serde_json::json!(result.id.0.to_string()));
+    result.metadata.insert("opencode_tool_state_time".to_string(), serde_json::json!({ "start": 0, "end": result.duration_ms }));
+    result.metadata.insert("opencode_tool_state_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall"));
+    result.metadata.insert("opencode_tool_output_shape".to_string(), serde_json::json!({ "title": title, "metadata": true, "output": true, "attachments": result.metadata.get("attachments").is_some() }));
+    if !result.success {
+        result.metadata.insert("opencode_tool_error".to_string(), serde_json::json!(result.error.clone().unwrap_or_else(|| "tool_error".to_string())));
+    }
+}
+
+fn opencode_tool_title(kind: &ToolKind, success: bool) -> String {
+    if !success { return format!("Failed {:?}", kind); }
+    match kind {
+        ToolKind::FileRead => "Read file".to_string(),
+        ToolKind::FileWrite => "Wrote file".to_string(),
+        ToolKind::FileEdit => "Edited file".to_string(),
+        ToolKind::FileDelete => "Deleted file".to_string(),
+        ToolKind::FileList => "Listed files".to_string(),
+        ToolKind::FileGlob => "Matched files".to_string(),
+        ToolKind::FileSearch => "Searched files".to_string(),
+        ToolKind::ShellCommand | ToolKind::TerminalRun => "Ran shell".to_string(),
+        ToolKind::ApplyPatch | ToolKind::ProposePatch => "Applied patch".to_string(),
+        ToolKind::Task => "Ran task".to_string(),
+        ToolKind::BatchParallel => "Ran parallel tools".to_string(),
+        ToolKind::RepoInfo => "Inspected repo".to_string(),
+        ToolKind::BrowserProof => "Captured browser proof".to_string(),
+        ToolKind::VisionReview => "Reviewed image".to_string(),
+        ToolKind::GraphBuild => "Built graph".to_string(),
+        ToolKind::GraphQuery => "Queried graph".to_string(),
+        ToolKind::WebFetch => "Fetched web page".to_string(),
+        ToolKind::WebSearch => "Searched web".to_string(),
+        ToolKind::SwitchMode => "Switched mode".to_string(),
+    }
 }
 
 fn tool_request_signatures(requests: &[ToolRequest]) -> Vec<String> { requests.iter().map(tool_request_signature).collect() }
@@ -200,7 +240,7 @@ fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) 
     let id = first.map(|request| request.id.clone()).unwrap_or_else(|| ToolCallId(uuid::Uuid::new_v4()));
     let kind = first.map(|request| request.kind.clone()).unwrap_or(ToolKind::Task);
     let input = first.map(|request| request.args.clone()).unwrap_or_else(|| serde_json::json!({}));
-    ToolResult {
+    let mut result = ToolResult {
         id,
         kind,
         success: false,
@@ -217,7 +257,9 @@ fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) 
             ("opencode_doom_loop_permission".to_string(), serde_json::json!(true)),
             ("opencode_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:permission.ask({ permission: \\\"doom_loop\\\" })")),
         ]),
-    }
+    };
+    annotate_opencode_tool_state(&mut result);
+    result
 }
 
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
