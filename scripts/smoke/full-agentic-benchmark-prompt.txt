@@ -8,6 +8,8 @@ Execution discipline for this benchmark:
 * Keep Phase 1 and Phase 2 concise after enough evidence exists.
 * You must reach Phase 4 and make one real non-temporary repository edit before final reporting.
 * Do not write the Founder report or Technical report until every required proof checkpoint below has tool evidence.
+* Never print tool-call JSON, patch JSON, command JSON, or pseudo-tool calls in prose. That does not count. Use actual tool invocations only.
+* If you are about to show a JSON object containing `patchText`, `path`, or `command`, stop and call the corresponding actual tool instead.
 
 OpenCode workflow requirements for this benchmark:
 
