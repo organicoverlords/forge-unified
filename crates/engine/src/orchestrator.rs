@@ -168,37 +168,22 @@ fn fallback_final_report(provider: &ProviderId, model: &ModelId, prior_output: &
     format!("Founder report\nThe live model-backed tool loop completed, but the final model text was not a usable report, so Forge produced a conservative fallback report from recorded evidence. Provider: {}; model: {}.\n\nTechnical report\nEvidence digest:\n{}\n\nFiles changed\nSee tool results above; exact final classification is incomplete.\n\nValidation commands run\nSee shell/tool evidence above; exact final classification is incomplete.\n\nRemaining risks\nThe final report used fallback formatting because the final model text was: {}\n\nConfidence score\n62/100", provider.0, model.0, evidence, trim_chars(prior_output, 500))
 }
 
-fn annotate_provider_executed_result(req: &ToolRequest, result: &mut ToolResult) {
-    annotate_provider_executed_metadata(result, Some(req.args.clone()));
-}
+fn annotate_provider_executed_result(req: &ToolRequest, result: &mut ToolResult) { annotate_provider_executed_metadata(result, Some(req.args.clone())); }
 
 fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<serde_json::Value>) {
     result.metadata.insert("providerExecuted".to_string(), serde_json::json!(true));
     result.metadata.insert("provider_executed".to_string(), serde_json::json!(true));
     result.metadata.insert("opencode_provider_executed_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall"));
-    if let Some(input) = input {
-        result.metadata.entry("opencode_tool_input".to_string()).or_insert(input);
-    }
+    if let Some(input) = input { result.metadata.entry("opencode_tool_input".to_string()).or_insert(input); }
 }
 
-fn tool_request_signatures(requests: &[ToolRequest]) -> Vec<String> {
-    requests.iter().map(tool_request_signature).collect()
-}
-
-fn tool_request_signature(request: &ToolRequest) -> String {
-    format!("{:?}:{}", request.kind, request.args)
-}
-
+fn tool_request_signatures(requests: &[ToolRequest]) -> Vec<String> { requests.iter().map(tool_request_signature).collect() }
+fn tool_request_signature(request: &ToolRequest) -> String { format!("{:?}:{}", request.kind, request.args) }
 fn repeated_tool_signature_window(history: &[Vec<String>], current: &[String]) -> bool {
     if current.is_empty() || history.len() + 1 < DOOM_LOOP_THRESHOLD { return false; }
     history.iter().rev().take(DOOM_LOOP_THRESHOLD - 1).all(|previous| previous == current)
 }
-
-fn remember_tool_signatures(history: &mut Vec<Vec<String>>, current: Vec<String>) {
-    history.push(current);
-    if history.len() > DOOM_LOOP_THRESHOLD { history.remove(0); }
-}
-
+fn remember_tool_signatures(history: &mut Vec<Vec<String>>, current: Vec<String>) { history.push(current); if history.len() > DOOM_LOOP_THRESHOLD { history.remove(0); } }
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
     ToolResult { id: req.id, kind: req.kind, success: false, output: format!("Tool execution failed: {error}"), error: Some(error), duration_ms: 0, metadata: HashMap::from([("tool_execution_error".to_string(), serde_json::json!(true))]) }
 }
@@ -209,9 +194,10 @@ fn build_system_prompt(user_message: &str) -> String {
     let benchmark = lower.contains("phase 3") && lower.contains(".agent_test") && lower.contains("founder report");
     let base = "You are Forge, an OpenCode-style coding agent. Use available tools for repository work, keep file changes low-risk, and keep final answers brief.";
     if !repo_work { return base.to_string(); }
-    let repo = "For repository tasks, call tools before answering. Use compact, bounded shell commands for broad inspection, then move forward. Treat tool errors as evidence and choose another tool or path instead of repeating the same failing call. Verify file operations by reading or listing files, run validation when feasible, and summarize changes, tests, risks, and confidence.";
+    let opencode = "OpenCode workflow rules: use todo_write first for any multi-step or repo task, keep the todo list current, and mark items completed immediately. For broad codebase exploration, use the task tool as a specialized subagent before direct grep-like searching. When independent operations do not depend on each other, use batch_parallel instead of sequential calls. Prefer dedicated file tools over shell for file reads/writes.";
+    let repo = "For repository tasks, call tools before answering. Use compact, bounded shell commands for validation and real terminal-only work. Treat tool errors as evidence and repair the failed tool call or choose another tool path instead of routing to another model. Verify file operations by reading or listing files, run validation when feasible, and summarize changes, tests, risks, and confidence.";
     if benchmark {
-        return format!("{base} {repo} This is a six-phase benchmark: complete the phases in order and do not write the final Founder report or Technical report until Phase 3 has real file_write results for .agent_test/repo_summary.md, .agent_test/investigation.md, and .agent_test/action_plan.json, real file_read results for all three, a file_delete result for .agent_test/investigation.md, and a verification result showing only repo_summary.md and action_plan.json remain. After that, complete Phase 4 with one small real repo edit plus git diff/status and validation evidence, then final reports.");
+        return format!("{base} {opencode} {repo} This is a six-phase benchmark: start with todo_write covering all six phases. Use at least one task subagent for repo exploration and at least one batch_parallel call for independent Phase 1 inspection. Complete the phases in order and do not write the final Founder report or Technical report until Phase 3 has real file_write results for .agent_test/repo_summary.md, .agent_test/investigation.md, and .agent_test/action_plan.json, real file_read results for all three, a file_delete result for .agent_test/investigation.md, and a verification result showing only repo_summary.md and action_plan.json remain. After that, complete Phase 4 with one small real repo edit plus git diff/status and validation evidence, then final reports.");
     }
-    format!("{base} {repo} For multi-phase prompts, complete phases in order and keep evidence concise. Do not state that a command, file operation, test, deletion, or final state succeeded unless a tool result proves it.")
+    format!("{base} {opencode} {repo} For multi-phase prompts, complete phases in order and keep evidence concise. Do not state that a command, file operation, test, deletion, or final state succeeded unless a tool result proves it.")
 }
