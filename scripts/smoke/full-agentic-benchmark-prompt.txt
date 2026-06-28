@@ -1,6 +1,13 @@
-You have full access to tools (filesystem, shell, git, web, search, read/write/delete files).
+You are running inside the Forge WebUI with repo-local coding tools.
 
-Do the following exactly and complete all steps before reporting.
+Complete all steps before reporting. Only modify files inside this repository. Only remove the one temporary file explicitly named below.
+
+Execution discipline for this benchmark:
+
+* This is a live WebUI proof run. Do not spend all rounds on inspection.
+* Keep Phase 1 and Phase 2 concise after enough evidence exists.
+* You must reach Phase 4 and make one real non-temporary repository edit before final reporting.
+* Do not write the Founder report or Technical report until every required proof checkpoint below has tool evidence.
 
 OpenCode workflow requirements for this benchmark:
 
@@ -8,8 +15,8 @@ OpenCode workflow requirements for this benchmark:
 * Update todos as work progresses. Mark a todo completed immediately after its evidence exists.
 * Use the task tool at least once as an OpenCode-style subagent for broad repo exploration before doing direct search/grep.
 * Use batch_parallel at least once for independent repo-inspection work, such as repo identity, file listing, config reads, and search.
-* Do not route away or switch models when a tool call fails. Repair the tool call, use the right dedicated tool, or record the failed tool result as evidence.
-* Prefer dedicated file tools over shell for read/write/delete operations.
+* If a tool call fails, repair the tool call, use the right dedicated tool, or record the failed tool result as evidence.
+* Prefer dedicated file tools over shell for repo-local file reads/writes.
 
 # Phase 1 — Environment + repo inspection
 
@@ -46,7 +53,7 @@ OpenCode workflow requirements for this benchmark:
 * giant files (>1000 LOC)
 * suspicious config drift
 
-Do not stop after shallow inspection.
+Do not stop after shallow inspection, but stop Phase 1 once you have evidence.
 
 ---
 
@@ -65,11 +72,11 @@ Required investigation loop:
 7. revise if wrong
 8. produce evidence
 
-You must do at least **8 meaningful tool calls** during this phase.
+You must do at least 8 meaningful tool calls during this phase.
 
 Do not pretend certainty.
 
-Label:
+Label the final answer with all three words exactly:
 
 * VERIFIED
 * LIKELY
@@ -114,9 +121,14 @@ Then:
 
 After verification:
 
-* delete ONLY `investigation.md`
-* verify deletion succeeded
+* remove ONLY `.agent_test/investigation.md`
+* verify removal succeeded
 * keep the other files
+* run this exact-style verification command or equivalent so the output lists the two remaining files and not investigation.md:
+
+```bash
+find .agent_test -maxdepth 1 -type f -print | sort
+```
 
 ---
 
@@ -139,11 +151,13 @@ Rules:
 * no unrelated cleanup
 * preserve behavior
 * must be provably useful
+* must edit at least one repository file outside `.agent_test/`
+* if no safer code edit is obvious, make a small documentation/state update in `PROJECT_STATE.md` recording the verified benchmark finding and next risk; that counts as the low-risk improvement
 
 After implementation:
 
 * validate with tests/build/lint if possible
-* inspect diff
+* inspect diff with `git diff` or status with `git status`
 * summarize changed files
 
 ---
@@ -173,6 +187,8 @@ Include:
 * failed hypotheses
 * confidence levels
 * rollback strategy
+* the exact words VERIFIED, LIKELY, and UNKNOWN
+* blast radius, implementation difficulty, and rollback difficulty
 
 ---
 
@@ -180,7 +196,7 @@ Include:
 
 Before finishing:
 
-Verify:
+Verify with tools:
 
 * no accidental secrets exposed
 * no unrelated file changes
@@ -188,14 +204,21 @@ Verify:
 * temporary folder only contains expected files
 * repo state is understood
 
-Report:
+Use compact shell checks such as:
+
+```bash
+git status --short
+find .agent_test -maxdepth 1 -type f -print | sort
+```
+
+Report with these exact labels:
 
 * files created
-* files deleted
+* files removed
 * files modified
 * tests run
 * unresolved risks
-* confidence (0–100)
+* confidence (0-100)
 
 Important constraints:
 
