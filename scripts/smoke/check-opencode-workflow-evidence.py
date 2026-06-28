@@ -40,7 +40,29 @@ def parse_sse(path: Path) -> list[dict[str, Any]]:
 def tool_results(conv: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for msg in conv.get("messages", []):
-        out.extend(msg.get("tool_results") or [])
+        for result in msg.get("tool_results") or []:
+            out.append(result)
+            out.extend(expand_batch_results(result))
+    return out
+
+
+def expand_batch_results(result: dict[str, Any]) -> list[dict[str, Any]]:
+    if result.get("kind") != "BatchParallel":
+        return []
+    output_text = result.get("output")
+    if not isinstance(output_text, str) or not output_text.strip():
+        return []
+    try:
+        nested = json.loads(output_text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(nested, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in nested:
+        if isinstance(item, dict):
+            out.append(item)
+            out.extend(expand_batch_results(item))
     return out
 
 
