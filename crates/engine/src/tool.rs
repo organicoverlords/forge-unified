@@ -52,6 +52,7 @@ impl ToolExecutor {
             ToolKind::ShellCommand => self.execute_shell(request).await,
             ToolKind::TerminalRun => self.execute_terminal(request).await,
             ToolKind::Task => self.execute_task(request).await,
+            ToolKind::TodoWrite => self.execute_todo_write(request).await,
             ToolKind::BatchParallel => self.execute_batch_parallel(request).await,
             ToolKind::RepoInfo => self.execute_repo_info(request).await,
             ToolKind::ProposePatch => self.execute_propose_patch(request).await,
@@ -117,6 +118,7 @@ fn tool(name: &str, description: &str, properties: serde_json::Value, required: 
 pub fn tool_definitions() -> Vec<ToolConfig> {
     vec![
         tool("repo_info", "Inspect repository identity, branch, remotes, dirty state, and workspace summary before changing files.", json!({}), &[], "packages/opencode/src/session/processor.ts"),
+        tool("todo_write", "OpenCode-style TodoWrite: create/update a visible checklist before and during multi-step work; mark items in_progress/completed immediately.", json!({"todos":{"type":"array","items":{"type":"object","properties":{"content":{"type":"string"},"status":{"type":"string","enum":["pending","in_progress","completed"]},"priority":{"type":"string","enum":["high","medium","low"]}},"required":["content","status"]}}}), &["todos"], "packages/opencode/src/tool/todo.ts"),
         tool("file_list", "List files under a workspace-relative directory with optional depth.", json!({"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":5}}), &[], "packages/opencode/src/tool/ls.ts"),
         tool("file_glob", "Find files by glob pattern under an optional workspace-relative directory.", json!({"pattern":{"type":"string"},"path":{"type":"string"}}), &["pattern"], "packages/opencode/src/tool/glob.ts"),
         tool("file_search", "Search text in workspace files by literal pattern and optional file glob.", json!({"pattern":{"type":"string"},"path":{"type":"string"},"file_pattern":{"type":"string"}}), &["pattern"], "packages/opencode/src/tool/grep.ts"),
@@ -128,8 +130,8 @@ pub fn tool_definitions() -> Vec<ToolConfig> {
         tool("propose_patch", "Prepare a patch for review before approval and application.", json!({"patchText":{"type":"string"},"reason":{"type":"string"}}), &["patchText"], "packages/opencode/src/tool/apply_patch.ts"),
         tool("shell_command", "Run a bounded shell command for repo inspection, validation, tests, or diagnostics.", json!({"command":{"type":"string"},"cwd":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1000,"maximum":180000}}), &["command"], "packages/opencode/src/tool/bash.ts"),
         tool("terminal_run", "Run an interactive-terminal style bounded command when the workflow needs terminal semantics.", json!({"command":{"type":"string"},"cwd":{"type":"string"},"timeout_ms":{"type":"integer","minimum":1000,"maximum":180000}}), &["command"], "packages/opencode/src/tool/bash.ts"),
-        tool("task", "Start a delegated subtask with bounded instructions and return a concise result.", json!({"description":{"type":"string"},"prompt":{"type":"string"}}), &["prompt"], "packages/opencode/src/session/processor.ts"),
-        tool("batch_parallel", "Run independent tool requests concurrently with the configured parallelism limit.", json!({"requests":{"type":"array","items":{"type":"object"}}}), &["requests"], "packages/opencode/src/session/processor.ts"),
+        tool("task", "Launch an OpenCode-style subagent for delegated repo exploration; use specialized agents for broad codebase search before direct grep.", json!({"description":{"type":"string"},"prompt":{"type":"string"},"agent":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"background":{"type":"boolean"}}), &["prompt"], "packages/opencode/src/tool/task.ts"),
+        tool("batch_parallel", "Run independent tool requests concurrently with the configured parallelism limit; use for independent repo identity, file listing, and search operations.", json!({"requests":{"type":"array","items":{"type":"object"}}}), &["requests"], "packages/opencode/src/session/processor.ts"),
         tool("web_fetch", "Fetch a public URL for source inspection when network is allowed.", json!({"url":{"type":"string"}}), &["url"], "packages/opencode/src/tool/webfetch.ts"),
         tool("web_search", "Search the web for source-backed current information when network is allowed.", json!({"query":{"type":"string"}}), &["query"], "packages/opencode/src/tool/webfetch.ts"),
         tool("browser_proof", "Capture browser screenshot and optional DOM proof for visible WebUI validation.", json!({"url":{"type":"string"},"width":{"type":"integer"},"height":{"type":"integer"},"capture_dom":{"type":"boolean"}}), &["url"], "packages/opencode/src/session/processor.ts"),
