@@ -5,15 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after `4b00c0a38c005ea1ccc647cbe1ff99c03541412e`
+- Current repair HEAD: pending workflow proof after `4703ff0630df47545bbc73530aa78581ce15f87f`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `a1dbb80d8a64e8c5abfe8b99a171dff397c419cd`; same-head Live WebUI Feature Sprint `28317071564`, Build Proof `28317071585`, and CI `28317071560` failed.
-- Latest failure diagnosis: Live WebUI job `83892223737` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 262: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
-- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` has been rewritten as a quote-safe harness with self `bash -n`, multi-line marker loops, NIM-only/local-shortcut rejection, full benchmark checker gates, and provider-visible tool catalog independence guards that reject `packages/opencode/` and `opencode_` markers.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-shell-rewrite-and-independence-gate-20260628T0955Z.md`.
-- Latest parity slice retained: Forge still follows OpenCode behavior references for provider-executed ToolPart lifecycle/state semantics, but source paths should stay in developer docs rather than provider-visible Forge runtime outputs.
+- Latest failed inspected HEAD before this update: `4a3c783b9993aa376f342e8aeff16da34625026a`; same-head Live WebUI Feature Sprint `28318502067`, Build Proof `28318502064`, and CI `28318502071` failed.
+- Latest failure diagnosis: Live WebUI job `83896051926` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 393: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
+- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` was replaced with a shorter quote-safe harness using self `bash -n`, `printf`-based prompts/status output, shared `post_stream` helper, NIM-only/local-shortcut rejection, full benchmark checker gates, browser screenshot capture, and provider-visible `/api/tools` independence guards that reject `packages/opencode/` and `opencode_` markers.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-harness-quote-safe-rewrite-20260628T1058Z.md`.
+- Latest parity slice retained: Forge follows OpenCode behavior references for provider-executed ToolPart lifecycle/state semantics, but source paths remain in developer docs rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
 
@@ -47,6 +47,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
 - Added provider-visible independence guards to the live proof harness for `/api/tools`.
+- Replaced the fragile live proof harness tail with a shorter quote-safe script after the same-head run failed at EOF quote parsing on line 393.
 
 ## OpenCode source anchors retained in developer docs only
 
