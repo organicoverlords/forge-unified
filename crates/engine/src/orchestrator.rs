@@ -103,7 +103,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope")), ("opencode_tool_state_result_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall state envelopes"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope")), ("opencode_tool_state_result_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall state envelopes")), ("opencode_tool_attachments_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:toolResultOutput normalized FilePart attachments"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -186,15 +186,67 @@ fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<se
 fn annotate_opencode_tool_state(result: &mut ToolResult) {
     let status = if result.success { "completed" } else { "error" };
     let title = opencode_tool_title(&result.kind, result.success);
+    let attachments = opencode_tool_attachments(result);
+    if !attachments.is_empty() {
+        result.metadata.insert("attachments".to_string(), serde_json::json!(attachments));
+        result.metadata.insert("opencode_normalized_attachments".to_string(), serde_json::json!(true));
+    }
     result.metadata.insert("opencode_tool_state_status".to_string(), serde_json::json!(status));
     result.metadata.insert("opencode_tool_state_title".to_string(), serde_json::json!(title));
     result.metadata.insert("opencode_tool_call_id".to_string(), serde_json::json!(result.id.0.to_string()));
     result.metadata.insert("opencode_tool_state_time".to_string(), serde_json::json!({ "start": 0, "end": result.duration_ms }));
     result.metadata.insert("opencode_tool_state_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall"));
+    result.metadata.insert("opencode_tool_attachments_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:toolResultOutput normalized FilePart attachments"));
     result.metadata.insert("opencode_tool_output_shape".to_string(), serde_json::json!({ "title": title, "metadata": true, "output": true, "attachments": result.metadata.get("attachments").is_some() }));
     if !result.success {
         result.metadata.insert("opencode_tool_error".to_string(), serde_json::json!(result.error.clone().unwrap_or_else(|| "tool_error".to_string())));
     }
+}
+
+fn opencode_tool_attachments(result: &ToolResult) -> Vec<serde_json::Value> {
+    if !result.success { return Vec::new(); }
+    let mut attachments = Vec::new();
+    match result.kind {
+        ToolKind::FileRead | ToolKind::FileWrite | ToolKind::FileEdit | ToolKind::FileDelete => {
+            if let Some(path) = result.metadata.get("opencode_tool_input").and_then(|value| value.get("path")).and_then(|value| value.as_str()) {
+                attachments.push(opencode_file_part(path, "tool-input-path"));
+            }
+        }
+        ToolKind::ApplyPatch | ToolKind::ProposePatch => {
+            collect_attachment_paths_from_metadata(result, "changed_files", &mut attachments);
+            collect_attachment_paths_from_metadata(result, "forge_filesystem_edits", &mut attachments);
+        }
+        _ => {}
+    }
+    attachments
+}
+
+fn collect_attachment_paths_from_metadata(result: &ToolResult, key: &str, attachments: &mut Vec<serde_json::Value>) {
+    let Some(values) = result.metadata.get(key).and_then(|value| value.as_array()) else { return; };
+    for value in values {
+        if let Some(path) = value.as_str() {
+            attachments.push(opencode_file_part(path, key));
+            continue;
+        }
+        if let Some(path) = value.get("path").and_then(|value| value.as_str()) {
+            attachments.push(opencode_file_part(path, key));
+            continue;
+        }
+        if let Some(path) = value.get("file").and_then(|value| value.as_str()) {
+            attachments.push(opencode_file_part(path, key));
+        }
+    }
+}
+
+fn opencode_file_part(path: &str, source: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "file",
+        "mime": "text/plain",
+        "filename": path.rsplit('/').next().unwrap_or(path),
+        "url": format!("file://{}", path),
+        "source": source,
+        "opencode_source": "packages/opencode/src/session/processor.ts:toolResultOutput attachments filter(isFilePart)",
+    })
 }
 
 fn opencode_tool_title(kind: &ToolKind, success: bool) -> String {
