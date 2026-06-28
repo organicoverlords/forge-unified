@@ -5,14 +5,14 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after `cb6e4ea7d34006e6353a853877856e4f72ff669a`
+- Current repair HEAD: pending workflow proof after `5b518136581646a8a8e54fb4a863f30a67006e11`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `ac43703fae3b70b6c7dd47a26034188426910a54`; same-head CI `28314329080`, Build Proof `28314329081`, and Live WebUI Feature Sprint `28314329079` failed.
-- Latest failure diagnosis: Live WebUI job `83884630279` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 270: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
-- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now keeps final Python/printf newline escapes as literal `\n` sequences and begins with `bash -n "$0"` before compiling, preserving NVIDIA NIM-only/local-shortcut rejection gates and browser screenshot checks.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-tail-escape-repair-20260628T0750Z.md`.
+- Latest failed inspected HEAD before this update: `a7d081a666da2359b86a040c4856569dc6822687`; same-head Live WebUI Feature Sprint `28315640506`, Build Proof `28315640508`, and CI `28315640515` failed.
+- Latest failure diagnosis: Live WebUI job `83888237891` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 272: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
+- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now replaces the fragile final Python/printf status tail with a quote-safe `write_status()` shell function and plain `echo` success lines. Conversation creation now uses Python-generated JSON with `curl --data-binary` instead of hand-built shell JSON.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-shell-tail-rewrite-20260628T0850Z.md`.
 - Latest parity slice retained: `crates/engine/src/orchestrator.rs` annotates provider-selected successful file/patch tool results with OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata.
 
 ## Accepted live full benchmark proof
@@ -47,7 +47,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Repaired the live proof harness shell marker/predicate parsing after failed parser runs and hardened conversation/model extraction.
 - Repaired the live proof harness again after a line-127 parser failure by replacing fragile inline JQ predicates with Python assertions and safer marker checks.
-- Repaired the live proof harness final proof-status writer after line-239, line-249, and line-270 unmatched-quote failures by preserving literal `\n` escapes and adding an early `bash -n` self-check.
+- Repaired the live proof harness final proof-status writer after line-239, line-249, line-270, and line-272 unmatched-quote failures by replacing embedded newline string literals with a quote-safe `write_status()` function and plain `echo` lines.
 
 ## OpenCode source anchors retained
 
