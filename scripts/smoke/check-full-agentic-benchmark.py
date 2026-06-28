@@ -56,7 +56,28 @@ def all_tool_results(conv: dict[str, Any]) -> list[dict[str, Any]]:
     for msg in conv.get("messages", []):
         for result in msg.get("tool_results") or []:
             results.append(result)
+            results.extend(expand_batch_results(result))
     return results
+
+
+def expand_batch_results(result: dict[str, Any]) -> list[dict[str, Any]]:
+    if result.get("kind") != "BatchParallel":
+        return []
+    output = result.get("output")
+    if not isinstance(output, str) or not output.strip():
+        return []
+    try:
+        nested = json.loads(output)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(nested, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in nested:
+        if isinstance(item, dict):
+            out.append(item)
+            out.extend(expand_batch_results(item))
+    return out
 
 
 def final_assistant_text(conv: dict[str, Any]) -> str:
@@ -80,7 +101,14 @@ def result_output(result: dict[str, Any]) -> str:
     return str(result.get("output") or "")
 
 
-def ok_result(results: list[dict[str, Any]], *, kind: str | None = None, path: str | None = None, command_re: str | None = None, output_re: str | None = None) -> list[dict[str, Any]]:
+def ok_result(
+    results: list[dict[str, Any]],
+    *,
+    kind: str | None = None,
+    path: str | None = None,
+    command_re: str | None = None,
+    output_re: str | None = None,
+) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for result in results:
         if result.get("success") is not True:
@@ -122,6 +150,18 @@ def final_has_required_summary_labels(final: str) -> bool:
     return all(re.search(pattern, final, re.I) for pattern in required_patterns)
 
 
+def has_actual_event(events: list[dict[str, Any]], name: str) -> bool:
+    return any(event.get("event") == name for event in events)
+
+
+def has_provider_local_event(events: list[dict[str, Any]]) -> bool:
+    for event in events:
+        data = event.get("data")
+        if isinstance(data, dict) and data.get("provider") == "local":
+            return True
+    return False
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print("usage: check-full-agentic-benchmark.py conversation.json stream.sse output.json", file=sys.stderr)
@@ -143,7 +183,7 @@ def main() -> int:
 
     add(checks, "provider_is_real_nvidia_nim", conv.get("provider") == "nvidia_nim", {"provider": conv.get("provider"), "model": conv.get("model")})
     add(checks, "model_is_recorded", isinstance(conv.get("model"), str) and len(conv.get("model")) > 0, conv.get("model"))
-    add(checks, "no_local_or_scripted_shortcut", "\"provider\":\"local\"" not in stream_text and "event: benchmark-phase" not in stream_text and not re.search(r'"local_shortcut"\s*:\s*true', stream_text), None)
+    add(checks, "no_local_or_scripted_shortcut", not has_provider_local_event(events) and not has_actual_event(events, "benchmark-phase") and not re.search(r'"local_shortcut"\s*:\s*true', stream_text), None)
     add(checks, "run_finished_without_tool_cap_forced_final", last_run.get("metadata", {}).get("forced_final_after_tool_cap") is not True, last_run.get("metadata"))
     add(checks, "tool_calls_and_results_present", stream_text.count("event: tool-call") >= 8 and stream_text.count("event: tool-result") >= 8, {"tool_call_events": stream_text.count("event: tool-call"), "tool_result_events": stream_text.count("event: tool-result")})
 
@@ -167,16 +207,7 @@ def main() -> int:
     deletes = [r for r in results if r.get("kind") == "FileDelete" and r.get("success") is True]
     deleted_paths = [result_path(r) for r in deletes]
     add(checks, "phase3_deleted_only_investigation_md", deleted_paths == [f"{AGENT_TEST}/investigation.md"], deleted_paths)
-    verify_after_delete = any(
-        r.get("success") is True
-        and (
-            (r.get("kind") in {"FileList", "ShellCommand"})
-            and f"{AGENT_TEST}/repo_summary.md" in result_output(r)
-            and f"{AGENT_TEST}/action_plan.json" in result_output(r)
-            and f"{AGENT_TEST}/investigation.md" not in result_output(r)
-        )
-        for r in results
-    )
+    verify_after_delete = any(r.get("success") is True and ((r.get("kind") in {"FileList", "ShellCommand"}) and f"{AGENT_TEST}/repo_summary.md" in result_output(r) and f"{AGENT_TEST}/action_plan.json" in result_output(r) and f"{AGENT_TEST}/investigation.md" not in result_output(r)) for r in results)
     add(checks, "phase3_verified_remaining_files_after_delete", verify_after_delete, None)
 
     real_edits = [r for r in results if r.get("success") is True and r.get("kind") in {"FileEdit", "FileWrite", "ApplyPatch"} and not result_path(r).startswith(f"{AGENT_TEST}/")]
