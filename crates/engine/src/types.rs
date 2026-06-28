@@ -33,6 +33,7 @@ pub enum ToolKind {
     ShellCommand,
     TerminalRun,
     Task,
+    TodoWrite,
     BatchParallel,
     RepoInfo,
     ProposePatch,
