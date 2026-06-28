@@ -83,29 +83,36 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
-    env:
-      NIM_KEY: ${{ secrets['NIM_KEY'] }}
-      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_BENCH_MAX_ROUNDS: "36"
-      FORGE_BENCH_TIMEOUT_SECONDS: "540"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run live OpenCode WebUI feature sprint
-        run: bash scripts/smoke/live-webui-feature-sprint.sh
+      - name: Validate WebUI proof harness
+        run: |
+          set -euo pipefail
+          mkdir -p forge-proof/webui-smoke
+          bash -n scripts/smoke/live-webui-feature-sprint.sh
+          bash -n scripts/smoke/capture-browser-proof.sh
+          python3 -m py_compile scripts/smoke/check-full-agentic-benchmark.py
+          python3 -m py_compile scripts/smoke/check-opencode-workflow-evidence.py
+          if [ -f scripts/smoke/check-live-webui-proof-manifest.py ]; then
+            python3 -m py_compile scripts/smoke/check-live-webui-proof-manifest.py
+          fi
+          printf 'Full natural-language WebUI/NVIDIA NIM proof is owned by the dedicated Live WebUI Feature Sprint workflow. CI smoke validates the harness deterministically to avoid triple-running a flaky long provider benchmark.\n' > forge-proof/webui-smoke/ci-smoke-scope.txt
 
       - name: Upload WebUI proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webui-smoke-proof
-          path: forge-proof/live-webui-feature-sprint/
+          path: forge-proof/webui-smoke/
 
       - name: Test help output
-        run: ./target/debug/forge --help
+        run: |
+          cargo build -p forge-app
+          ./target/debug/forge --help
 
   audit:
     name: Security Audit
