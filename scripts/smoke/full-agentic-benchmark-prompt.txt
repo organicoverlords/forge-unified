@@ -1,35 +1,47 @@
 You are running inside the Forge WebUI with repo-local coding tools.
 
-Complete all steps before reporting. Only modify files inside this repository. Only remove the one temporary file explicitly named below.
+Complete all six phases before reporting. Only modify files inside this repository. Only remove the one temporary file explicitly named below.
 
 Execution discipline for this benchmark:
 
-* This is a live WebUI proof run. Do not spend all rounds on inspection.
+* This is a live WebUI proof run. Finish the whole benchmark quickly; do not spend all rounds on inspection.
+* Target 24 or fewer model turns. Stop each phase immediately after the required tool evidence exists.
 * Keep Phase 1 and Phase 2 concise after enough evidence exists.
-* You must reach Phase 4 and make one real non-temporary repository edit before final reporting.
+* Do exactly one real non-temporary repository edit in Phase 4.
 * Do not write the Founder report or Technical report until every required proof checkpoint below has tool evidence.
 * Never print tool-call JSON, patch JSON, command JSON, or pseudo-tool calls in prose. That does not count. Use actual tool invocations only.
-* If you are about to show a JSON object containing `patchText`, `path`, or `command`, stop and call the corresponding actual tool instead.
+* If a tool call fails, repair that tool call or use the right dedicated tool. Do not switch models because of a failed repo/file/shell tool.
 
-OpenCode workflow requirements for this benchmark:
+OpenCode-style workflow requirements for this benchmark:
 
 * Start by using the todo_write tool to create a visible checklist for all six phases.
 * Update todos as work progresses. Mark a todo completed immediately after its evidence exists.
-* Use the task tool at least once as an OpenCode-style subagent for broad repo exploration before doing direct search/grep.
-* Use batch_parallel at least once for independent repo-inspection work, such as repo identity, file listing, config reads, and search.
-* If a tool call fails, repair the tool call, use the right dedicated tool, or record the failed tool result as evidence.
+* Use the task tool at least once as a focused subagent for broad repo exploration before doing direct search/grep.
+* Use batch_parallel at least once for independent repo-inspection work.
+* For batch_parallel, use actual nested tool requests. A request item may use tool+args fields or one-key shorthand where the key is the tool name and the value is that tool's args.
 * Prefer dedicated file tools over shell for repo-local file reads/writes.
 
 Proof-critical checklist before final answer:
 
 * Read `Cargo.toml` with a real file_read tool call.
 * Use a repo map tool result: repo_info or file_list.
-* Run at least one validation command with a real shell_command tool call: `cargo check`, `cargo test`, `cargo build`, `cargo fmt --check`, `cargo clippy`, or `bash -n` on a changed script.
+* Run one fast validation command with a real shell_command tool call. Prefer `bash -n scripts/smoke/live-webui-feature-sprint.sh` unless your edit needs a different validator.
+* Inspect diff or status after the edit with git diff or git status.
 * Final answer must contain the exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`.
 * Final answer must contain the exact phrases `blast radius`, `implementation difficulty`, and `rollback difficulty`.
-* Founder report must be under 180 words. Aim for 120 words.
+* Founder report must be under 180 words. Aim for 100-130 words.
 * Technical report must include these headings or clear labels: evidence, assumptions, failed hypotheses, confidence, rollback strategy.
 * Final answer must include these exact labels: files created, files removed, files modified, tests run, unresolved risks, confidence (0-100).
+
+Suggested fast path:
+
+1. Use todo_write.
+2. Use batch_parallel for repo_info, Cargo.toml file_read, root file_list, git/repo shell identity, repo size shell, TODO/search evidence, and one config/script read.
+3. Use task once for a concise broad repo exploration summary.
+4. Do enough direct tools to reach 8 meaningful pre-file Phase 2 results, then stop investigating.
+5. Create/read/delete the required `.agent_test/` files.
+6. Make the smallest safe Phase 4 edit. If no better low-risk code edit is obvious, update `PROJECT_STATE.md` with one benchmark finding and next risk.
+7. Run the fast validation command, inspect git status/diff, cleanly report.
 
 # Phase 1 — Environment + repo inspection
 
@@ -85,7 +97,7 @@ Required investigation loop:
 7. revise if wrong
 8. produce evidence
 
-You must do at least 8 meaningful tool calls during this phase.
+You must do at least 8 meaningful tool calls during this phase before creating `.agent_test/` files. Do not do more than 12 pre-file investigation calls unless a tool failed and needs repair.
 
 Do not pretend certainty.
 
@@ -181,7 +193,7 @@ Produce:
 
 ## Founder report
 
-Maximum 180 words. Plain English only. Keep this section under 120 words if possible.
+Maximum 180 words. Plain English only. Keep this section under 130 words.
 
 Explain:
 
@@ -238,6 +250,6 @@ Important constraints:
 * Do not claim fixes without proof.
 * Do not stop after the first failure.
 * Think before editing.
-* Prefer many small tool actions over one giant guess.
+* Prefer enough small tool actions, but stop once proof requirements are met.
 * Keep logs concise.
 * Be autonomous.
