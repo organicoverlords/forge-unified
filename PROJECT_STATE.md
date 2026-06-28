@@ -1,6 +1,6 @@
 # Forge Unified — Current State
 
-Updated: 2026-06-27
+Updated: 2026-06-28
 
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
@@ -8,7 +8,8 @@ Updated: 2026-06-27
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest work after that proof: OpenCode-style durable part base fields and OpenCode-style repeated-tool doom-loop interruption.
+- Latest failed inspected HEAD before this update: `1ed62be3c68e7eb402505afba552e18f6352ca39`; same-head CI `28306664889`, Build Proof `28306664881`, and Live WebUI Feature Sprint `28306664885` failed.
+- Latest repair: the live WebUI proof harness now starts the already-built `target/debug/forge` binary directly, records `server-command.txt`, waits up to 180 seconds for `/api/health`, and prints server logs on startup failure.
 
 ## Accepted live full benchmark proof
 
@@ -36,10 +37,11 @@ Proof requirements satisfied by the older accepted artifact:
 - Added OpenCode-style provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
 - Added deterministic OpenCode-style `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
 - Added an OpenCode-style repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
+- Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 
 ## OpenCode source anchors retained
 
-- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, same-call ToolPart update semantics, and `DOOM_LOOP_THRESHOLD` repeated tool-call detection.
+- `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, same-call ToolPart update semantics, `DOOM_LOOP_THRESHOLD`, recent ToolPart repeated-call comparison, `permission.ask({ permission: "doom_loop", ... })`, and interrupted tool cleanup metadata.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — `partBase`, ToolPart / ToolState / FilePart schema shape.
 - `anomalyco/opencode:packages/schema/src/session-id.ts` — `SessionID` prefix semantics.
 - `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — EventV2Bridge receipt behavior.
@@ -60,6 +62,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
+- The startup repair is proof-harness work, not an OpenCode parity feature claim.
 - The doom-loop guard is detection/interruption only; it does not yet ask the OpenCode-style permission question to continue.
 - Full provider-side OpenCode processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
@@ -70,8 +73,8 @@ Proof requirements satisfied by the older accepted artifact:
 ## Next targets
 
 1. Prove the latest HEAD with same-head CI, Build Proof, and Live WebUI Feature Sprint.
-2. Prove provider-selected tool results visibly carry provider metadata and schema-compatible part IDs in WebUI screenshots/DOM.
-3. Add the full OpenCode doom-loop permission question/recovery path.
+2. If startup is green, continue the full OpenCode doom-loop permission question/recovery path.
+3. Prove provider-selected tool results visibly carry provider metadata and schema-compatible part IDs in WebUI screenshots/DOM.
 4. Continue live LSP diagnostics.
 5. Continue full formatter registry/config/runtime parity.
 6. Continue deeper watcher parity.
