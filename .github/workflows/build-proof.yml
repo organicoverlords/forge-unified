@@ -11,8 +11,8 @@ jobs:
     env:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_BENCH_MAX_ROUNDS: "60"
-      FORGE_BENCH_TIMEOUT_SECONDS: "600"
+      FORGE_BENCH_MAX_ROUNDS: "36"
+      FORGE_BENCH_TIMEOUT_SECONDS: "540"
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -49,14 +49,18 @@ jobs:
           conversation="$proof_dir/full-benchmark-conversation.json"
           stream="$proof_dir/full-benchmark-stream.sse"
           checker="$proof_dir/full-benchmark-checker.json"
+          workflow_checker="$proof_dir/opencode-workflow-checker.json"
           if [ ! -s "$conversation" ] || [ ! -s "$stream" ]; then
             mkdir -p "$proof_dir"
             printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$checker"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$workflow_checker"
             echo "::error::missing full benchmark conversation or stream artifact"
             exit 1
           fi
           python3 scripts/smoke/check-full-agentic-benchmark.py "$conversation" "$stream" "$checker"
           jq -e '.passed == true' "$checker" >/dev/null
+          python3 scripts/smoke/check-opencode-workflow-evidence.py "$conversation" "$stream" "$workflow_checker"
+          jq -e '.passed == true' "$workflow_checker" >/dev/null
       - name: Upload proof
         if: always()
         uses: actions/upload-artifact@v4
