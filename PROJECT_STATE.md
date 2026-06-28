@@ -5,14 +5,14 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after nested batch evidence and prompt-loop repair.
+- Current repair HEAD: pending workflow proof after final-report proof-contract repair.
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `1c90e4ffce6b88c9d02b9b6ba59fc059b8eec857`; Live WebUI Feature Sprint `28327349867` failed and uploaded artifact `7936162431`.
-- Latest failure diagnosis: the run used real `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`, produced 62 tool-call events and 61 tool-result events, and executed real tools. It failed because the model spent the run on repeated doom-loop/internal searches and stopped before Phase 3 file operations. The full checker also under-counted real `batch_parallel` nested tool results, so `Cargo.toml` file_read and repo_map evidence from batch execution were not counted. The no-local shortcut check also falsely matched literal proof-script text containing `event: benchmark-phase` after the model read that script.
-- Latest repair: both benchmark checkers now expand nested `BatchParallel` outputs as real tool evidence; the no-local/scripted shortcut check now parses actual SSE event names/provider fields instead of matching raw prompt/script text; and the benchmark prompt now explicitly avoids doom-loop/OpenCode/provider metadata searches, requires one non-todo `task` subagent, forbids reading the proof shell script as file content, and forces Phase 3 after bounded Phase 2 evidence.
-- Latest proof docs: `docs/generated/proof/live-benchmark-timeout-repair-20260628T1520Z.md` plus this state update.
+- Latest failed inspected HEAD before this update: `e296cbbc99c40895df82df63524b9b406b7b3b30`; Live WebUI Feature Sprint `28328598367`, job `83922751023`, failed after a real WebUI/NVIDIA NIM run.
+- Latest failure diagnosis: the run used provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`; the workflow checker passed, but the full benchmark checker failed because Phase 3 did not have dedicated `FileWrite` evidence for `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`, and the final answer claimed build/check success without a matching successful cargo build/check tool result.
+- Latest repair: `crates/engine/src/orchestrator.rs` now tightens benchmark/finalization instructions so Phase 3 requires dedicated `file_write`, `file_read`, and `file_delete` evidence, and final reports may not claim build/check/test/file success unless exact successful tool evidence exists.
+- Latest proof docs: `docs/generated/proof/live-benchmark-final-report-proof-contract-20260628T1655Z.md` plus this state update.
 - Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
@@ -57,6 +57,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Aligned Build Proof with the same benchmark budget and both benchmark checkers, so it no longer runs a stale longer proof contract.
 - Full benchmark and workflow checkers now count nested batch_parallel outputs as real evidence.
 - Full benchmark prompt now explicitly prevents the doom-loop/internal-search path that blocked Phase 3.
+- Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -81,7 +82,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after nested batch evidence and prompt-loop repair.
+- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after final-report proof-contract repair.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
