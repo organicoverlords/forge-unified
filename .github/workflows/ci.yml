@@ -86,8 +86,8 @@ jobs:
     env:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_BENCH_MAX_ROUNDS: "60"
-      FORGE_BENCH_TIMEOUT_SECONDS: "600"
+      FORGE_BENCH_MAX_ROUNDS: "36"
+      FORGE_BENCH_TIMEOUT_SECONDS: "540"
     steps:
       - uses: actions/checkout@v4
 
