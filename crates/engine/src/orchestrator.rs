@@ -44,6 +44,7 @@ impl Orchestrator {
         let mut total_tool_failures = 0u32;
         let mut stopped_on_tool_cap = false;
         let mut doom_loop_interrupted = false;
+        let mut doom_loop_permission_recorded = false;
         let mut tool_signature_history: Vec<Vec<String>> = Vec::new();
         {
             let mut mgr = self.conversation_mgr.write().await;
@@ -69,8 +70,12 @@ impl Orchestrator {
             let current_tool_signatures = tool_request_signatures(&allowed_requests);
             if repeated_tool_signature_window(&tool_signature_history, &current_tool_signatures) {
                 doom_loop_interrupted = true;
+                doom_loop_permission_recorded = true;
+                total_tool_failures += 1;
                 stopped_on_tool_cap = false;
-                self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[OpenCode doom-loop guard interrupted repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds: {}]", current_tool_signatures.join(", ")));
+                let permission_result = doom_loop_permission_result(&allowed_requests, &current_tool_signatures);
+                self.conversation_mgr.write().await.add_tool_results(&conversation_id, vec![permission_result]);
+                self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[OpenCode doom-loop permission gate interrupted repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds: {}]", current_tool_signatures.join(", ")));
                 break;
             }
             remember_tool_signatures(&mut tool_signature_history, current_tool_signatures);
@@ -98,7 +103,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD and recent tool part comparison"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -184,6 +189,37 @@ fn repeated_tool_signature_window(history: &[Vec<String>], current: &[String]) -
     history.iter().rev().take(DOOM_LOOP_THRESHOLD - 1).all(|previous| previous == current)
 }
 fn remember_tool_signatures(history: &mut Vec<Vec<String>>, current: Vec<String>) { history.push(current); if history.len() > DOOM_LOOP_THRESHOLD { history.remove(0); } }
+
+fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) -> ToolResult {
+    let mut patterns: Vec<String> = Vec::new();
+    for request in requests {
+        let name = format!("{:?}", request.kind);
+        if !patterns.contains(&name) { patterns.push(name); }
+    }
+    let first = requests.first();
+    let id = first.map(|request| request.id.clone()).unwrap_or_else(|| ToolCallId(uuid::Uuid::new_v4()));
+    let kind = first.map(|request| request.kind.clone()).unwrap_or(ToolKind::Task);
+    let input = first.map(|request| request.args.clone()).unwrap_or_else(|| serde_json::json!({}));
+    ToolResult {
+        id,
+        kind,
+        success: false,
+        output: format!("OpenCode doom-loop permission gate blocked repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds. Patterns: {}", patterns.join(", ")),
+        error: Some("doom_loop_permission_required".to_string()),
+        duration_ms: 0,
+        metadata: HashMap::from([
+            ("permission".to_string(), serde_json::json!("doom_loop")),
+            ("patterns".to_string(), serde_json::json!(patterns)),
+            ("always".to_string(), serde_json::json!(patterns)),
+            ("ruleset".to_string(), serde_json::json!("forge_safety_checker")),
+            ("input".to_string(), input),
+            ("recent_tool_signatures".to_string(), serde_json::json!(signatures)),
+            ("opencode_doom_loop_permission".to_string(), serde_json::json!(true)),
+            ("opencode_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:permission.ask({ permission: \\\"doom_loop\\\" })")),
+        ]),
+    }
+}
+
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
     ToolResult { id: req.id, kind: req.kind, success: false, output: format!("Tool execution failed: {error}"), error: Some(error), duration_ms: 0, metadata: HashMap::from([("tool_execution_error".to_string(), serde_json::json!(true))]) }
 }
