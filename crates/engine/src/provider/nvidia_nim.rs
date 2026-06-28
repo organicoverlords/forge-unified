@@ -38,13 +38,8 @@ impl NvidiaNimProvider {
 
 #[async_trait]
 impl Provider for NvidiaNimProvider {
-    fn id(&self) -> &ProviderId {
-        &self.config.id
-    }
-
-    fn config(&self) -> &ProviderConfig {
-        &self.config
-    }
+    fn id(&self) -> &ProviderId { &self.config.id }
+    fn config(&self) -> &ProviderConfig { &self.config }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
         let api_key = self.api_key()?;
@@ -97,28 +92,17 @@ impl Provider for NvidiaNimProvider {
             let deltas: Vec<ToolCallDelta> = tc.into_iter().filter_map(|v| {
                 let function = v.get("function").unwrap_or(&v);
                 let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
-                let name = function.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let raw_name = function.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let name = normalize_nim_tool_name(raw_name).to_string();
                 let arguments = tool_arguments_as_json_string(function.get("arguments"));
-                if name.is_empty() { None } else {
-                    Some(ToolCallDelta { id, name, arguments })
-                }
+                if name.is_empty() { None } else { Some(ToolCallDelta { id, name, arguments }) }
             }).collect();
             crate::provider::tool_calls_from_deltas(deltas)
         });
 
         Ok(ChatResponse {
-            message: Message {
-                role: MessageRole::Assistant,
-                content: choice.message.content.unwrap_or_default(),
-                tool_calls: tool_requests,
-                tool_results: None,
-                metadata: Default::default(),
-            },
-            usage: nims_response.usage.map(|u| TokenUsage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
-                total_tokens: u.total_tokens,
-            }),
+            message: Message { role: MessageRole::Assistant, content: choice.message.content.unwrap_or_default(), tool_calls: tool_requests, tool_results: None, metadata: Default::default() },
+            usage: nims_response.usage.map(|u| TokenUsage { prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens, total_tokens: u.total_tokens }),
             provider: self.config.id.clone(),
             model: request.model,
         })
@@ -164,7 +148,6 @@ impl Provider for NvidiaNimProvider {
             use futures_util::StreamExt;
             let mut stream = response;
             let mut buffer = String::new();
-
             while let Some(chunk) = stream.next().await {
                 match chunk {
                     Ok(bytes) => {
@@ -174,33 +157,23 @@ impl Provider for NvidiaNimProvider {
                                 if data == "[DONE]" { continue; }
                                 if let Ok(sse) = serde_json::from_str::<SseChunk>(data) {
                                     for choice in sse.choices {
-                                        if let Some(content) = choice.delta.content {
-                                            let _ = tx.send(StreamEvent::Token(content)).await;
-                                        }
+                                        if let Some(content) = choice.delta.content { let _ = tx.send(StreamEvent::Token(content)).await; }
                                     }
                                 }
                             }
                         }
                         buffer.clear();
                     }
-                    Err(e) => {
-                        let _ = tx.send(StreamEvent::Error(e.to_string())).await;
-                    }
+                    Err(e) => { let _ = tx.send(StreamEvent::Error(e.to_string())).await; }
                 }
             }
         });
 
-        Ok(ChatStream {
-            provider: self.config.id.clone(),
-            model: request.model,
-            receiver: rx,
-        })
+        Ok(ChatStream { provider: self.config.id.clone(), model: request.model, receiver: rx })
     }
 
     async fn health_check(&self) -> Result<bool> {
-        if self.api_key().is_err() {
-            return Ok(false);
-        }
+        if self.api_key().is_err() { return Ok(false); }
         Ok(true)
     }
 }
@@ -208,38 +181,20 @@ impl Provider for NvidiaNimProvider {
 impl NvidiaNimProvider {
     fn format_messages(&self, messages: &[Message]) -> Vec<serde_json::Value> {
         messages.iter().map(|m| {
-            let role = match m.role {
-                MessageRole::System => "system",
-                MessageRole::User => "user",
-                MessageRole::Assistant => "assistant",
-                MessageRole::Tool => "tool",
-            };
+            let role = match m.role { MessageRole::System => "system", MessageRole::User => "user", MessageRole::Assistant => "assistant", MessageRole::Tool => "tool" };
             let mut obj = serde_json::Map::new();
             obj.insert("role".to_string(), json!(role));
-
             if m.role == MessageRole::Tool {
                 let content = if let Some(ref results) = m.tool_results {
-                    results.iter().map(|r| {
-                        if r.success { r.output.clone() }
-                        else { format!("Error: {}", r.error.as_deref().unwrap_or("unknown")) }
-                    }).collect::<Vec<_>>().join("\n")
-                } else {
-                    m.content.clone()
-                };
+                    results.iter().map(|r| if r.success { r.output.clone() } else { format!("Error: {}", r.error.as_deref().unwrap_or("unknown")) }).collect::<Vec<_>>().join("\n")
+                } else { m.content.clone() };
                 obj.insert("content".to_string(), json!(content));
             } else {
                 obj.insert("content".to_string(), json!(m.content));
                 if let Some(ref tool_calls) = m.tool_calls {
                     let oai_calls: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
                         let args_str = tc.args.to_string();
-                        json!({
-                            "id": tc.id.0.to_string(),
-                            "type": "function",
-                            "function": {
-                                "name": crate::provider::tool_kind_name(&tc.kind),
-                                "arguments": args_str,
-                            }
-                        })
+                        json!({"id": tc.id.0.to_string(), "type": "function", "function": {"name": crate::provider::tool_kind_name(&tc.kind), "arguments": args_str}})
                     }).collect();
                     obj.insert("tool_calls".to_string(), json!(oai_calls));
                 }
@@ -247,6 +202,10 @@ impl NvidiaNimProvider {
             json!(obj)
         }).collect()
     }
+}
+
+fn normalize_nim_tool_name(name: &str) -> &str {
+    if name == "todo_write" || name == "todo" { "task" } else { name }
 }
 
 fn tool_arguments_as_json_string(arguments: Option<&serde_json::Value>) -> String {
@@ -258,47 +217,16 @@ fn tool_arguments_as_json_string(arguments: Option<&serde_json::Value>) -> Strin
 }
 
 #[derive(Debug, Deserialize)]
-struct NimResponse {
-    id: String,
-    object: String,
-    created: u64,
-    model: String,
-    choices: Vec<NimChoice>,
-    usage: Option<NimUsage>,
-}
-
+struct NimResponse { id: String, object: String, created: u64, model: String, choices: Vec<NimChoice>, usage: Option<NimUsage> }
 #[derive(Debug, Deserialize)]
-struct NimChoice {
-    index: u32,
-    message: NimMessage,
-    finish_reason: Option<String>,
-}
-
+struct NimChoice { index: u32, message: NimMessage, finish_reason: Option<String> }
 #[derive(Debug, Deserialize)]
-struct NimMessage {
-    role: String,
-    content: Option<String>,
-    tool_calls: Option<Vec<serde_json::Value>>,
-}
-
+struct NimMessage { role: String, content: Option<String>, tool_calls: Option<Vec<serde_json::Value>> }
 #[derive(Debug, Deserialize)]
-struct NimUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
-}
-
+struct NimUsage { prompt_tokens: u32, completion_tokens: u32, total_tokens: u32 }
 #[derive(Debug, Deserialize)]
-struct SseChunk {
-    choices: Vec<SseChoice>,
-}
-
+struct SseChunk { choices: Vec<SseChoice> }
 #[derive(Debug, Deserialize)]
-struct SseChoice {
-    delta: SseDelta,
-}
-
+struct SseChoice { delta: SseDelta }
 #[derive(Debug, Deserialize)]
-struct SseDelta {
-    content: Option<String>,
-}
+struct SseDelta { content: Option<String> }
