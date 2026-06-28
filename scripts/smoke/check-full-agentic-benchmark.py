@@ -178,26 +178,39 @@ def non_negated_claim_line(line: str) -> bool:
     return not any(negation in lower for negation in negations)
 
 
+def success_claim(line: str) -> bool:
+    return bool(re.search(r"\b(pass(?:ed|es)?|success(?:ful|fully)?|green|succeeds?)\b", line, re.I))
+
+
 def claims_cargo_tests_success(final: str) -> bool:
-    if re.search(r"\ball tests pass\b", final, re.I):
+    """Detect only explicit cargo-test success claims.
+
+    The final benchmark answer must contain a generic `tests run` summary label.
+    That label is not itself a cargo-test claim, even when it says the required
+    `bash -n` validation command succeeded. OpenCode-style proof is exact-command
+    based: only explicit `cargo test` or `all tests pass` prose requires cargo-test
+    tool evidence.
+    """
+
+    if re.search(r"\ball\s+(cargo\s+)?tests\s+pass(?:ed|es)?\b", final, re.I):
         return True
     for line in final.splitlines():
         if not non_negated_claim_line(line):
             continue
-        if re.search(r"\b(cargo test|tests?)\b[^\n]{0,80}\b(pass(?:ed|es)?|success(?:ful|fully)?|green)\b", line, re.I):
-            return True
-        if re.search(r"\b(pass(?:ed|es)?|success(?:ful|fully)?|green)\b[^\n]{0,80}\b(cargo test|tests?)\b", line, re.I):
+        if re.search(r"\bcargo\s+test\b", line, re.I) and success_claim(line):
             return True
     return False
 
 
 def claims_build_check_success(final: str) -> bool:
+    """Detect explicit cargo-build/check or compilation success claims only."""
+
     for line in final.splitlines():
         if not non_negated_claim_line(line):
             continue
-        if re.search(r"\b(cargo check|cargo build|build|compilation)\b[^\n]{0,80}\b(pass(?:ed|es)?|success(?:ful|fully)?|green|succeeds?)\b", line, re.I):
-            return True
-        if re.search(r"\b(pass(?:ed|es)?|success(?:ful|fully)?|green|succeeds?)\b[^\n]{0,80}\b(cargo check|cargo build|build|compilation)\b", line, re.I):
+        has_exact_build_check = re.search(r"\bcargo\s+(check|build)\b", line, re.I)
+        has_compilation_claim = re.search(r"\bcompilation\b", line, re.I)
+        if (has_exact_build_check or has_compilation_claim) and success_claim(line):
             return True
     return False
 
