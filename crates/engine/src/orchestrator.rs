@@ -103,7 +103,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -148,14 +148,40 @@ async fn final_evidence_digest(conversation_mgr: &Arc<RwLock<ConversationManager
             for result in results {
                 tool_count += 1;
                 if !result.success { failure_count += 1; }
-                let output = result.output.lines().take(3).collect::<Vec<_>>().join(" ");
-                lines.push(format!("- {:?}: success={} error={} output={}", result.kind, result.success, result.error.as_deref().unwrap_or("none"), trim_chars(&output, 260)));
+                lines.push(result_evidence_line(result));
             }
         }
     }
     let mut digest = format!("provider/model-backed tool loop completed. tool_results={tool_count}; tool_failures={failure_count}.\n");
-    digest.push_str(&lines.into_iter().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
+    digest.push_str(&lines.into_iter().rev().take(36).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
     digest
+}
+
+fn result_evidence_line(result: &ToolResult) -> String {
+    let path = result_metadata_path(result).unwrap_or("none");
+    let command = result_metadata_command(result).unwrap_or("none");
+    let output = result.output.lines().take(3).collect::<Vec<_>>().join(" ");
+    format!(
+        "- kind={:?} success={} path={} command={} error={} output={}",
+        result.kind,
+        result.success,
+        path,
+        trim_chars(command, 180),
+        result.error.as_deref().unwrap_or("none"),
+        trim_chars(&output, 260)
+    )
+}
+
+fn result_metadata_path(result: &ToolResult) -> Option<&str> {
+    result.metadata.get("path").and_then(|value| value.as_str()).or_else(|| {
+        result.metadata.get("forge_tool_input").and_then(|value| value.get("path")).and_then(|value| value.as_str())
+    })
+}
+
+fn result_metadata_command(result: &ToolResult) -> Option<&str> {
+    result.metadata.get("command").and_then(|value| value.as_str()).or_else(|| {
+        result.metadata.get("forge_tool_input").and_then(|value| value.get("command")).and_then(|value| value.as_str())
+    })
 }
 
 fn trim_chars(value: &str, limit: usize) -> String {
