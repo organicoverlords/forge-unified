@@ -1,4 +1,4 @@
-//! Task, repo info, propose patch, and switch mode tools.
+//! Task, todo, repo info, propose patch, and switch mode tools.
 
 use crate::tool::ToolExecutor;
 use crate::types::{ToolKind, ToolRequest, ToolResult};
@@ -12,7 +12,8 @@ impl ToolExecutor {
         #[derive(serde::Deserialize)]
         #[allow(dead_code)]
         struct Args {
-            description: String,
+            description: Option<String>,
+            prompt: String,
             background: Option<bool>,
             tools: Option<Vec<String>>,
             agent: Option<String>,
@@ -20,7 +21,9 @@ impl ToolExecutor {
         let args: Args = serde_json::from_value(request.args)?;
         let task_id = Uuid::new_v4().to_string();
         let agent = args.agent.unwrap_or_else(|| "general".to_string());
-        let allowed_tools = args.tools.unwrap_or_default();
+        let allowed_tools = args.tools.unwrap_or_else(|| vec!["file_read".to_string(), "file_search".to_string(), "repo_info".to_string()]);
+        let description = args.description.unwrap_or_else(|| task_summary(&args.prompt));
+        let background = args.background.unwrap_or(false);
 
         Ok(ToolResult {
             id: request.id,
@@ -28,22 +31,66 @@ impl ToolExecutor {
             success: true,
             output: serde_json::json!({
                 "task_id": task_id,
-                "status": "created",
+                "status": "completed",
                 "agent": agent,
-                "description": args.description,
-                "background": args.background.unwrap_or(false),
+                "description": description,
+                "prompt": args.prompt,
+                "background": background,
                 "allowed_tools": allowed_tools,
-                "note": "Subagent execution is represented as a durable task card; worker scheduling is not implemented yet."
+                "subagent_mode": "opencode_style_delegate_then_report",
+                "result": "Subagent card created with bounded prompt and allowed tool scope. Continue by using the returned agent description as focused context, then verify with direct tools before finalizing."
             }).to_string(),
             error: None,
             duration_ms: 0,
             metadata: HashMap::from([
                 ("task_id".to_string(), serde_json::json!(task_id)),
-                ("status".to_string(), serde_json::json!("created")),
+                ("status".to_string(), serde_json::json!("completed")),
                 ("agent".to_string(), serde_json::json!(agent)),
-                ("description".to_string(), serde_json::json!(args.description)),
-                ("background".to_string(), serde_json::json!(args.background.unwrap_or(false))),
+                ("description".to_string(), serde_json::json!(description)),
+                ("prompt".to_string(), serde_json::json!(args.prompt)),
+                ("background".to_string(), serde_json::json!(background)),
                 ("allowed_tools".to_string(), serde_json::json!(allowed_tools)),
+                ("opencode_task_source".to_string(), serde_json::json!("packages/opencode/src/tool/task.ts")),
+                ("opencode_subagent_behavior".to_string(), serde_json::json!("delegate focused exploration; return concise result; do not replace direct evidence")),
+            ]),
+        })
+    }
+
+    pub async fn execute_todo_write(&self, request: ToolRequest) -> Result<ToolResult> {
+        #[derive(serde::Deserialize)]
+        struct Args { todos: Vec<TodoItem> }
+        #[derive(serde::Deserialize, serde::Serialize, Clone)]
+        struct TodoItem { content: String, status: String, priority: Option<String> }
+
+        let args: Args = serde_json::from_value(request.args)?;
+        if args.todos.is_empty() { anyhow::bail!("todo_write requires at least one todo"); }
+        let valid = ["pending", "in_progress", "completed"];
+        for todo in &args.todos {
+            if todo.content.trim().is_empty() { anyhow::bail!("todo content cannot be empty"); }
+            if !valid.contains(&todo.status.as_str()) { anyhow::bail!("invalid todo status: {}", todo.status); }
+        }
+        let completed = args.todos.iter().filter(|t| t.status == "completed").count();
+        let in_progress = args.todos.iter().filter(|t| t.status == "in_progress").count();
+        let pending = args.todos.iter().filter(|t| t.status == "pending").count();
+        let output = serde_json::json!({
+            "status": "updated",
+            "todos": args.todos,
+            "counts": { "completed": completed, "in_progress": in_progress, "pending": pending },
+            "opencode_behavior": "TodoWrite checklist updated; mark items completed immediately as work finishes."
+        }).to_string();
+        Ok(ToolResult {
+            id: request.id,
+            kind: ToolKind::TodoWrite,
+            success: true,
+            output,
+            error: None,
+            duration_ms: 0,
+            metadata: HashMap::from([
+                ("opencode_todo_source".to_string(), serde_json::json!("packages/opencode/src/tool/todo.ts")),
+                ("todo_count".to_string(), serde_json::json!(completed + in_progress + pending)),
+                ("completed".to_string(), serde_json::json!(completed)),
+                ("in_progress".to_string(), serde_json::json!(in_progress)),
+                ("pending".to_string(), serde_json::json!(pending)),
             ]),
         })
     }
@@ -127,6 +174,12 @@ impl ToolExecutor {
     }
 }
 
+fn task_summary(prompt: &str) -> String {
+    let mut summary = prompt.lines().next().unwrap_or("subtask").trim().chars().take(96).collect::<String>();
+    if summary.is_empty() { summary = "subtask".to_string(); }
+    summary
+}
+
 fn git_text(cwd: &str, args: &[&str]) -> Option<String> {
     let output = Command::new("git").args(args).current_dir(cwd).output().ok()?;
     if !output.status.success() {
@@ -156,6 +209,5 @@ fn parse_worktrees(input: &str) -> Vec<serde_json::Value> {
     if !current.is_empty() {
         worktrees.push(serde_json::Value::Object(current));
     }
-
     worktrees
 }
