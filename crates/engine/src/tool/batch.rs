@@ -1,23 +1,39 @@
 //! Batch parallel tool execution.
 
 use crate::tool::ToolExecutor;
-use crate::types::{ToolRequest, ToolResult, ToolCallId, ToolKind};
+use crate::types::{ToolCallId, ToolKind, ToolRequest, ToolResult};
 use anyhow::Result;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(Debug)]
+struct NormalizedBatchCall {
+    tool: String,
+    args: Value,
+}
 
 impl ToolExecutor {
     pub async fn execute_batch_parallel(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
-        struct Args { calls: Option<Vec<BatchCall>>, requests: Option<Vec<BatchCall>> }
-        #[derive(serde::Deserialize)]
-        struct BatchCall { tool: String, args: serde_json::Value }
+        struct Args {
+            calls: Option<Vec<Value>>,
+            requests: Option<Vec<Value>>,
+        }
+
         let args: Args = serde_json::from_value(request.args)?;
         let calls = args.calls.or(args.requests).unwrap_or_default();
 
         let mut sub_requests = Vec::new();
         let mut skipped = Vec::new();
-        for call in calls {
+        for raw_call in calls {
+            let call = match normalize_batch_call(raw_call) {
+                Some(call) => call,
+                None => {
+                    skipped.push("invalid_batch_call".to_string());
+                    continue;
+                }
+            };
             let kind = match call.tool.as_str() {
                 "file_read" => ToolKind::FileRead,
                 "file_write" => ToolKind::FileWrite,
@@ -32,7 +48,10 @@ impl ToolExecutor {
                 "terminal" | "terminal_run" => ToolKind::TerminalRun,
                 "task" | "todo" | "todo_write" => ToolKind::Task,
                 "repo_info" => ToolKind::RepoInfo,
-                _ => { skipped.push(call.tool); continue; }
+                _ => {
+                    skipped.push(call.tool);
+                    continue;
+                }
             };
 
             sub_requests.push(ToolRequest {
@@ -61,8 +80,59 @@ impl ToolExecutor {
                 ("successful".to_string(), serde_json::json!(success_count)),
                 ("failed".to_string(), serde_json::json!(failed_count)),
                 ("skipped_tools".to_string(), serde_json::json!(skipped)),
-                ("opencode_parallel_source".to_string(), serde_json::json!("packages/opencode/src/session/prompt/anthropic.txt:parallel tool calls policy")),
+                ("forge_parallel_policy".to_string(), serde_json::json!("independent tool requests are executed concurrently up to the configured parallelism limit")),
             ]),
         })
+    }
+}
+
+fn normalize_batch_call(raw: Value) -> Option<NormalizedBatchCall> {
+    let object = raw.as_object()?.clone();
+    if let Some(tool) = object.get("tool").and_then(Value::as_str) {
+        let args = object.get("args").cloned().unwrap_or_else(|| args_without_tool_fields(&object));
+        return Some(NormalizedBatchCall { tool: tool.to_string(), args });
+    }
+
+    if object.len() == 1 {
+        let (tool, args) = object.into_iter().next()?;
+        return Some(NormalizedBatchCall { tool, args });
+    }
+
+    None
+}
+
+fn args_without_tool_fields(object: &Map<String, Value>) -> Value {
+    let mut args = Map::new();
+    for (key, value) in object {
+        if key != "tool" && key != "args" {
+            args.insert(key.clone(), value.clone());
+        }
+    }
+    Value::Object(args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_explicit_tool_args_shape() {
+        let call = normalize_batch_call(serde_json::json!({"tool":"file_read","args":{"path":"Cargo.toml"}})).unwrap();
+        assert_eq!(call.tool, "file_read");
+        assert_eq!(call.args["path"], "Cargo.toml");
+    }
+
+    #[test]
+    fn normalizes_explicit_tool_inline_args_shape() {
+        let call = normalize_batch_call(serde_json::json!({"tool":"shell_command","command":"git status -sb"})).unwrap();
+        assert_eq!(call.tool, "shell_command");
+        assert_eq!(call.args["command"], "git status -sb");
+    }
+
+    #[test]
+    fn normalizes_single_key_shorthand_shape() {
+        let call = normalize_batch_call(serde_json::json!({"repo_info":{}})).unwrap();
+        assert_eq!(call.tool, "repo_info");
+        assert_eq!(call.args, serde_json::json!({}));
     }
 }
