@@ -9,6 +9,10 @@ use uuid::Uuid;
 
 impl ToolExecutor {
     pub async fn execute_task(&self, request: ToolRequest) -> Result<ToolResult> {
+        if request.args.get("todos").is_some() {
+            return self.execute_todo_payload(request).await;
+        }
+
         #[derive(serde::Deserialize)]
         #[allow(dead_code)]
         struct Args {
@@ -56,7 +60,7 @@ impl ToolExecutor {
         })
     }
 
-    pub async fn execute_todo_write(&self, request: ToolRequest) -> Result<ToolResult> {
+    async fn execute_todo_payload(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
         struct Args { todos: Vec<TodoItem> }
         #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -74,18 +78,20 @@ impl ToolExecutor {
         let pending = args.todos.iter().filter(|t| t.status == "pending").count();
         let output = serde_json::json!({
             "status": "updated",
+            "tool_alias": "todo_write",
             "todos": args.todos,
             "counts": { "completed": completed, "in_progress": in_progress, "pending": pending },
             "opencode_behavior": "TodoWrite checklist updated; mark items completed immediately as work finishes."
         }).to_string();
         Ok(ToolResult {
             id: request.id,
-            kind: ToolKind::TodoWrite,
+            kind: ToolKind::Task,
             success: true,
             output,
             error: None,
             duration_ms: 0,
             metadata: HashMap::from([
+                ("tool_alias".to_string(), serde_json::json!("todo_write")),
                 ("opencode_todo_source".to_string(), serde_json::json!("packages/opencode/src/tool/todo.ts")),
                 ("todo_count".to_string(), serde_json::json!(completed + in_progress + pending)),
                 ("completed".to_string(), serde_json::json!(completed)),
@@ -122,15 +128,7 @@ impl ToolExecutor {
         }));
 
         let output = serde_json::to_string_pretty(&info)?;
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::RepoInfo,
-            success: true,
-            output,
-            error: None,
-            duration_ms: 0,
-            metadata: info.into_iter().collect(),
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::RepoInfo, success: true, output, error: None, duration_ms: 0, metadata: info.into_iter().collect() })
     }
 
     pub async fn execute_propose_patch(&self, request: ToolRequest) -> Result<ToolResult> {
@@ -138,39 +136,15 @@ impl ToolExecutor {
         #[allow(dead_code)]
         struct Args { summary: String, diff: String, run_id: Option<String> }
         let args: Args = serde_json::from_value(request.args)?;
-
-        if args.summary.is_empty() {
-            anyhow::bail!("Patch summary cannot be empty");
-        }
-
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::ProposePatch,
-            success: true,
-            output: format!("Patch proposed: {}", args.summary),
-            error: None,
-            duration_ms: 0,
-            metadata: HashMap::from([
-                ("summary".to_string(), serde_json::json!(args.summary)),
-                ("diff_length".to_string(), serde_json::json!(args.diff.len())),
-            ]),
-        })
+        if args.summary.is_empty() { anyhow::bail!("Patch summary cannot be empty"); }
+        Ok(ToolResult { id: request.id, kind: ToolKind::ProposePatch, success: true, output: format!("Patch proposed: {}", args.summary), error: None, duration_ms: 0, metadata: HashMap::from([("summary".to_string(), serde_json::json!(args.summary)), ("diff_length".to_string(), serde_json::json!(args.diff.len()))]) })
     }
 
     pub async fn execute_switch_mode(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
         struct Args { mode: String }
         let args: Args = serde_json::from_value(request.args)?;
-
-        Ok(ToolResult {
-            id: request.id,
-            kind: ToolKind::SwitchMode,
-            success: true,
-            output: format!("Switched to mode: {}", args.mode),
-            error: None,
-            duration_ms: 0,
-            metadata: HashMap::from([("mode".to_string(), serde_json::json!(args.mode))]),
-        })
+        Ok(ToolResult { id: request.id, kind: ToolKind::SwitchMode, success: true, output: format!("Switched to mode: {}", args.mode), error: None, duration_ms: 0, metadata: HashMap::from([("mode".to_string(), serde_json::json!(args.mode))]) })
     }
 }
 
@@ -182,32 +156,21 @@ fn task_summary(prompt: &str) -> String {
 
 fn git_text(cwd: &str, args: &[&str]) -> Option<String> {
     let output = Command::new("git").args(args).current_dir(cwd).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
+    if !output.status.success() { return None; }
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 fn parse_worktrees(input: &str) -> Vec<serde_json::Value> {
     let mut worktrees = Vec::new();
     let mut current = serde_json::Map::new();
-
     for line in input.lines() {
         if line.trim().is_empty() {
-            if !current.is_empty() {
-                worktrees.push(serde_json::Value::Object(std::mem::take(&mut current)));
-            }
+            if !current.is_empty() { worktrees.push(serde_json::Value::Object(std::mem::take(&mut current))); }
             continue;
         }
-        if let Some((key, value)) = line.split_once(' ') {
-            current.insert(key.to_string(), serde_json::json!(value));
-        } else {
-            current.insert(line.to_string(), serde_json::json!(true));
-        }
+        if let Some((key, value)) = line.split_once(' ') { current.insert(key.to_string(), serde_json::json!(value)); }
+        else { current.insert(line.to_string(), serde_json::json!(true)); }
     }
-
-    if !current.is_empty() {
-        worktrees.push(serde_json::Value::Object(current));
-    }
+    if !current.is_empty() { worktrees.push(serde_json::Value::Object(current)); }
     worktrees
 }
