@@ -17,8 +17,8 @@ jobs:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
       FORGE_FEATURE_PROMPT: ${{ github.event.inputs.prompt }}
-      FORGE_BENCH_MAX_ROUNDS: "36"
-      FORGE_BENCH_TIMEOUT_SECONDS: "900"
+      FORGE_BENCH_MAX_ROUNDS: "60"
+      FORGE_BENCH_TIMEOUT_SECONDS: "600"
     steps:
       - uses: actions/checkout@v4
 
