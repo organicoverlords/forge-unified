@@ -5,14 +5,14 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after final-report proof-contract repair.
+- Current repair HEAD: `b0e316d2655fb2d6a16ce4de9dbfcf9d1b378995`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `e296cbbc99c40895df82df63524b9b406b7b3b30`; Live WebUI Feature Sprint `28328598367`, job `83922751023`, failed after a real WebUI/NVIDIA NIM run.
-- Latest failure diagnosis: the run used provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`; the workflow checker passed, but the full benchmark checker failed because Phase 3 did not have dedicated `FileWrite` evidence for `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`, and the final answer claimed build/check success without a matching successful cargo build/check tool result.
-- Latest repair: `crates/engine/src/orchestrator.rs` now tightens benchmark/finalization instructions so Phase 3 requires dedicated `file_write`, `file_read`, and `file_delete` evidence, and final reports may not claim build/check/test/file success unless exact successful tool evidence exists.
-- Latest proof docs: `docs/generated/proof/live-benchmark-final-report-proof-contract-20260628T1655Z.md` plus this state update.
+- Latest inspected current-head workflow set before this update: Build Proof `28330704599`, CI `28330704602`, Live WebUI Feature Sprint `28330704615`, all in progress on `6c69fe1e11c495b058253bc5305e64c3979ed842`.
+- Latest failure diagnosis retained from prior failed head: real WebUI/NVIDIA NIM reached provider `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash`; the checker failures centered on missing exact path/command evidence in final reporting and claim verification.
+- Latest repair: `crates/engine/src/orchestrator.rs` now writes a path/command-aware final evidence digest for forced finalization. Each tool evidence line includes `kind`, `success`, `path`, `command`, `error`, and bounded output, and run metadata records `forge_final_evidence_digest`.
+- Latest proof docs: `docs/generated/proof/final-evidence-digest-path-command-20260628T1745Z.md` plus this state update.
 - Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
@@ -58,6 +58,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Full benchmark and workflow checkers now count nested batch_parallel outputs as real evidence.
 - Full benchmark prompt now explicitly prevents the doom-loop/internal-search path that blocked Phase 3.
 - Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
+- Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -82,7 +83,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after final-report proof-contract repair.
+- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after the final-evidence-digest repair.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
