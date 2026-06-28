@@ -203,14 +203,18 @@ def claims_cargo_tests_success(final: str) -> bool:
 
 
 def claims_build_check_success(final: str) -> bool:
-    """Detect explicit cargo-build/check or compilation success claims only."""
+    """Detect only exact cargo build/check success claims.
+
+    Phrases such as `build config`, `build proof`, `compilation not run`, or a
+    generic `validation passed` line are not proof claims for cargo build/check.
+    Matching stays aligned with ToolPart semantics: only explicit cargo command
+    success prose demands matching ShellCommand tool evidence.
+    """
 
     for line in final.splitlines():
         if not non_negated_claim_line(line):
             continue
-        has_exact_build_check = re.search(r"\bcargo\s+(check|build)\b", line, re.I)
-        has_compilation_claim = re.search(r"\bcompilation\b", line, re.I)
-        if (has_exact_build_check or has_compilation_claim) and success_claim(line):
+        if re.search(r"\bcargo\s+(?:check|build)\b", line, re.I) and success_claim(line):
             return True
     return False
 
