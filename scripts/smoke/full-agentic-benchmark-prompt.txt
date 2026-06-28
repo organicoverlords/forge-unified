@@ -2,6 +2,15 @@ You have full access to tools (filesystem, shell, git, web, search, read/write/d
 
 Do the following exactly and complete all steps before reporting.
 
+OpenCode workflow requirements for this benchmark:
+
+* Start by using the todo_write tool to create a visible checklist for all six phases.
+* Update todos as work progresses. Mark a todo completed immediately after its evidence exists.
+* Use the task tool at least once as an OpenCode-style subagent for broad repo exploration before doing direct search/grep.
+* Use batch_parallel at least once for independent repo-inspection work, such as repo identity, file listing, config reads, and search.
+* Do not route away or switch models when a tool call fails. Repair the tool call, use the right dedicated tool, or record the failed tool result as evidence.
+* Prefer dedicated file tools over shell for read/write/delete operations.
+
 # Phase 1 — Environment + repo inspection
 
 1. Identify:
