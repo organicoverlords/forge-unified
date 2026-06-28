@@ -5,13 +5,13 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after live benchmark timeout/round-discipline repair.
+- Current repair HEAD: pending workflow proof after Build Proof and Live WebUI benchmark gate alignment.
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
 - Latest failed inspected HEAD before this update: `1b62fa7193c41ac980af828220ee2a685af608d8`; same-head CI `28325968943`, Build Proof `28325968949`, and Live WebUI Feature Sprint `28325968948` failed.
 - Latest failure diagnosis: Live WebUI artifact `7935806412` started the full six-phase benchmark through the WebUI with real `nvidia_nim` tool execution, but the run timed out mid-Phase 3 before `run-finish`. The archive then missed `full-benchmark-conversation.json`, `full-benchmark-browser-proof.json`, `full-benchmark-webui.png`, and `opencode-workflow-checker.json`, causing `missing_full_benchmark_artifacts`. The stream also showed an avoidable batch call shape failure where the model used one-key shorthand request objects and the executor required `tool`.
-- Latest repair: batch_parallel now accepts explicit and one-key shorthand call shapes; the provider-visible batch schema documents this; the benchmark prompt now has tighter turn/Phase 2 limits and a fast validation path; the Live WebUI workflow uses a bounded 36-round / 540-second benchmark budget; and the proof harness now preserves conversation/checker artifacts on timeout.
+- Latest repair: batch_parallel accepts explicit and one-key shorthand call shapes; provider-visible batch schema documents this; the benchmark prompt has tighter turn/Phase 2 limits and a fast validation path; both Live WebUI Feature Sprint and Build Proof use the same bounded 36-round / 540-second benchmark budget; both workflows write/check `full-benchmark-checker.json` and `opencode-workflow-checker.json`; and the proof harness preserves conversation/checker artifacts on timeout.
 - Latest proof doc: `docs/generated/proof/live-benchmark-timeout-repair-20260628T1520Z.md`.
 - Latest parity slice retained: Forge follows explicit tool-backed state before final reporting. Source paths stay in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
@@ -54,6 +54,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Added tolerant batch_parallel request normalization for explicit and one-key shorthand tool call shapes.
 - Added timeout artifact salvage so failed full benchmark runs still upload `full-benchmark-conversation.json` and both checker JSON files when possible.
 - Bounded the Live WebUI benchmark budget to 36 rounds / 540 seconds and tightened the prompt to stop Phase 2 once checker-required evidence exists.
+- Aligned Build Proof with the same benchmark budget and both benchmark checkers, so it no longer runs a stale longer proof contract.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -78,7 +79,7 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after the benchmark timeout/round-discipline repair.
+- The current live proof attempt is waiting for same-head CI/Build Proof/Live WebUI results after Build Proof and Live WebUI benchmark gate alignment.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
