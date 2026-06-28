@@ -27,7 +27,37 @@ STEP_LOG="$PROOF_DIR/live-proof-steps.log"
 : > "$STEP_LOG"
 
 step() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$STEP_LOG"; }
-need_marker() { local file="$1"; local marker="$2"; grep -Fq -- "$marker" "$file"; }
+need_marker() {
+  local file="$1"
+  local marker="$2"
+  if ! grep -Fq -- "$marker" "$file"; then
+    echo "::error::missing marker '$marker' in $file" >&2
+    tail -n 200 "$file" >&2 || true
+    exit 20
+  fi
+}
+create_conversation() {
+  local title="$1"
+  local out="$2"
+  curl -fsS --connect-timeout 2 --max-time 20 \
+    -X POST "$BASE/api/conversations" \
+    -H 'content-type: application/json' \
+    -d "{\"title\":\"$title\"}" > "$out"
+  python3 - "$out" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as fh:
+    data = json.load(fh)
+print(data.get('id', ''))
+PY
+}
+model_id_from_conversation() {
+  python3 - "$1" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as fh:
+    data = json.load(fh)
+print(data.get('model', ''))
+PY
+}
 
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
@@ -66,7 +96,8 @@ jq -e '.catalog == "opencode_provider_tool_catalog" and .provider_visible == tru
 for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "packages/opencode/src/tool/todo.ts" "provider_visible" "patchText" "todo_write"; do need_marker "$TOOL_CATALOG_JSON" "$marker"; done
 
 step "create NIM conversation"
-CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"live NIM browser model proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+CONV_CREATED="$PROOF_DIR/live-model-created.json"
+CONV_ID="$(create_conversation "live NIM browser model proof" "$CONV_CREATED")"
 test -n "$CONV_ID"
 cat > "$PROMPT_FILE" <<'PROMPT'
 Reply with LIVE_NIM_BROWSER_PROOF and one short sentence.
@@ -94,10 +125,12 @@ need_marker "$MODEL_STREAM" '"model":"'
 need_marker "$MODEL_STREAM" 'LIVE_NIM_BROWSER_PROOF'
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$CONVERSATION_JSON" >/dev/null
-MODEL_ID="$(jq -r '.model' "$CONVERSATION_JSON")"
+MODEL_ID="$(model_id_from_conversation "$CONVERSATION_JSON")"
+test -n "$MODEL_ID"
 
 step "create tool lifecycle conversation"
-TOOL_CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"OpenCode visible ToolPart lifecycle proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+TOOL_CREATED="$PROOF_DIR/tool-lifecycle-created.json"
+TOOL_CONV_ID="$(create_conversation "OpenCode visible ToolPart lifecycle proof" "$TOOL_CREATED")"
 test -n "$TOOL_CONV_ID"
 cat > "$TOOL_PROMPT_FILE" <<'PROMPT'
 Please run an OpenCode file tool formatter proof so I can see live ToolPart lifecycle cards, providerExecuted metadata, file-change cards, EventV2Bridge receipts, and a final human-readable summary in the WebUI.
@@ -105,9 +138,9 @@ PROMPT
 jq -Rs '{message: ., max_rounds: 2}' "$TOOL_PROMPT_FILE" > "$TOOL_REQUEST_JSON"
 
 timeout 180s curl -fsS --connect-timeout 2 --max-time 170 -X POST "$BASE/api/conversations/$TOOL_CONV_ID/chat/stream" -H 'content-type: application/json' -H 'accept: text/event-stream' --data-binary "@$TOOL_REQUEST_JSON" > "$TOOL_STREAM"
-for marker in 'event: tool-lifecycle' 'event: tool-input-start' 'event: tool-input-delta' 'event: tool-input-end' 'event: tool-call' 'event: tool-result' 'event: file-change' 'event: event-bus' 'providerExecuted' 'providerExecuted_delta' 'doom_loop_threshold' 'opencode_provider_executed_source' 'ToolStateCompleted' 'file_write' 'file_edit' 'file_delete' 'file-tool-event-proof.rs'; do need_marker "$TOOL_STREAM" "$marker"; done
+for marker in 'event: tool-lifecycle' 'event: tool-input-start' 'event: tool-input-delta' 'event: tool-input-end' 'event: tool-call' 'event: tool-result' 'event: file-change' 'event: event-bus' 'providerExecuted' 'providerExecuted_delta' 'doom_loop_threshold' 'opencode_provider_executed_source' 'opencode_tool_state_status' 'opencode_tool_state_title' 'ToolStateCompleted' 'file_write' 'file_edit' 'file_delete' 'file-tool-event-proof.rs'; do need_marker "$TOOL_STREAM" "$marker"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$TOOL_CONV_ID" > "$TOOL_CONVERSATION_JSON"
-for marker in 'providerExecuted' 'opencode_provider_executed_source' 'mutable_tool_part_updates' 'same ToolPart row updated by callID' 'ToolStateCompleted.attachments' 'file-tool-event-proof.rs'; do need_marker "$TOOL_CONVERSATION_JSON" "$marker"; done
+for marker in 'providerExecuted' 'opencode_provider_executed_source' 'opencode_tool_state_status' 'opencode_tool_state_title' 'mutable_tool_part_updates' 'same ToolPart row updated by callID' 'ToolStateCompleted.attachments' 'file-tool-event-proof.rs'; do need_marker "$TOOL_CONVERSATION_JSON" "$marker"; done
 
 step "browser proof tool lifecycle"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$TOOL_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
@@ -116,7 +149,8 @@ cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/tool-lifecycle-browser-proof.json
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/tool-lifecycle-webui.png"
 
 step "create full benchmark conversation"
-BENCH_CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"Full six-phase agentic benchmark prompt"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+BENCH_CREATED="$PROOF_DIR/full-benchmark-created.json"
+BENCH_CONV_ID="$(create_conversation "Full six-phase agentic benchmark prompt" "$BENCH_CREATED")"
 test -n "$BENCH_CONV_ID"
 jq -Rs '{message: ., max_rounds: 75}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
 
@@ -140,23 +174,10 @@ fi
 for marker in 'file_write' 'file_read' 'file_delete' '.agent_test/repo_summary.md' '.agent_test/investigation.md' '.agent_test/action_plan.json' 'PROJECT_STATE.md'; do need_marker "$BENCH_STREAM" "$marker"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$BENCH_CONV_ID" > "$BENCH_CONVERSATION_JSON"
 jq -e '.provider == "nvidia_nim" and (.model | type == "string" and length > 0) and (.messages | length >= 2)' "$BENCH_CONVERSATION_JSON" >/dev/null
-jq -e '
-  def results: [.messages[]?.tool_results[]?];
-  def path($r): ($r.metadata.path // "");
-  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/repo_summary.md" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileWrite" and path(.) == ".agent_test/action_plan.json" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/repo_summary.md" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/action_plan.json" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "FileDelete" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "Task" and (.metadata.tool_alias // "") == "todo_write" and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "Task" and ((.metadata.tool_alias // "") != "todo_write") and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "BatchParallel" and .success == true)] | length) >= 1 and
-  ([results[] | select((.kind == "FileEdit" or .kind == "FileWrite") and ((path(.) | startswith(".agent_test/")) | not) and .success == true)] | length) >= 1 and
-  ([results[] | select(.kind == "ShellCommand" and ((.metadata.command // "") | test("git diff|git status|cargo check|cargo test|bash -n"; "i")) and .success == true)] | length) >= 1
-' "$BENCH_CONVERSATION_JSON" >/dev/null
+python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json"
+jq -e '.passed == true' "$PROOF_DIR/full-benchmark-checker.json" >/dev/null
 python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$OPENCODE_WORKFLOW_JSON"
+jq -e '.passed == true' "$OPENCODE_WORKFLOW_JSON" >/dev/null
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
@@ -168,4 +189,4 @@ cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
 echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON" > "$PROOF_DIR/live-proof-status.txt"
 step "done"
-echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, OpenCode todo/subagent/parallel proof, and semantic full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
+echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, OpenCode todo/subagent/parallel proof, semantic full benchmark prompt proof, and OpenCode tool-state envelope proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
