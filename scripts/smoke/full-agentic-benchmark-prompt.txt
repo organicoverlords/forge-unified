@@ -5,27 +5,29 @@ Complete all six phases before reporting. Only modify files inside this reposito
 Execution discipline for this benchmark:
 
 * This is a live WebUI proof run. Finish the whole benchmark quickly; do not spend all rounds on inspection.
-* Target 24 or fewer model turns. Stop each phase immediately after the required tool evidence exists.
+* Target 18 or fewer model turns. Stop each phase immediately after the required tool evidence exists.
 * Keep Phase 1 and Phase 2 concise after enough evidence exists.
 * Do exactly one real non-temporary repository edit in Phase 4.
 * Do not write the Founder report or Technical report until every required proof checkpoint below has tool evidence.
 * Never print tool-call JSON, patch JSON, command JSON, or pseudo-tool calls in prose. That does not count. Use actual tool invocations only.
 * If a tool call fails, repair that tool call or use the right dedicated tool. Do not switch models because of a failed repo/file/shell tool.
+* Do not investigate OpenCode internals, doom-loop code, DOOM_LOOP_THRESHOLD, or provider identity metadata. They are not the suspicious issue for this benchmark.
+* Do not read `scripts/smoke/live-webui-feature-sprint.sh` as file content. Validate it only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 
-OpenCode-style workflow requirements for this benchmark:
+Workflow requirements for this benchmark:
 
 * Start by using the todo_write tool to create a visible checklist for all six phases.
-* Update todos as work progresses. Mark a todo completed immediately after its evidence exists.
-* Use the task tool at least once as a focused subagent for broad repo exploration before doing direct search/grep.
+* The `task` tool is separate from todo_write. Use the real task tool exactly once as a focused subagent with an agent/description, not as another todo list.
 * Use batch_parallel at least once for independent repo-inspection work.
 * For batch_parallel, use actual nested tool requests. A request item may use tool+args fields or one-key shorthand where the key is the tool name and the value is that tool's args.
 * Prefer dedicated file tools over shell for repo-local file reads/writes.
+* Do not repeat the same file_search pattern. If a search result is inconclusive, move on.
 
 Proof-critical checklist before final answer:
 
 * Read `Cargo.toml` with a real file_read tool call.
 * Use a repo map tool result: repo_info or file_list.
-* Run one fast validation command with a real shell_command tool call. Prefer `bash -n scripts/smoke/live-webui-feature-sprint.sh` unless your edit needs a different validator.
+* Run one fast validation command with a real shell_command tool call: `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 * Inspect diff or status after the edit with git diff or git status.
 * Final answer must contain the exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`.
 * Final answer must contain the exact phrases `blast radius`, `implementation difficulty`, and `rollback difficulty`.
@@ -33,15 +35,15 @@ Proof-critical checklist before final answer:
 * Technical report must include these headings or clear labels: evidence, assumptions, failed hypotheses, confidence, rollback strategy.
 * Final answer must include these exact labels: files created, files removed, files modified, tests run, unresolved risks, confidence (0-100).
 
-Suggested fast path:
+Required fast path:
 
 1. Use todo_write.
-2. Use batch_parallel for repo_info, Cargo.toml file_read, root file_list, git/repo shell identity, repo size shell, TODO/search evidence, and one config/script read.
-3. Use task once for a concise broad repo exploration summary.
-4. Do enough direct tools to reach 8 meaningful pre-file Phase 2 results, then stop investigating.
+2. Use batch_parallel for repo_info, Cargo.toml file_read, root file_list, git/repo shell identity, repo size shell, one TODO/FIXME file_search, one Rust file list/glob, and the validation command.
+3. Use task once with a short repo-explorer prompt. The subagent should summarize likely architecture and one safe suspicious issue in five bullets; it must not search doom-loop/OpenCode/provider metadata.
+4. Run at most four additional direct file/search/shell tools for Phase 2. Then stop investigating and move to Phase 3.
 5. Create/read/delete the required `.agent_test/` files.
 6. Make the smallest safe Phase 4 edit. If no better low-risk code edit is obvious, update `PROJECT_STATE.md` with one benchmark finding and next risk.
-7. Run the fast validation command, inspect git status/diff, cleanly report.
+7. Run `bash -n scripts/smoke/live-webui-feature-sprint.sh`, inspect git status/diff, cleanly report.
 
 # Phase 1 — Environment + repo inspection
 
@@ -86,18 +88,21 @@ Do not stop after shallow inspection, but stop Phase 1 once you have evidence.
 
 Choose ONE suspicious issue in the repo and investigate it deeply.
 
+Use this safe issue unless a clearer low-risk issue appears immediately:
+`benchmark proof instructions can cause over-inspection before file operation proof`.
+
 Required investigation loop:
 
-1. inspect code
+1. inspect code or docs
 2. inspect related config
-3. inspect logs/errors/build output
+3. inspect validation/build output
 4. search for references/usages
 5. form hypothesis
 6. test hypothesis
 7. revise if wrong
 8. produce evidence
 
-You must do at least 8 meaningful tool calls during this phase before creating `.agent_test/` files. Do not do more than 12 pre-file investigation calls unless a tool failed and needs repair.
+You must have at least 8 meaningful pre-file tool results before creating `.agent_test/` files. Count batch_parallel nested results. Do not do more than 12 pre-file investigation results unless a tool failed and needs repair.
 
 Do not pretend certainty.
 
