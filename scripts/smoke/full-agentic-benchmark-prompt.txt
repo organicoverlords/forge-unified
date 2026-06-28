@@ -1,198 +1,61 @@
 You are running inside the Forge WebUI with repo-local coding tools.
 
-Complete all six phases before reporting. Only modify files inside this repository. Only remove the one temporary file explicitly named below.
+Complete all six phases before reporting. This is a live NVIDIA NIM/WebUI proof run, so finish quickly and stop inspecting as soon as the required evidence exists.
 
-Execution discipline for this benchmark:
+Hard rule: after the batch_parallel call and one task call below, do not inspect any more source files for Phase 2. Go directly to Phase 3 file operations. Do not read these timeout-prone implementation files during this benchmark: `crates/engine/src/orchestrator.rs`, `crates/webui/src/agent_benchmark.rs`, `crates/engine/src/tool/file_ops.rs`, or `scripts/smoke/live-webui-feature-sprint.sh`. Validate the script only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 
-* This is a live WebUI proof run. Finish the whole benchmark quickly; do not spend all rounds on inspection.
-* Target 18 or fewer model turns. Stop each phase immediately after the required tool evidence exists.
-* Keep Phase 1 and Phase 2 concise after enough evidence exists.
-* Do exactly one real non-temporary repository edit in Phase 4.
-* Do not write the Founder report or Technical report until every required proof checkpoint below has tool evidence.
-* Never print tool-call JSON, patch JSON, command JSON, or pseudo-tool calls in prose. That does not count. Use actual tool invocations only.
-* If a tool call fails, repair that tool call or use the right dedicated tool. Do not switch models because of a failed repo/file/shell tool.
-* Do not investigate OpenCode internals, doom-loop code, DOOM_LOOP_THRESHOLD, or provider identity metadata. They are not the suspicious issue for this benchmark.
-* Do not read `scripts/smoke/live-webui-feature-sprint.sh` as file content. Validate it only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
+Use real tools only. Do not print tool JSON in prose. Tool failures must be repaired with the correct file/shell/repo tool; do not switch models because a repo tool fails.
 
-Workflow requirements for this benchmark:
+# Required exact fast path
 
-* Start by using the todo_write tool to create a visible checklist for all six phases.
-* The `task` tool is separate from todo_write. Use the real task tool exactly once as a focused subagent with an agent/description, not as another todo list.
-* Use batch_parallel at least once for independent repo-inspection work.
-* For batch_parallel, use actual nested tool requests. A request item may use tool+args fields or one-key shorthand where the key is the tool name and the value is that tool's args.
-* Prefer dedicated file tools over shell for repo-local file reads/writes.
-* Do not repeat the same file_search pattern. If a search result is inconclusive, move on.
-
-Proof-critical checklist before final answer:
-
-* Read `Cargo.toml` with a real file_read tool call.
-* Use a repo map tool result: repo_info or file_list.
-* After creating `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`, read each of the three files back with real file_read tool calls before deleting anything.
-* Run one fast validation command with a real shell_command tool call: `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
-* Inspect diff or status after the edit with git diff or git status.
-* Final answer must contain the exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`.
-* Final answer must contain the exact phrases `blast radius`, `implementation difficulty`, and `rollback difficulty`.
-* Founder report must be under 180 words. Aim for 100-130 words.
-* Technical report must include these headings or clear labels: evidence, assumptions, failed hypotheses, confidence, rollback strategy.
-* Final answer must include these exact labels: files created, files removed, files modified, tests run, unresolved risks, confidence (0-100).
-
-Required fast path:
-
-1. Use todo_write.
-2. Use batch_parallel for repo_info, Cargo.toml file_read, root file_list, git/repo shell identity, repo size shell, one TODO/FIXME file_search, one Rust file list/glob, and the validation command.
-3. Use task once with a short repo-explorer prompt. The subagent should summarize likely architecture and one safe suspicious issue in five bullets; it must not search doom-loop/OpenCode/provider metadata.
-4. Run at most four additional direct file/search/shell tools for Phase 2. Then stop investigating and move to Phase 3.
-5. Create the required `.agent_test/` files, then use file_read on all three files: `repo_summary.md`, `investigation.md`, and `action_plan.json`.
-6. Remove only `.agent_test/investigation.md`; verify the two remaining files with `find .agent_test -maxdepth 1 -type f -print | sort`.
-7. Make the smallest safe Phase 4 edit. If no better low-risk code edit is obvious, update `PROJECT_STATE.md` with one benchmark finding and next risk.
-8. Run `bash -n scripts/smoke/live-webui-feature-sprint.sh`, inspect git status/diff, cleanly report.
+1. Use `todo_write` first with six todos, one per phase.
+2. Use `batch_parallel` once with independent nested requests for exactly this evidence:
+   - `repo_info`
+   - `file_read` of `Cargo.toml`
+   - `file_list` of the repo root
+   - `shell_command`: `pwd; echo '---'; git rev-parse --show-toplevel; echo '---'; git branch --show-current; echo '---'; git rev-parse HEAD; echo '---'; git remote -v; echo '---'; git status --short`
+   - `shell_command`: `du -sh . --exclude=target 2>/dev/null | head -1; echo '---'; find . -maxdepth 2 -type f | sed 's#^./##' | sort | head -80`
+   - `file_search` in `crates` for `TODO|FIXME|HACK`
+   - `shell_command`: `find crates -name '*.rs' | sort | head -60`
+   - `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"`
+3. Use the real `task` tool exactly once with agent `repo-explorer` and description `summarize architecture and one safe benchmark risk from existing evidence`. Keep its prompt short. Do not ask it to inspect forbidden files.
+4. Stop Phase 1/2 inspection. The batch_parallel nested results plus task result are enough. Do not call more file_read/file_search/shell inspection tools before Phase 3.
+5. Phase 3: create exactly these files with dedicated `file_write` tools:
+   - `.agent_test/repo_summary.md`
+   - `.agent_test/investigation.md`
+   - `.agent_test/action_plan.json`
+6. Read back all three files with dedicated `file_read` tools.
+7. Delete only `.agent_test/investigation.md` with `file_delete`.
+8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
+9. Phase 4: make one tiny safe repository edit outside `.agent_test`. Prefer appending one dated benchmark note to `PROJECT_STATE.md` with `file_edit` or `apply_patch`. Do not edit source code.
+10. Validate and inspect state with `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
+11. Final answer only after all required tool evidence exists.
 
 # Phase 1 — Environment + repo inspection
 
-1. Identify:
-
-* current working directory
-* git repo root
-* current branch
-* HEAD commit
-* remote(s)
-* dirty state
-* build system
-* package manager
-* test commands
-* repo size (rough estimate)
-* top 15 largest files/directories
-
-2. Create a concise repo map:
-
-* major folders
-* probable entrypoints
-* config files
-* tests
-* scripts
-* docs
-* possible dead systems or duplicates
-
-3. Find:
-
-* TODO/FIXME/HACK comments
-* disabled code
-* stale branches of implementation
-* duplicate functionality
-* giant files (>1000 LOC)
-* suspicious config drift
-
-Do not stop after shallow inspection, but stop Phase 1 once you have evidence.
-
----
+Use the batch_parallel results to identify current working directory, repo root, branch, HEAD, remotes, dirty state, build system, package manager, test commands, repo size, repo map, scripts/docs/configs/tests, TODO/FIXME/HACK evidence, and likely risks. Keep this concise.
 
 # Phase 2 — Long tool loop test
 
-Choose ONE suspicious issue in the repo and investigate it deeply.
+Use this suspicious issue: `benchmark proof instructions can cause over-inspection before file operation proof`.
 
-Use this safe issue unless a clearer low-risk issue appears immediately:
-`benchmark proof instructions can cause over-inspection before file operation proof`.
+Your Phase 2 investigation is complete once the batch_parallel nested results and the one task result exist. Do not investigate deeply beyond that. Your hypothesis should be based on evidence already gathered: too much inspection can starve Phase 3 within the WebUI proof timeout.
 
-Required investigation loop:
-
-1. inspect code or docs
-2. inspect related config
-3. inspect validation/build output
-4. search for references/usages
-5. form hypothesis
-6. test hypothesis
-7. revise if wrong
-8. produce evidence
-
-You must have at least 8 meaningful pre-file tool results before creating `.agent_test/` files. Count batch_parallel nested results. Do not do more than 12 pre-file investigation results unless a tool failed and needs repair.
-
-Do not pretend certainty.
-
-Label the final answer with all three words exactly:
-
-* VERIFIED
-* LIKELY
-* UNKNOWN
-
----
+Final answer must contain the exact uppercase words: VERIFIED, LIKELY, UNKNOWN.
 
 # Phase 3 — File operation stress test
 
-Create a temporary folder:
+Create `.agent_test/` implicitly by writing files if needed. The three required files are:
 
-`.agent_test/`
+- `.agent_test/repo_summary.md`: short repo overview, probable architecture, biggest risks.
+- `.agent_test/investigation.md`: Phase 2 finding, confidence level, proof.
+- `.agent_test/action_plan.json`: JSON object with `top_issues`, `recommended_order`, `quick_wins`, `risky_changes`, and `confidence_score`.
 
-Inside it create:
-
-1. `repo_summary.md`
-
-* short repo overview
-* probable architecture
-* biggest risks
-
-2. `investigation.md`
-
-* findings from phase 2
-* confidence level
-* proof
-
-3. `action_plan.json`
-   containing:
-
-* top_issues
-* recommended_order
-* quick_wins
-* risky_changes
-* confidence_score
-
-Then:
-
-* read all three files back with file_read: `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`
-* verify contents
-* summarize them
-
-After verification:
-
-* remove ONLY `.agent_test/investigation.md`
-* verify removal succeeded
-* keep the other files
-* run this exact-style verification command or equivalent so the output lists the two remaining files and not investigation.md:
-
-```bash
-find .agent_test -maxdepth 1 -type f -print | sort
-```
-
----
+Read all three files back. Then remove only `.agent_test/investigation.md`. Verify only `repo_summary.md` and `action_plan.json` remain.
 
 # Phase 4 — Judgment test
 
-Choose ONE high-value but low-risk improvement.
-
-Before editing anything:
-
-* explain why this change matters
-* estimate blast radius
-* estimate implementation difficulty
-* estimate rollback difficulty
-
-Then implement the change.
-
-Rules:
-
-* no giant rewrites
-* no unrelated cleanup
-* preserve behavior
-* must be provably useful
-* must edit at least one repository file outside `.agent_test/`
-* if no safer code edit is obvious, make a small documentation/state update in `PROJECT_STATE.md` recording the verified benchmark finding and next risk; that counts as the low-risk improvement
-
-After implementation:
-
-* validate with tests/build/lint if possible
-* inspect diff with `git diff` or status with `git status`
-* summarize changed files
-
----
+Before the tiny edit, state briefly in the assistant text: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
 
 # Phase 5 — Writing quality
 
@@ -200,63 +63,21 @@ Produce:
 
 ## Founder report
 
-Maximum 180 words. Plain English only. Keep this section under 130 words.
-
-Explain:
-
-* what you investigated
-* what you changed
-* what still seems risky
-* what should happen next
+Under 130 words. Plain English. Include what you investigated, what changed, risk, and next step.
 
 ## Technical report
 
-Include:
-
-* exact evidence
-* assumptions
-* failed hypotheses
-* confidence levels
-* rollback strategy
-* the exact words VERIFIED, LIKELY, and UNKNOWN
-* blast radius, implementation difficulty, and rollback difficulty
-
----
+Include these labels or headings: evidence, assumptions, failed hypotheses, confidence, rollback strategy. Include exact phrases: blast radius, implementation difficulty, rollback difficulty. Include exact words: VERIFIED, LIKELY, UNKNOWN.
 
 # Phase 6 — Cleanup discipline
 
-Before finishing:
+Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include exact labels:
 
-Verify with tools:
+- files created
+- files removed
+- files modified
+- tests run
+- unresolved risks
+- confidence (0-100)
 
-* no accidental secrets exposed
-* no unrelated file changes
-* no giant logs created
-* temporary folder only contains expected files
-* repo state is understood
-
-Use compact shell checks such as:
-
-```bash
-git status --short
-find .agent_test -maxdepth 1 -type f -print | sort
-```
-
-Report with these exact labels:
-
-* files created
-* files removed
-* files modified
-* tests run
-* unresolved risks
-* confidence (0-100)
-
-Important constraints:
-
-* Do not hallucinate success.
-* Do not claim fixes without proof.
-* Do not stop after the first failure.
-* Think before editing.
-* Prefer enough small tool actions, but stop once proof requirements are met.
-* Keep logs concise.
-* Be autonomous.
+Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
