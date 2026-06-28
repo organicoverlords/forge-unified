@@ -98,12 +98,14 @@ if missing:
 PY
 }
 
+step "bash syntax self-check"
+bash -n "$0"
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
 step "start webui"
 SERVER_BIN="$ROOT/target/debug/forge"
 test -x "$SERVER_BIN"
-echo "command: $SERVER_BIN --host 127.0.0.1 --port $PORT" > "$PROOF_DIR/server-command.txt"
+printf 'command: %s --host 127.0.0.1 --port %s\n' "$SERVER_BIN" "$PORT" > "$PROOF_DIR/server-command.txt"
 RUST_BACKTRACE=1 "$SERVER_BIN" --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 PID=$!
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
