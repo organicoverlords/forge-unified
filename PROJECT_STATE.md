@@ -5,15 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after `5b518136581646a8a8e54fb4a863f30a67006e11`
+- Current repair HEAD: pending workflow proof after `4b00c0a38c005ea1ccc647cbe1ff99c03541412e`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `a7d081a666da2359b86a040c4856569dc6822687`; same-head Live WebUI Feature Sprint `28315640506`, Build Proof `28315640508`, and CI `28315640515` failed.
-- Latest failure diagnosis: Live WebUI job `83888237891` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 272: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
-- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now replaces the fragile final Python/printf status tail with a quote-safe `write_status()` shell function and plain `echo` success lines. Conversation creation now uses Python-generated JSON with `curl --data-binary` instead of hand-built shell JSON.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-shell-tail-rewrite-20260628T0850Z.md`.
-- Latest parity slice retained: `crates/engine/src/orchestrator.rs` annotates provider-selected successful file/patch tool results with OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata.
+- Latest failed inspected HEAD before this update: `a1dbb80d8a64e8c5abfe8b99a171dff397c419cd`; same-head Live WebUI Feature Sprint `28317071564`, Build Proof `28317071585`, and CI `28317071560` failed.
+- Latest failure diagnosis: Live WebUI job `83892223737` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 262: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
+- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` has been rewritten as a quote-safe harness with self `bash -n`, multi-line marker loops, NIM-only/local-shortcut rejection, full benchmark checker gates, and provider-visible tool catalog independence guards that reject `packages/opencode/` and `opencode_` markers.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-shell-rewrite-and-independence-gate-20260628T0955Z.md`.
+- Latest parity slice retained: Forge still follows OpenCode behavior references for provider-executed ToolPart lifecycle/state semantics, but source paths should stay in developer docs rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
 
@@ -38,18 +38,17 @@ Proof requirements satisfied by the older accepted artifact:
 - Returned failed tool executions to the model as tool results instead of dropping them.
 - Normalized `/` and empty file paths to workspace root for repo-scoped file tools.
 - Added clean no-tools finalization from a compact evidence digest when the model exhausts tool rounds.
-- Added OpenCode-style provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
-- Added deterministic OpenCode-style `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
-- Added an OpenCode-style repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
-- Added a structured OpenCode-style doom-loop permission envelope: `permission: doom_loop`, `patterns`, `always`, `ruleset`, `input`, `recent_tool_signatures`, and upstream source metadata.
-- Added OpenCode `completeToolCall` / `failToolCall` style result metadata: `opencode_tool_state_status`, `opencode_tool_state_title`, `opencode_tool_call_id`, `opencode_tool_state_time`, `opencode_tool_state_source`, `opencode_tool_output_shape`, and `opencode_tool_error`.
-- Added OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata for successful file/patch tool results: `attachments`, `opencode_normalized_attachments`, and `opencode_tool_attachments_source`.
+- Added provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
+- Added deterministic `id`, `sessionID`, and `messageID` base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
+- Added a repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
+- Added a structured doom-loop permission envelope: `permission: doom_loop`, `patterns`, `always`, `ruleset`, `input`, and `recent_tool_signatures`.
+- Added ToolPart-style result metadata for completed/failed tool states: status, title, call id, timing, output shape, and error fields.
+- Added normalized attachment metadata for successful file/patch tool results.
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
-- Repaired the live proof harness shell marker/predicate parsing after failed parser runs and hardened conversation/model extraction.
-- Repaired the live proof harness again after a line-127 parser failure by replacing fragile inline JQ predicates with Python assertions and safer marker checks.
-- Repaired the live proof harness final proof-status writer after line-239, line-249, line-270, and line-272 unmatched-quote failures by replacing embedded newline string literals with a quote-safe `write_status()` function and plain `echo` lines.
+- Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
+- Added provider-visible independence guards to the live proof harness for `/api/tools`.
 
-## OpenCode source anchors retained
+## OpenCode source anchors retained in developer docs only
 
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, `providerExecuted`, same-call ToolPart update semantics, `completeToolCall`, `failToolCall`, `toolResultOutput`, normalized `attachments`, `DOOM_LOOP_THRESHOLD`, recent ToolPart repeated-call comparison, `permission.ask({ permission: "doom_loop", ... })`, and interrupted tool cleanup metadata.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — `partBase`, ToolPart / ToolState / FilePart schema shape.
@@ -63,18 +62,19 @@ Proof requirements satisfied by the older accepted artifact:
 - Live WebUI proof must use a real NVIDIA NIM route, not local shortcuts.
 - Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
-- Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and normalized tool attachment metadata.
-- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops while preserving an explicit OpenCode source marker and permission-envelope metadata.
+- Normal file tools emit file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and normalized tool attachment metadata.
+- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops.
 - Native watcher publishes `watcher.started` and live `watcher.updated` events.
 - LSP diagnostic envelopes and report blocks are visible in the event rail, but live language-server collection remains incomplete.
-- Conversation compaction emits OpenCode `session.next.compaction.started` and `session.next.compaction.ended` receipts.
+- Conversation compaction emits compaction started/ended receipts.
 
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- The new attachment envelope is schema/metadata parity only; it does not implement OpenCode image resizing or database-backed FilePart persistence.
+- Some engine runtime metadata still needs a follow-up cleanup to remove `opencode_*` keys from provider-visible tool results while retaining behavior-compatible semantics under Forge-owned names.
+- The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
-- Full provider-side OpenCode processor semantics need more proof beyond metadata propagation.
+- Full provider-side processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
-- Full OpenCode formatter catalog/config/runtime remains partial.
+- Full formatter catalog/config/runtime remains partial.
 - Full NIM-backed streamed compaction remains incomplete.
