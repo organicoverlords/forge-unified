@@ -60,14 +60,15 @@ Before the tiny edit, state briefly in the assistant text: why it matters, blast
 
 # Phase 5 — Writing quality
 
-Your final answer must start with the following exact confidence block before any other final-answer prose:
+Your final answer must start with the following exact confidence score block before any other final-answer prose. Keep the literal label `confidence (0-100)` exactly as written:
 
-confidence
+confidence (0-100)
+85
 - VERIFIED: evidence directly proven by successful tool results.
 - LIKELY: supported conclusion that is not fully proven.
 - UNKNOWN: remaining uncertainty.
 
-After that exact confidence block, produce exactly these final sections and labels. Do not omit any label. Use the words VERIFIED, LIKELY, and UNKNOWN exactly in uppercase again inside the Technical report.
+After that exact confidence score block, produce exactly these final sections and labels. Do not omit any label. Use the words VERIFIED, LIKELY, and UNKNOWN exactly in uppercase again inside the Technical report.
 
 ## Founder report
 
@@ -98,4 +99,4 @@ tests run
 unresolved risks
 confidence (0-100)
 
-Final self-check before sending the final answer: if your final answer does not contain all three exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`, rewrite it before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
+Final self-check before sending the final answer: if your final answer does not contain all of these exact strings — `confidence (0-100)`, `VERIFIED`, `LIKELY`, and `UNKNOWN` — rewrite it before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
