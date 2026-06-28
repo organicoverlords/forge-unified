@@ -56,47 +56,70 @@ Read all three files back with actual file_read tool calls before deleting anyth
 
 # Phase 4 — Judgment test
 
-Before the tiny edit, state briefly in the assistant text: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
+Before the tiny edit, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
 
 # Phase 5 — Writing quality
 
-Your final answer must start exactly like this before any other final-answer prose:
+Your final answer must copy this literal Markdown template. Keep every heading and lowercase label exactly. Fill the bracketed text briefly, but do not remove any label.
 
 confidence (0-100)
 85
-- VERIFIED: evidence directly proven by successful tool results.
-- LIKELY: supported conclusion that is not fully proven.
-- UNKNOWN: remaining uncertainty.
-
-After that exact block, produce exactly these sections and labels. Do not omit any label.
+- VERIFIED: [tool evidence directly proves this]
+- LIKELY: [supported conclusion not fully proven]
+- UNKNOWN: [remaining uncertainty]
 
 ## Founder report
 
-Under 130 words. Plain English. Include what you investigated, what changed, risk, and next step.
+[Under 130 words: what you investigated, what changed, risk, and next step.]
 
 ## Technical report
 
 evidence
+- VERIFIED: [specific successful tool evidence]
+
 assumptions
+- LIKELY: [one supported assumption]
+
 failed hypotheses
+- UNKNOWN: [one thing not proven or a hypothesis not resolved]
+
 confidence
-- VERIFIED: what tool evidence proves.
-- LIKELY: what is supported but not fully proven.
-- UNKNOWN: what remains uncertain.
+- VERIFIED: [what tool evidence proves]
+- LIKELY: [what is supported but not fully proven]
+- UNKNOWN: [what remains uncertain]
+
 rollback strategy
+- [rollback command or action]
+
 blast radius
+- [low/medium/high plus reason]
+
 implementation difficulty
+- [low/medium/high plus reason]
+
 rollback difficulty
+- [low/medium/high plus reason]
+
+files created
+- [paths]
+
+files removed
+- [paths]
+
+files modified
+- [paths]
+
+tests run
+- [exact validation command]
+
+unresolved risks
+- [remaining risk]
+
+confidence (0-100)
+85
 
 # Phase 6 — Cleanup discipline
 
-Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include these exact lowercase labels, including the parenthesized confidence label exactly:
+Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include these exact strings: `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `evidence`, `assumptions`, `failed hypotheses`, `rollback strategy`, `blast radius`, `implementation difficulty`, `rollback difficulty`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks`.
 
-files created
-files removed
-files modified
-tests run
-unresolved risks
-confidence (0-100)
-
-Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from this set — `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks` — rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
+Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from that list, rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
