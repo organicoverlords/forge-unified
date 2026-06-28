@@ -11,6 +11,8 @@ fi
 PORT="${FORGE_FEATURE_PORT:-3320}"
 BASE="http://127.0.0.1:${PORT}"
 PROOF_DIR="${FORGE_FEATURE_PROOF_DIR:-$ROOT/forge-proof/live-webui-feature-sprint}"
+BENCH_MAX_ROUNDS="${FORGE_BENCH_MAX_ROUNDS:-24}"
+BENCH_TIMEOUT_SECONDS="${FORGE_BENCH_TIMEOUT_SECONDS:-360}"
 mkdir -p "$PROOF_DIR"
 
 SERVER_LOG="$PROOF_DIR/server.log"
@@ -138,7 +140,11 @@ post_stream() {
   local request_json="$2"
   local out="$3"
   local timeout_seconds="$4"
-  timeout "$timeout_seconds" curl -fsS --connect-timeout 2 --max-time "$((timeout_seconds - 10))" \
+  local curl_timeout=$((timeout_seconds - 10))
+  if [ "$curl_timeout" -lt 30 ]; then
+    curl_timeout=30
+  fi
+  timeout "$timeout_seconds" curl -fsS --connect-timeout 2 --max-time "$curl_timeout" \
     -X POST "$BASE/api/conversations/$conv_id/chat/stream" \
     -H "content-type: application/json" \
     -H "accept: text/event-stream" \
@@ -151,6 +157,8 @@ write_status() {
   printf 'tool_conversation=%s\n' "$TOOL_CONV_ID" >> "$out"
   printf 'benchmark_conversation=%s\n' "$BENCH_CONV_ID" >> "$out"
   printf 'model=%s\n' "$MODEL_ID" >> "$out"
+  printf 'benchmark_max_rounds=%s\n' "$BENCH_MAX_ROUNDS" >> "$out"
+  printf 'benchmark_timeout_seconds=%s\n' "$BENCH_TIMEOUT_SECONDS" >> "$out"
   printf 'benchmark_screenshot=%s\n' "$PROOF_DIR/full-benchmark-webui.png" >> "$out"
   printf 'event_rail=%s\n' "$PROOF_DIR/event-rail.png" >> "$out"
   printf 'tool_catalog=%s\n' "$TOOL_CATALOG_JSON" >> "$out"
@@ -250,8 +258,9 @@ step "create full benchmark conversation"
 BENCH_CREATED="$PROOF_DIR/full-benchmark-created.json"
 BENCH_CONV_ID="$(create_conversation "Full six-phase agentic benchmark prompt" "$BENCH_CREATED")"
 test -n "$BENCH_CONV_ID"
-jq -Rs '{message: ., max_rounds: 75}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
-post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON"  "$BENCH_STREAM" 1200
+step "full benchmark budget: max_rounds=$BENCH_MAX_ROUNDS timeout=${BENCH_TIMEOUT_SECONDS}s"
+jq -Rs --argjson max_rounds "$BENCH_MAX_ROUNDS" '{message: ., max_rounds: $max_rounds}' "$BENCH_PROMPT_FILE" > "$BENCH_REQUEST_JSON"
+post_stream "$BENCH_CONV_ID" "$BENCH_REQUEST_JSON" "$BENCH_STREAM" "$BENCH_TIMEOUT_SECONDS"
 if grep -Fq '"provider":"local"' "$BENCH_STREAM" || grep -Fq 'event: benchmark-phase' "$BENCH_STREAM" || grep -Eq '"local_shortcut"[[:space:]]*:[[:space:]]*true' "$BENCH_STREAM"; then
   fail_with_tail 12 "full benchmark used local or scripted shortcut" "$BENCH_STREAM"
 fi
