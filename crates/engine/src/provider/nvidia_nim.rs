@@ -8,8 +8,12 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::time::Duration;
+
+const DEFAULT_MAX_TOKENS: u32 = 4096;
+const MAX_REQUEST_TEXT_CHARS: usize = 24_000;
+const MAX_TOOL_RESULT_CHARS: usize = 8_000;
 
 pub struct NvidiaNimProvider {
     config: ProviderConfig,
@@ -43,12 +47,13 @@ impl Provider for NvidiaNimProvider {
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
         let api_key = self.api_key()?;
+        let max_tokens = request.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS).clamp(1, DEFAULT_MAX_TOKENS);
 
         let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
             "temperature": request.temperature.unwrap_or(0.7),
-            "max_tokens": request.max_tokens.unwrap_or(8192),
+            "max_tokens": max_tokens,
             "stream": false,
         });
 
@@ -110,12 +115,13 @@ impl Provider for NvidiaNimProvider {
 
     async fn chat_stream(&self, request: ChatRequest) -> Result<ChatStream> {
         let api_key = self.api_key()?;
+        let max_tokens = request.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS).clamp(1, DEFAULT_MAX_TOKENS);
 
         let mut body = json!({
             "model": request.model.0,
             "messages": self.format_messages(&request.messages),
             "temperature": request.temperature.unwrap_or(0.7),
-            "max_tokens": request.max_tokens.unwrap_or(8192),
+            "max_tokens": max_tokens,
             "stream": true,
         });
 
@@ -140,6 +146,12 @@ impl Provider for NvidiaNimProvider {
             .json(&body)
             .send()
             .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("NIM API error {}: {}", status, text);
+        }
 
         let (tx, rx) = tokio::sync::mpsc::channel(256);
         let response = response.bytes_stream();
@@ -180,28 +192,48 @@ impl Provider for NvidiaNimProvider {
 
 impl NvidiaNimProvider {
     fn format_messages(&self, messages: &[Message]) -> Vec<serde_json::Value> {
-        messages.iter().map(|m| {
-            let role = match m.role { MessageRole::System => "system", MessageRole::User => "user", MessageRole::Assistant => "assistant", MessageRole::Tool => "tool" };
-            let mut obj = serde_json::Map::new();
-            obj.insert("role".to_string(), json!(role));
-            if m.role == MessageRole::Tool {
-                let content = if let Some(ref results) = m.tool_results {
-                    results.iter().map(|r| if r.success { r.output.clone() } else { format!("Error: {}", r.error.as_deref().unwrap_or("unknown")) }).collect::<Vec<_>>().join("\n")
-                } else { m.content.clone() };
-                obj.insert("content".to_string(), json!(content));
-            } else {
-                obj.insert("content".to_string(), json!(m.content));
-                if let Some(ref tool_calls) = m.tool_calls {
-                    let oai_calls: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
-                        let args_str = tc.args.to_string();
-                        json!({"id": tc.id.0.to_string(), "type": "function", "function": {"name": crate::provider::tool_kind_name(&tc.kind), "arguments": args_str}})
-                    }).collect();
-                    obj.insert("tool_calls".to_string(), json!(oai_calls));
+        let mut out = Vec::new();
+        for m in messages {
+            match m.role {
+                MessageRole::Tool => {
+                    if let Some(ref results) = m.tool_results {
+                        for result in results {
+                            let content = if result.success { result.output.clone() } else { format!("Error: {}", result.error.as_deref().unwrap_or("unknown")) };
+                            out.push(json!({
+                                "role": "tool",
+                                "tool_call_id": result.id.0.to_string(),
+                                "content": trim_for_provider(&content, MAX_TOOL_RESULT_CHARS),
+                            }));
+                        }
+                    } else if !m.content.trim().is_empty() {
+                        out.push(json!({"role": "user", "content": trim_for_provider(&m.content, MAX_TOOL_RESULT_CHARS)}));
+                    }
+                }
+                _ => {
+                    let role = match m.role { MessageRole::System => "system", MessageRole::User => "user", MessageRole::Assistant => "assistant", MessageRole::Tool => unreachable!() };
+                    let mut obj = serde_json::Map::new();
+                    obj.insert("role".to_string(), json!(role));
+                    obj.insert("content".to_string(), json!(trim_for_provider(&m.content, MAX_REQUEST_TEXT_CHARS)));
+                    if let Some(ref tool_calls) = m.tool_calls {
+                        let oai_calls: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
+                            let args_str = tc.args.to_string();
+                            json!({"id": tc.id.0.to_string(), "type": "function", "function": {"name": crate::provider::tool_kind_name(&tc.kind), "arguments": args_str}})
+                        }).collect();
+                        obj.insert("tool_calls".to_string(), json!(oai_calls));
+                    }
+                    out.push(Value::Object(obj));
                 }
             }
-            json!(obj)
-        }).collect()
+        }
+        out
     }
+}
+
+fn trim_for_provider(value: &str, limit: usize) -> String {
+    if value.chars().count() <= limit { return value.to_string(); }
+    let mut out = value.chars().take(limit).collect::<String>();
+    out.push_str("\n[Forge truncated provider request content for NIM context safety]");
+    out
 }
 
 fn normalize_nim_tool_name(name: &str) -> &str {
