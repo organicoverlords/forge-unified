@@ -20,6 +20,17 @@ OpenCode workflow requirements for this benchmark:
 * If a tool call fails, repair the tool call, use the right dedicated tool, or record the failed tool result as evidence.
 * Prefer dedicated file tools over shell for repo-local file reads/writes.
 
+Proof-critical checklist before final answer:
+
+* Read `Cargo.toml` with a real file_read tool call.
+* Use a repo map tool result: repo_info or file_list.
+* Run at least one validation command with a real shell_command tool call: `cargo check`, `cargo test`, `cargo build`, `cargo fmt --check`, `cargo clippy`, or `bash -n` on a changed script.
+* Final answer must contain the exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`.
+* Final answer must contain the exact phrases `blast radius`, `implementation difficulty`, and `rollback difficulty`.
+* Founder report must be under 180 words. Aim for 120 words.
+* Technical report must include these headings or clear labels: evidence, assumptions, failed hypotheses, confidence, rollback strategy.
+* Final answer must include these exact labels: files created, files removed, files modified, tests run, unresolved risks, confidence (0-100).
+
 # Phase 1 — Environment + repo inspection
 
 1. Identify:
@@ -170,8 +181,7 @@ Produce:
 
 ## Founder report
 
-Maximum 180 words.
-Plain English only.
+Maximum 180 words. Plain English only. Keep this section under 120 words if possible.
 
 Explain:
 
