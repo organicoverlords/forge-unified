@@ -41,7 +41,7 @@ impl ToolExecutor {
                 "prompt": args.prompt,
                 "background": background,
                 "allowed_tools": allowed_tools,
-                "subagent_mode": "opencode_style_delegate_then_report",
+                "subagent_mode": "delegate_then_report",
                 "result": "Subagent card created with bounded prompt and allowed tool scope. Continue by using the returned agent description as focused context, then verify with direct tools before finalizing."
             }).to_string(),
             error: None,
@@ -54,8 +54,7 @@ impl ToolExecutor {
                 ("prompt".to_string(), serde_json::json!(args.prompt)),
                 ("background".to_string(), serde_json::json!(background)),
                 ("allowed_tools".to_string(), serde_json::json!(allowed_tools)),
-                ("opencode_task_source".to_string(), serde_json::json!("packages/opencode/src/tool/task.ts")),
-                ("opencode_subagent_behavior".to_string(), serde_json::json!("delegate focused exploration; return concise result; do not replace direct evidence")),
+                ("subagent_behavior".to_string(), serde_json::json!("delegate focused exploration; return concise result; do not replace direct evidence")),
             ]),
         })
     }
@@ -81,7 +80,7 @@ impl ToolExecutor {
             "tool_alias": "todo_write",
             "todos": args.todos,
             "counts": { "completed": completed, "in_progress": in_progress, "pending": pending },
-            "opencode_behavior": "TodoWrite checklist updated; mark items completed immediately as work finishes."
+            "behavior": "Checklist updated; mark items completed immediately as work finishes."
         }).to_string();
         Ok(ToolResult {
             id: request.id,
@@ -92,7 +91,6 @@ impl ToolExecutor {
             duration_ms: 0,
             metadata: HashMap::from([
                 ("tool_alias".to_string(), serde_json::json!("todo_write")),
-                ("opencode_todo_source".to_string(), serde_json::json!("packages/opencode/src/tool/todo.ts")),
                 ("todo_count".to_string(), serde_json::json!(completed + in_progress + pending)),
                 ("completed".to_string(), serde_json::json!(completed)),
                 ("in_progress".to_string(), serde_json::json!(in_progress)),
@@ -122,9 +120,9 @@ impl ToolExecutor {
         info.insert("status_porcelain".to_string(), serde_json::json!(status_porcelain));
         info.insert("diff_stat".to_string(), serde_json::json!(diff_stat));
         info.insert("worktrees".to_string(), serde_json::json!(parse_worktrees(&worktree_text)));
-        info.insert("opencode_parity".to_string(), serde_json::json!({
-            "copied_concepts": ["repo_discover", "remote_get", "history_head", "history_branch", "worktree_list", "status_snapshot"],
-            "not_yet_copied": ["worktree_create", "worktree_remove", "tree_capture", "patch_restore", "permission_v2"]
+        info.insert("forge_repo_capabilities".to_string(), serde_json::json!({
+            "captured": ["repo_root", "remote", "head", "branch", "worktree_list", "status_snapshot"],
+            "not_yet_implemented": ["worktree_create", "worktree_remove", "tree_capture", "patch_restore", "permission_v2"]
         }));
 
         let output = serde_json::to_string_pretty(&info)?;
