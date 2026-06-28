@@ -5,19 +5,18 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD before this state update: `d7bc4e1d5e618ac20f425b13c89a4b8fa6676ef9`
-- Latest failed same-head workflow set for previous head `009137bf1760144ce841efb8d4975a368afed50a`: CI `28333950469` failure due Smoke Test, Build Proof `28333950465` success, Live WebUI Feature Sprint `28333950462` failure.
-- Latest failed Live WebUI artifact: `7938035145`, digest `sha256:2f7b85d30a0ae06793b64cea216155e653c0fd1873d74d5be49c658fe36c2174`.
-- Failure diagnosis: real WebUI/NVIDIA NIM ran with provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, and produced real tool evidence, but the final assistant text missed required final-report labels and did not satisfy the full benchmark checker.
-- Latest repair: `scripts/smoke/full-agentic-benchmark-prompt.txt` now explicitly rejects blank/JSON/tool-call final output and requires a Markdown self-check containing the exact final report labels.
-- Latest proof doc: `docs/generated/proof/live-benchmark-final-answer-self-check-20260628T2050Z.md`.
-- Latest accepted proof remains the prior same-head WebUI/NVIDIA NIM full benchmark proof for `6de537bc881c66348301dfb18ff50914e110eff0`; do not claim latest-head parity until same-head workflows pass.
+- Latest accepted same-head proof HEAD: `0579b550bfb489a0a16289b98a6eafabcd14c0d6`
+- Accepted same-head workflows: CI `28336034206`, Build Proof `28336034212`, Live WebUI Feature Sprint `28336034202`.
+- Accepted Live WebUI artifact: `7938654225`, `live-webui-feature-sprint-proof`, digest `sha256:c631cbb7570af2563475220513924f134ec1b96d4c36b2304bb85af344c5448b`.
+- Latest hardening slice after accepted proof: `scripts/smoke/check-live-webui-proof-manifest.py` now hard-gates screenshot PNG bytes, browser-proof benchmark markers, conversation tool-result counts, and status-file path consistency.
+- Latest proof doc: `docs/generated/proof/live-proof-manifest-hard-gate-20260628T2155Z.md`.
+- Do not claim the new hardening head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `6de537bc881c66348301dfb18ff50914e110eff0`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `0579b550bfb489a0a16289b98a6eafabcd14c0d6`.
 
-Proof requirements satisfied by artifact `7937929953`:
+Proof requirements satisfied by artifact `7938654225`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -44,7 +43,6 @@ Proof requirements satisfied by artifact `7937929953`:
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
 - Added provider-visible independence guards to the live proof harness for `/api/tools`.
-- Replaced the fragile live proof harness tail with a shorter quote-safe script after the same-head run failed at EOF quote parsing on line 393.
 - Removed upstream source paths and upstream-prefixed metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
 - Added live conversation snapshot streaming in `crates/webui/src/events_live.rs` so long natural-language WebUI/NIM runs expose conversation, ToolPart, tool-result, file-change, and text evidence while the run is still executing.
 - Tightened the full benchmark prompt contract so the live WebUI run asks the model for the same tool-backed evidence and report labels that the checker verifies.
@@ -57,8 +55,8 @@ Proof requirements satisfied by artifact `7937929953`:
 - Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
 - Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
 - Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
-- Added `scripts/smoke/check-live-webui-proof-manifest.py` so future proof acceptance checks required screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, and absence of local/upstream identity shortcuts.
 - Full benchmark prompt now explicitly rejects blank/JSON/tool-call final output and requires a Markdown final self-check for exact labels before sending.
+- `scripts/smoke/check-live-webui-proof-manifest.py` now requires screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, absence of local/upstream identity shortcuts, PNG screenshot bytes, browser proof markers, conversation tool-result counts, and status-path consistency.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -82,7 +80,7 @@ Proof requirements satisfied by artifact `7937929953`:
 
 ## Current gaps / do not overclaim
 
-- The accepted same-head proof is for `6de537bc881c66348301dfb18ff50914e110eff0`; the latest final-answer self-check repair needs its own same-head workflow run before claiming proof on that newer head.
+- The accepted same-head proof is for `0579b550bfb489a0a16289b98a6eafabcd14c0d6`; the latest manifest-hard-gate commit needs its own same-head workflow run before claiming proof on that newer head.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
