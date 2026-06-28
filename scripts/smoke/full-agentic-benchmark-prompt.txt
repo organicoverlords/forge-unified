@@ -27,6 +27,7 @@ Proof-critical checklist before final answer:
 
 * Read `Cargo.toml` with a real file_read tool call.
 * Use a repo map tool result: repo_info or file_list.
+* After creating `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`, read each of the three files back with real file_read tool calls before deleting anything.
 * Run one fast validation command with a real shell_command tool call: `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 * Inspect diff or status after the edit with git diff or git status.
 * Final answer must contain the exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`.
@@ -41,9 +42,10 @@ Required fast path:
 2. Use batch_parallel for repo_info, Cargo.toml file_read, root file_list, git/repo shell identity, repo size shell, one TODO/FIXME file_search, one Rust file list/glob, and the validation command.
 3. Use task once with a short repo-explorer prompt. The subagent should summarize likely architecture and one safe suspicious issue in five bullets; it must not search doom-loop/OpenCode/provider metadata.
 4. Run at most four additional direct file/search/shell tools for Phase 2. Then stop investigating and move to Phase 3.
-5. Create/read/delete the required `.agent_test/` files.
-6. Make the smallest safe Phase 4 edit. If no better low-risk code edit is obvious, update `PROJECT_STATE.md` with one benchmark finding and next risk.
-7. Run `bash -n scripts/smoke/live-webui-feature-sprint.sh`, inspect git status/diff, cleanly report.
+5. Create the required `.agent_test/` files, then use file_read on all three files: `repo_summary.md`, `investigation.md`, and `action_plan.json`.
+6. Remove only `.agent_test/investigation.md`; verify the two remaining files with `find .agent_test -maxdepth 1 -type f -print | sort`.
+7. Make the smallest safe Phase 4 edit. If no better low-risk code edit is obvious, update `PROJECT_STATE.md` with one benchmark finding and next risk.
+8. Run `bash -n scripts/smoke/live-webui-feature-sprint.sh`, inspect git status/diff, cleanly report.
 
 # Phase 1 — Environment + repo inspection
 
@@ -145,7 +147,7 @@ Inside it create:
 
 Then:
 
-* read all files back
+* read all three files back with file_read: `.agent_test/repo_summary.md`, `.agent_test/investigation.md`, and `.agent_test/action_plan.json`
 * verify contents
 * summarize them
 
