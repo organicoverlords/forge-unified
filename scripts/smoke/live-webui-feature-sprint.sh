@@ -234,16 +234,37 @@ need_any_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Repor
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
-cat > "$PROOF_DIR/live-proof-status.txt" <<STATUS
-nim_conversation=$CONV_ID
-tool_conversation=$TOOL_CONV_ID
-benchmark_conversation=$BENCH_CONV_ID
-model=$MODEL_ID
-benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png
-event_rail=$PROOF_DIR/event-rail.png
-tool_catalog=$TOOL_CATALOG_JSON
-opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON
-STATUS
+python3 - "$PROOF_DIR/live-proof-status.txt" \
+  "$CONV_ID" \
+  "$TOOL_CONV_ID" \
+  "$BENCH_CONV_ID" \
+  "$MODEL_ID" \
+  "$PROOF_DIR/full-benchmark-webui.png" \
+  "$PROOF_DIR/event-rail.png" \
+  "$TOOL_CATALOG_JSON" \
+  "$OPENCODE_WORKFLOW_JSON" <<'PY'
+import sys
+keys = [
+    "nim_conversation",
+    "tool_conversation",
+    "benchmark_conversation",
+    "model",
+    "benchmark_screenshot",
+    "event_rail",
+    "tool_catalog",
+    "opencode_workflow_checker",
+]
+out = sys.argv[1]
+values = sys.argv[2:]
+with open(out, "w", encoding="utf-8") as fh:
+    for key, value in zip(keys, values):
+        fh.write(f"{key}={value}\n")
+PY
 
 step "done"
-echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, OpenCode todo/subagent/parallel proof, semantic full benchmark prompt proof, and OpenCode normalized tool attachment proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
+printf '%s\n' "LIVE WebUI/NVIDIA NIM proof passed"
+printf 'base=%s\n' "$BASE"
+printf 'nim_conversation=%s\n' "$CONV_ID"
+printf 'tool_conversation=%s\n' "$TOOL_CONV_ID"
+printf 'benchmark_conversation=%s\n' "$BENCH_CONV_ID"
+printf 'model=%s\n' "$MODEL_ID"
