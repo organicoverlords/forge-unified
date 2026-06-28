@@ -234,6 +234,16 @@ need_any_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Repor
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
-echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON" > "$PROOF_DIR/live-proof-status.txt"
+cat > "$PROOF_DIR/live-proof-status.txt" <<STATUS
+nim_conversation=$CONV_ID
+tool_conversation=$TOOL_CONV_ID
+benchmark_conversation=$BENCH_CONV_ID
+model=$MODEL_ID
+benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png
+event_rail=$PROOF_DIR/event-rail.png
+tool_catalog=$TOOL_CATALOG_JSON
+opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON
+STATUS
+
 step "done"
 echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, OpenCode todo/subagent/parallel proof, semantic full benchmark prompt proof, and OpenCode normalized tool attachment proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
