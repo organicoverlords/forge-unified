@@ -24,7 +24,10 @@ Use real tools only. Do not print tool JSON in prose. Tool failures must be repa
    - `.agent_test/repo_summary.md`
    - `.agent_test/investigation.md`
    - `.agent_test/action_plan.json`
-6. Read back all three files with dedicated `file_read` tools.
+6. Immediately read back all three files with dedicated `file_read` tools. Use `batch_parallel` for exactly these three reads if available, and do not delete anything until all three file_read results exist:
+   - `.agent_test/action_plan.json`
+   - `.agent_test/investigation.md`
+   - `.agent_test/repo_summary.md`
 7. Delete only `.agent_test/investigation.md` with `file_delete`.
 8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
 9. Phase 4: make one tiny safe repository edit outside `.agent_test`. Prefer appending one dated benchmark note to `PROJECT_STATE.md` with `file_edit` or `apply_patch`. Do not edit source code.
@@ -51,7 +54,7 @@ Create `.agent_test/` implicitly by writing files if needed. The three required 
 - `.agent_test/investigation.md`: Phase 2 finding, confidence level, proof.
 - `.agent_test/action_plan.json`: JSON object with `top_issues`, `recommended_order`, `quick_wins`, `risky_changes`, and `confidence_score`.
 
-Read all three files back. Then remove only `.agent_test/investigation.md`. Verify only `repo_summary.md` and `action_plan.json` remain.
+Read all three files back with actual file_read tool calls before deleting anything. The final proof will fail unless `.agent_test/action_plan.json` has a dedicated successful file_read result. Then remove only `.agent_test/investigation.md`. Verify only `repo_summary.md` and `action_plan.json` remain.
 
 # Phase 4 — Judgment test
 
@@ -59,7 +62,7 @@ Before the tiny edit, state briefly in the assistant text: why it matters, blast
 
 # Phase 5 — Writing quality
 
-Produce:
+Produce exactly these final sections and labels. Do not omit any label. Use the words VERIFIED, LIKELY, and UNKNOWN exactly in uppercase.
 
 ## Founder report
 
@@ -67,17 +70,27 @@ Under 130 words. Plain English. Include what you investigated, what changed, ris
 
 ## Technical report
 
-Include these labels or headings: evidence, assumptions, failed hypotheses, confidence, rollback strategy. Include exact phrases: blast radius, implementation difficulty, rollback difficulty. Include exact words: VERIFIED, LIKELY, UNKNOWN.
+evidence
+assumptions
+failed hypotheses
+confidence
+- VERIFIED: what tool evidence proves.
+- LIKELY: what is supported but not fully proven.
+- UNKNOWN: what remains uncertain.
+rollback strategy
+blast radius
+implementation difficulty
+rollback difficulty
 
 # Phase 6 — Cleanup discipline
 
-Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include exact labels:
+Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include these exact lowercase labels, including the parenthesized confidence label exactly:
 
-- files created
-- files removed
-- files modified
-- tests run
-- unresolved risks
-- confidence (0-100)
+files created
+files removed
+files modified
+tests run
+unresolved risks
+confidence (0-100)
 
 Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
