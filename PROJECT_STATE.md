@@ -5,15 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: pending workflow proof after `4703ff0630df47545bbc73530aa78581ce15f87f`
+- Current repair HEAD: pending workflow proof after runtime ToolPart independence cleanup.
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `4a3c783b9993aa376f342e8aeff16da34625026a`; same-head Live WebUI Feature Sprint `28318502067`, Build Proof `28318502064`, and CI `28318502071` failed.
-- Latest failure diagnosis: Live WebUI job `83896051926` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 393: unexpected EOF while looking for matching '"'`, so no current-head WebUI/NIM browser screenshot or checker artifacts were produced.
-- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` was replaced with a shorter quote-safe harness using self `bash -n`, `printf`-based prompts/status output, shared `post_stream` helper, NIM-only/local-shortcut rejection, full benchmark checker gates, browser screenshot capture, and provider-visible `/api/tools` independence guards that reject `packages/opencode/` and `opencode_` markers.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-harness-quote-safe-rewrite-20260628T1058Z.md`.
-- Latest parity slice retained: Forge follows OpenCode behavior references for provider-executed ToolPart lifecycle/state semantics, but source paths remain in developer docs rather than provider-visible Forge runtime outputs.
+- Latest failed inspected HEAD before this update: `3af6b810747839229c3f783abc330d02d16fa7a6`; same-head CI `28321804112`, Build Proof `28321804108`, and Live WebUI Feature Sprint `28321804109` failed.
+- Latest failure diagnosis: Live WebUI job `83904916420` compiled `forge-app`, started the WebUI, completed the smaller NIM/tool lifecycle stages, then timed out during the full six-phase benchmark stream with `curl: (28) Operation timed out after 1190002 milliseconds with 0 bytes received`; no full benchmark conversation/stream artifact was produced.
+- Latest repair: `crates/webui/src/events.rs` now keeps OpenCode source paths and `opencode_*` identifiers out of runtime ToolPart lifecycle/result payloads while preserving Forge-owned ToolPart lifecycle/state semantics.
+- Latest proof doc: `docs/generated/proof/runtime-toolpart-independence-cleanup-20260628T1250Z.md`.
+- Latest parity slice retained: Forge follows OpenCode behavior references for provider-executed ToolPart lifecycle/state semantics, but source paths remain in developer docs/proof notes rather than provider-visible Forge runtime outputs.
 
 ## Accepted live full benchmark proof
 
@@ -48,6 +48,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
 - Added provider-visible independence guards to the live proof harness for `/api/tools`.
 - Replaced the fragile live proof harness tail with a shorter quote-safe script after the same-head run failed at EOF quote parsing on line 393.
+- Removed OpenCode source paths and `opencode_*` metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -72,10 +73,9 @@ Proof requirements satisfied by the older accepted artifact:
 ## Current gaps / do not overclaim
 
 - Latest HEAD does not yet have same-head green workflow/browser-proof artifact in this chat.
-- Some engine runtime metadata still needs a follow-up cleanup to remove `opencode_*` keys from provider-visible tool results while retaining behavior-compatible semantics under Forge-owned names.
+- The full six-phase live benchmark stream currently stalls long enough that the proof harness times out without final benchmark artifacts; next useful source slice is incremental SSE progress while the model/tool loop is running.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
 - Live language-server process/client diagnostics are not implemented yet.
 - Full formatter catalog/config/runtime remains partial.
-- Full NIM-backed streamed compaction remains incomplete.
