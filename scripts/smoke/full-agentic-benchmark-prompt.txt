@@ -44,8 +44,6 @@ Use this suspicious issue: `benchmark proof instructions can cause over-inspecti
 
 Your Phase 2 investigation is complete once the batch_parallel nested results and the one task result exist. Do not investigate deeply beyond that. Your hypothesis should be based on evidence already gathered: too much inspection can starve Phase 3 within the WebUI proof timeout.
 
-Final answer must contain the exact uppercase words: VERIFIED, LIKELY, UNKNOWN.
-
 # Phase 3 — File operation stress test
 
 Create `.agent_test/` implicitly by writing files if needed. The three required files are:
@@ -62,7 +60,14 @@ Before the tiny edit, state briefly in the assistant text: why it matters, blast
 
 # Phase 5 — Writing quality
 
-Produce exactly these final sections and labels. Do not omit any label. Use the words VERIFIED, LIKELY, and UNKNOWN exactly in uppercase.
+Your final answer must start with the following exact confidence block before any other final-answer prose:
+
+confidence
+- VERIFIED: evidence directly proven by successful tool results.
+- LIKELY: supported conclusion that is not fully proven.
+- UNKNOWN: remaining uncertainty.
+
+After that exact confidence block, produce exactly these final sections and labels. Do not omit any label. Use the words VERIFIED, LIKELY, and UNKNOWN exactly in uppercase again inside the Technical report.
 
 ## Founder report
 
@@ -93,4 +98,4 @@ tests run
 unresolved risks
 confidence (0-100)
 
-Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
+Final self-check before sending the final answer: if your final answer does not contain all three exact uppercase words `VERIFIED`, `LIKELY`, and `UNKNOWN`, rewrite it before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
