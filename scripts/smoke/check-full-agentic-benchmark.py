@@ -110,6 +110,18 @@ def add(checks: list[dict[str, Any]], name: str, passed: bool, evidence: Any = N
     checks.append({"name": name, "passed": bool(passed), "evidence": evidence})
 
 
+def final_has_required_summary_labels(final: str) -> bool:
+    required_patterns = [
+        r"files created",
+        r"files (deleted|removed)",
+        r"files modified",
+        r"tests run",
+        r"unresolved risks",
+        r"confidence\s*\(?0?[-–]100\)?",
+    ]
+    return all(re.search(pattern, final, re.I) for pattern in required_patterns)
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print("usage: check-full-agentic-benchmark.py conversation.json stream.sse output.json", file=sys.stderr)
@@ -186,7 +198,7 @@ def main() -> int:
 
     cleanup_shell = ok_result(results, kind="ShellCommand", command_re=r"git status|find .*agent_test|ls .*agent_test|grep -R .*SECRET|grep -R .*TOKEN")
     add(checks, "phase6_cleanup_or_state_check_present", bool(cleanup_shell), [result_command(r) for r in cleanup_shell])
-    add(checks, "final_reports_files_tests_risks_confidence", all(re.search(term, final, re.I) for term in ["files created", "files deleted", "files modified", "tests run", "unresolved risks", r"confidence\s*\(?0?[-–]100\)?"]), None)
+    add(checks, "final_reports_files_tests_risks_confidence", final_has_required_summary_labels(final), None)
 
     failed = [check for check in checks if not check["passed"]]
     report = {
