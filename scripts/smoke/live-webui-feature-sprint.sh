@@ -16,6 +16,7 @@ TOOL_CONVERSATION_JSON="$PROOF_DIR/tool-lifecycle-conversation.json"
 TOOL_STREAM="$PROOF_DIR/tool-lifecycle-stream.sse"
 BENCH_CONVERSATION_JSON="$PROOF_DIR/full-benchmark-conversation.json"
 BENCH_STREAM="$PROOF_DIR/full-benchmark-stream.sse"
+OPENCODE_WORKFLOW_JSON="$PROOF_DIR/opencode-workflow-checker.json"
 PROMPT_FILE="$PROOF_DIR/live-model-prompt.txt"
 TOOL_PROMPT_FILE="$PROOF_DIR/tool-lifecycle-prompt.txt"
 BENCH_PROMPT_FILE="scripts/smoke/full-agentic-benchmark-prompt.txt"
@@ -44,8 +45,8 @@ done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
 for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible" "opencode-provider-tool-catalog" "apply_patch-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$TOOL_CATALOG_JSON"
-jq -e '.catalog == "opencode_provider_tool_catalog" and .provider_visible == true and .tool_count >= 20 and (.names | index("apply_patch")) and (.names | index("task")) and (.names | index("batch_parallel"))' "$TOOL_CATALOG_JSON" >/dev/null
-for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "provider_visible" "patchText"; do grep -Fq "$marker" "$TOOL_CATALOG_JSON"; done
+jq -e '.catalog == "opencode_provider_tool_catalog" and .provider_visible == true and .tool_count >= 20 and (.names | index("apply_patch")) and (.names | index("task")) and (.names | index("todo_write")) and (.names | index("batch_parallel"))' "$TOOL_CATALOG_JSON" >/dev/null
+for marker in "packages/opencode/src/tool/apply_patch.ts" "packages/opencode/src/session/processor.ts" "packages/opencode/src/tool/todo.ts" "provider_visible" "patchText" "todo_write"; do grep -Fq "$marker" "$TOOL_CATALOG_JSON"; done
 
 step "create NIM conversation"
 CONV_ID="$(curl -fsS --connect-timeout 2 --max-time 20 -X POST "$BASE/api/conversations" -H 'content-type: application/json' -d '{"title":"live NIM browser model proof"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
@@ -110,7 +111,7 @@ if grep -Fq 'event: provider-error' "$BENCH_STREAM"; then
   exit 13
 fi
 for marker in 'event: run-finish' '"provider":"nvidia_nim"' '"model":"' 'event: tool-call' 'event: tool-result'; do grep -Fq "$marker" "$BENCH_STREAM"; done
-if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel' "$BENCH_STREAM"; then
+if ! grep -Eq 'repo_info|file_list|file_search|file_read|shell_command|apply_patch|task|batch_parallel|todo_write' "$BENCH_STREAM"; then
   echo "::error::full benchmark did not use advertised provider tools" >&2
   tail -n 200 "$BENCH_STREAM" >&2 || true
   exit 14
@@ -128,9 +129,13 @@ jq -e '
   ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "FileRead" and path(.) == ".agent_test/action_plan.json" and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "FileDelete" and path(.) == ".agent_test/investigation.md" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "Task" and (.metadata.tool_alias // "") == "todo_write" and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "Task" and ((.metadata.tool_alias // "") != "todo_write") and .success == true)] | length) >= 1 and
+  ([results[] | select(.kind == "BatchParallel" and .success == true)] | length) >= 1 and
   ([results[] | select((.kind == "FileEdit" or .kind == "FileWrite") and (path(.) | startswith(".agent_test/") | not) and .success == true)] | length) >= 1 and
   ([results[] | select(.kind == "ShellCommand" and ((.metadata.command // "") | test("git diff|git status|cargo check|cargo test|bash -n"; "i")) and .success == true)] | length) >= 1
 ' "$BENCH_CONVERSATION_JSON" >/dev/null
+python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$OPENCODE_WORKFLOW_JSON"
 
 step "browser proof full benchmark"
 timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
@@ -140,6 +145,6 @@ grep -Eiq 'Technical report|Technical Report' "$PROOF_DIR/browser-proof.json"
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
 
-echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON" > "$PROOF_DIR/live-proof-status.txt"
+echo "nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png event_rail=$PROOF_DIR/event-rail.png tool_catalog=$TOOL_CATALOG_JSON opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON" > "$PROOF_DIR/live-proof-status.txt"
 step "done"
-echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, and semantic full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
+echo "LIVE model-backed browser proof, visible ToolPart proof, provider tool catalog proof, OpenCode todo/subagent/parallel proof, and semantic full benchmark prompt proof passed: $BASE nim_conversation=$CONV_ID tool_conversation=$TOOL_CONV_ID benchmark_conversation=$BENCH_CONV_ID model=$MODEL_ID"
