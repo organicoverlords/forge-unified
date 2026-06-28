@@ -9,7 +9,7 @@ use axum::{
 use forge_engine::types::{ConversationId, MessageRole, ToolCallId, ToolKind, ToolRequest, ToolResult};
 use futures_util::{stream, Stream};
 use serde::Deserialize;
-use std::{convert::Infallible, pin::Pin, time::Duration};
+use std::{collections::HashSet, convert::Infallible, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
 
 type BoxEventStream = Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>;
@@ -43,6 +43,7 @@ fn stream_agent_run(state: AppState, conversation_id: ConversationId, message: S
             "conversation_id": conversation_id.0.to_string(),
             "phase": "started",
             "streaming": "incremental",
+            "snapshot_streaming": true,
             "max_rounds": max_rounds,
         })).await;
         send_event(&tx, "text-start", serde_json::json!({"id":"live-progress"})).await;
@@ -54,6 +55,7 @@ fn stream_agent_run(state: AppState, conversation_id: ConversationId, message: S
             agent.chat_with_max_rounds(&run_conversation_id, message, max_rounds).await
         });
         let mut tick: u64 = 0;
+        let mut emitted_tools = HashSet::new();
         let record = loop {
             tokio::select! {
                 result = &mut run => {
@@ -67,7 +69,9 @@ fn stream_agent_run(state: AppState, conversation_id: ConversationId, message: S
                         "conversation_id": conversation_id.0.to_string(),
                         "status": "agent loop still running",
                         "provider": "nvidia_nim",
+                        "snapshot_streaming": true,
                     })).await;
+                    emit_live_conversation_snapshot(&state, &tx, &conversation_id, tick, &mut emitted_tools).await;
                     send_event(&tx, "text-delta", serde_json::json!({
                         "id":"live-progress",
                         "text": format!("benchmark still running: {}s elapsed\n", tick * 15),
@@ -123,6 +127,36 @@ fn stream_file_tool_event_action(state: AppState, conversation_id: ConversationI
         send_event(&tx, "run-finish", serde_json::json!({"status":"completed", "task":"forge file tool event proof", "provider":"local"})).await;
     });
     sse_channel(rx)
+}
+
+async fn emit_live_conversation_snapshot(
+    state: &AppState,
+    tx: &EventSender,
+    conversation_id: &ConversationId,
+    tick: u64,
+    emitted_tools: &mut HashSet<String>,
+) {
+    let Some(conv) = state.agent.get_conversation(conversation_id).await else { return; };
+    let message_count = conv.messages.len();
+    let tool_result_count: usize = conv.messages.iter().map(|msg| msg.tool_results.as_ref().map_or(0, Vec::len)).sum();
+    send_event(tx, "conversation-snapshot", serde_json::json!({
+        "tick": tick,
+        "conversation_id": conversation_id.0.to_string(),
+        "messages": message_count,
+        "tool_results": tool_result_count,
+        "provider": conv.provider,
+        "model": conv.model,
+        "snapshot_streaming": true,
+    })).await;
+
+    let mut events = Vec::new();
+    append_conversation_events(state, conversation_id, &mut events).await;
+    for (name, data) in events {
+        let key = serde_json::to_string(&(name.as_str(), &data)).unwrap_or_default();
+        if emitted_tools.insert(key) {
+            send_event(tx, &name, data).await;
+        }
+    }
 }
 
 async fn append_conversation_events(state: &AppState, conversation_id: &ConversationId, events: &mut Vec<(String, serde_json::Value)>) {
