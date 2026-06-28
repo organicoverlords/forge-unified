@@ -5,14 +5,15 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
+- Current repair HEAD: `09c1335e6c8ed2d9eec6035be1cb06338a62b1e6`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `5ea11d17efaf019c42749dc2d97aa913fce221da`; same-head CI `28309348173`, Build Proof `28309348175`, and Live WebUI Feature Sprint `28309348172` failed.
-- Latest failure diagnosis: Live WebUI job `83871158736` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 127: syntax error near unexpected token '('`, so no full benchmark conversation/stream artifacts were produced.
-- Latest repair: the live WebUI proof harness now uses Python assertions for conversation/provider/model and tool-catalog predicates instead of fragile inline shell/JQ parsing, while keeping local/scripted shortcut rejection gates.
-- Latest parity slice: `crates/engine/src/orchestrator.rs` now annotates provider-selected successful file/patch tool results with OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata.
-- Latest proof doc: `docs/generated/proof/opencode-normalized-tool-attachments-20260628T0354Z.md`.
+- Latest failed inspected HEAD before this update: `4a016e0024e323b8cca066f771b31cd4609b268e`; same-head Build Proof `28311822270`, CI `28311822274`, and Live WebUI Feature Sprint `28311822267` failed.
+- Latest failure diagnosis: Live WebUI job `83877891507` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 239: unexpected EOF while looking for matching '"'`, so no full benchmark conversation/stream artifacts were produced.
+- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now writes `live-proof-status.txt` with a quoted-safe heredoc and closes the final success `echo`, preserving NVIDIA NIM-only/local-shortcut rejection gates and browser screenshot checks.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-status-quote-repair-20260628T0548Z.md`.
+- Latest parity slice retained: `crates/engine/src/orchestrator.rs` annotates provider-selected successful file/patch tool results with OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata.
 
 ## Accepted live full benchmark proof
 
@@ -46,6 +47,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Repaired the live proof harness shell marker/predicate parsing after failed parser runs and hardened conversation/model extraction.
 - Repaired the live proof harness again after a line-127 parser failure by replacing fragile inline JQ predicates with Python assertions and safer marker checks.
+- Repaired the live proof harness final proof-status writer after a line-239 unmatched-quote failure by replacing the final single-line status echo with a heredoc and closing the success echo.
 
 ## OpenCode source anchors retained
 
@@ -61,7 +63,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Live WebUI proof must use a real NVIDIA NIM route, not local shortcuts.
 - Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
-- Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and now normalized tool attachment metadata.
+- Normal file tools emit OpenCode-style file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and normalized tool attachment metadata.
 - Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops while preserving an explicit OpenCode source marker and permission-envelope metadata.
 - Native watcher publishes `watcher.started` and live `watcher.updated` events.
 - LSP diagnostic envelopes and report blocks are visible in the event rail, but live language-server collection remains incomplete.
