@@ -48,29 +48,34 @@ need_any_regex() {
 create_conversation() {
   local title="$1"
   local out="$2"
-  curl -fsS --connect-timeout 2 --max-time 20 \
-    -X POST "$BASE/api/conversations" \
-    -H 'content-type: application/json' \
-    -d "{\"title\":\"$title\"}" > "$out"
-  python3 - "$out" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+  python3 - "$title" "$out" "$BASE" <<'PY'
+import json, subprocess, sys
+title, out, base = sys.argv[1:]
+payload = json.dumps({"title": title})
+with open(out, "wb") as fh:
+    subprocess.run([
+        "curl", "-fsS", "--connect-timeout", "2", "--max-time", "20",
+        "-X", "POST", f"{base}/api/conversations",
+        "-H", "content-type: application/json",
+        "--data-binary", payload,
+    ], check=True, stdout=fh)
+with open(out, encoding="utf-8") as fh:
     data = json.load(fh)
-print(data.get('id', ''))
+print(data.get("id", ""))
 PY
 }
 model_id_from_conversation() {
   python3 - "$1" <<'PY'
 import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
-print(data.get('model', ''))
+print(data.get("model", ""))
 PY
 }
 assert_conversation_nim() {
   python3 - "$1" <<'PY'
 import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
 messages = data.get("messages") or []
 provider = data.get("provider")
@@ -82,7 +87,7 @@ PY
 assert_tool_catalog() {
   python3 - "$1" <<'PY'
 import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
 names = data.get("names") or []
 required = {"apply_patch", "task", "todo_write", "batch_parallel"}
@@ -97,15 +102,26 @@ if missing:
     raise SystemExit(f"tool catalog missing required tools: {missing}")
 PY
 }
+write_status() {
+  local out="$1"
+  {
+    echo "nim_conversation=$CONV_ID"
+    echo "tool_conversation=$TOOL_CONV_ID"
+    echo "benchmark_conversation=$BENCH_CONV_ID"
+    echo "model=$MODEL_ID"
+    echo "benchmark_screenshot=$PROOF_DIR/full-benchmark-webui.png"
+    echo "event_rail=$PROOF_DIR/event-rail.png"
+    echo "tool_catalog=$TOOL_CATALOG_JSON"
+    echo "opencode_workflow_checker=$OPENCODE_WORKFLOW_JSON"
+  } > "$out"
+}
 
-step "bash syntax self-check"
-bash -n "$0"
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
 step "start webui"
 SERVER_BIN="$ROOT/target/debug/forge"
 test -x "$SERVER_BIN"
-printf 'command: %s --host 127.0.0.1 --port %s\n' "$SERVER_BIN" "$PORT" > "$PROOF_DIR/server-command.txt"
+echo "command: $SERVER_BIN --host 127.0.0.1 --port $PORT" > "$PROOF_DIR/server-command.txt"
 RUST_BACKTRACE=1 "$SERVER_BIN" --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 PID=$!
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
@@ -214,7 +230,7 @@ assert_conversation_nim "$BENCH_CONVERSATION_JSON"
 python3 scripts/smoke/check-full-agentic-benchmark.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$PROOF_DIR/full-benchmark-checker.json"
 python3 - "$PROOF_DIR/full-benchmark-checker.json" <<'PY'
 import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
 if data.get("passed") is not True:
     raise SystemExit("full benchmark checker did not pass")
@@ -222,7 +238,7 @@ PY
 python3 scripts/smoke/check-opencode-workflow-evidence.py "$BENCH_CONVERSATION_JSON" "$BENCH_STREAM" "$OPENCODE_WORKFLOW_JSON"
 python3 - "$OPENCODE_WORKFLOW_JSON" <<'PY'
 import json, sys
-with open(sys.argv[1], encoding='utf-8') as fh:
+with open(sys.argv[1], encoding="utf-8") as fh:
     data = json.load(fh)
 if data.get("passed") is not True:
     raise SystemExit("OpenCode workflow checker did not pass")
@@ -235,38 +251,12 @@ need_any_regex "$PROOF_DIR/browser-proof.json" 'Founder report|Founder Report'
 need_any_regex "$PROOF_DIR/browser-proof.json" 'Technical report|Technical Report'
 cp "$PROOF_DIR/browser-proof.json" "$PROOF_DIR/full-benchmark-browser-proof.json"
 cp "$PROOF_DIR/webui.png" "$PROOF_DIR/full-benchmark-webui.png"
-
-python3 - "$PROOF_DIR/live-proof-status.txt" \
-  "$CONV_ID" \
-  "$TOOL_CONV_ID" \
-  "$BENCH_CONV_ID" \
-  "$MODEL_ID" \
-  "$PROOF_DIR/full-benchmark-webui.png" \
-  "$PROOF_DIR/event-rail.png" \
-  "$TOOL_CATALOG_JSON" \
-  "$OPENCODE_WORKFLOW_JSON" <<'PY'
-import sys
-keys = [
-    "nim_conversation",
-    "tool_conversation",
-    "benchmark_conversation",
-    "model",
-    "benchmark_screenshot",
-    "event_rail",
-    "tool_catalog",
-    "opencode_workflow_checker",
-]
-out = sys.argv[1]
-values = sys.argv[2:]
-with open(out, "w", encoding="utf-8") as fh:
-    for key, value in zip(keys, values):
-        fh.write(f"{key}={value}\n")
-PY
+write_status "$PROOF_DIR/live-proof-status.txt"
 
 step "done"
-printf '%s\n' "LIVE WebUI/NVIDIA NIM proof passed"
-printf 'base=%s\n' "$BASE"
-printf 'nim_conversation=%s\n' "$CONV_ID"
-printf 'tool_conversation=%s\n' "$TOOL_CONV_ID"
-printf 'benchmark_conversation=%s\n' "$BENCH_CONV_ID"
-printf 'model=%s\n' "$MODEL_ID"
+echo "LIVE WebUI/NVIDIA NIM proof passed"
+echo "base=$BASE"
+echo "nim_conversation=$CONV_ID"
+echo "tool_conversation=$TOOL_CONV_ID"
+echo "benchmark_conversation=$BENCH_CONV_ID"
+echo "model=$MODEL_ID"
