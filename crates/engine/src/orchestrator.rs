@@ -75,7 +75,7 @@ impl Orchestrator {
                 stopped_on_tool_cap = false;
                 let permission_result = doom_loop_permission_result(&allowed_requests, &current_tool_signatures);
                 self.conversation_mgr.write().await.add_tool_results(&conversation_id, vec![permission_result]);
-                self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[OpenCode doom-loop permission gate interrupted repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds: {}]", current_tool_signatures.join(", ")));
+                self.conversation_mgr.write().await.add_assistant_message(&conversation_id, format!("[Forge doom-loop permission gate interrupted repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds: {}]", current_tool_signatures.join(", ")));
                 break;
             }
             remember_tool_signatures(&mut tool_signature_history, current_tool_signatures);
@@ -103,7 +103,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("opencode_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("opencode_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("opencode_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("opencode_doom_loop_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:DOOM_LOOP_THRESHOLD, recent tool part comparison, permission.ask doom_loop envelope")), ("opencode_tool_state_result_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall state envelopes")), ("opencode_tool_attachments_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:toolResultOutput normalized FilePart attachments"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -178,38 +178,35 @@ fn annotate_provider_executed_result(req: &ToolRequest, result: &mut ToolResult)
 fn annotate_provider_executed_metadata(result: &mut ToolResult, input: Option<serde_json::Value>) {
     result.metadata.insert("providerExecuted".to_string(), serde_json::json!(true));
     result.metadata.insert("provider_executed".to_string(), serde_json::json!(true));
-    result.metadata.insert("opencode_provider_executed_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:ensureToolCall/updateToolCall/completeToolCall"));
-    if let Some(input) = input { result.metadata.entry("opencode_tool_input".to_string()).or_insert(input); }
-    annotate_opencode_tool_state(result);
+    if let Some(input) = input { result.metadata.entry("forge_tool_input".to_string()).or_insert(input); }
+    annotate_forge_tool_state(result);
 }
 
-fn annotate_opencode_tool_state(result: &mut ToolResult) {
+fn annotate_forge_tool_state(result: &mut ToolResult) {
     let status = if result.success { "completed" } else { "error" };
-    let title = opencode_tool_title(&result.kind, result.success);
-    let attachments = opencode_tool_attachments(result);
+    let title = forge_tool_title(&result.kind, result.success);
+    let attachments = forge_tool_attachments(result);
     if !attachments.is_empty() {
         result.metadata.insert("attachments".to_string(), serde_json::json!(attachments));
-        result.metadata.insert("opencode_normalized_attachments".to_string(), serde_json::json!(true));
+        result.metadata.insert("forge_normalized_attachments".to_string(), serde_json::json!(true));
     }
-    result.metadata.insert("opencode_tool_state_status".to_string(), serde_json::json!(status));
-    result.metadata.insert("opencode_tool_state_title".to_string(), serde_json::json!(title));
-    result.metadata.insert("opencode_tool_call_id".to_string(), serde_json::json!(result.id.0.to_string()));
-    result.metadata.insert("opencode_tool_state_time".to_string(), serde_json::json!({ "start": 0, "end": result.duration_ms }));
-    result.metadata.insert("opencode_tool_state_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:completeToolCall/failToolCall"));
-    result.metadata.insert("opencode_tool_attachments_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:toolResultOutput normalized FilePart attachments"));
-    result.metadata.insert("opencode_tool_output_shape".to_string(), serde_json::json!({ "title": title, "metadata": true, "output": true, "attachments": result.metadata.get("attachments").is_some() }));
+    result.metadata.insert("forge_tool_state_status".to_string(), serde_json::json!(status));
+    result.metadata.insert("forge_tool_state_title".to_string(), serde_json::json!(title));
+    result.metadata.insert("forge_tool_call_id".to_string(), serde_json::json!(result.id.0.to_string()));
+    result.metadata.insert("forge_tool_state_time".to_string(), serde_json::json!({ "start": 0, "end": result.duration_ms }));
+    result.metadata.insert("forge_tool_output_shape".to_string(), serde_json::json!({ "title": title, "metadata": true, "output": true, "attachments": result.metadata.get("attachments").is_some() }));
     if !result.success {
-        result.metadata.insert("opencode_tool_error".to_string(), serde_json::json!(result.error.clone().unwrap_or_else(|| "tool_error".to_string())));
+        result.metadata.insert("forge_tool_error".to_string(), serde_json::json!(result.error.clone().unwrap_or_else(|| "tool_error".to_string())));
     }
 }
 
-fn opencode_tool_attachments(result: &ToolResult) -> Vec<serde_json::Value> {
+fn forge_tool_attachments(result: &ToolResult) -> Vec<serde_json::Value> {
     if !result.success { return Vec::new(); }
     let mut attachments = Vec::new();
     match result.kind {
         ToolKind::FileRead | ToolKind::FileWrite | ToolKind::FileEdit | ToolKind::FileDelete => {
-            if let Some(path) = result.metadata.get("opencode_tool_input").and_then(|value| value.get("path")).and_then(|value| value.as_str()) {
-                attachments.push(opencode_file_part(path, "tool-input-path"));
+            if let Some(path) = result.metadata.get("forge_tool_input").and_then(|value| value.get("path")).and_then(|value| value.as_str()) {
+                attachments.push(forge_file_part(path, "tool-input-path"));
             }
         }
         ToolKind::ApplyPatch | ToolKind::ProposePatch => {
@@ -225,31 +222,30 @@ fn collect_attachment_paths_from_metadata(result: &ToolResult, key: &str, attach
     let Some(values) = result.metadata.get(key).and_then(|value| value.as_array()) else { return; };
     for value in values {
         if let Some(path) = value.as_str() {
-            attachments.push(opencode_file_part(path, key));
+            attachments.push(forge_file_part(path, key));
             continue;
         }
         if let Some(path) = value.get("path").and_then(|value| value.as_str()) {
-            attachments.push(opencode_file_part(path, key));
+            attachments.push(forge_file_part(path, key));
             continue;
         }
         if let Some(path) = value.get("file").and_then(|value| value.as_str()) {
-            attachments.push(opencode_file_part(path, key));
+            attachments.push(forge_file_part(path, key));
         }
     }
 }
 
-fn opencode_file_part(path: &str, source: &str) -> serde_json::Value {
+fn forge_file_part(path: &str, source: &str) -> serde_json::Value {
     serde_json::json!({
         "type": "file",
         "mime": "text/plain",
         "filename": path.rsplit('/').next().unwrap_or(path),
         "url": format!("file://{}", path),
         "source": source,
-        "opencode_source": "packages/opencode/src/session/processor.ts:toolResultOutput attachments filter(isFilePart)",
     })
 }
 
-fn opencode_tool_title(kind: &ToolKind, success: bool) -> String {
+fn forge_tool_title(kind: &ToolKind, success: bool) -> String {
     if !success { return format!("Failed {:?}", kind); }
     match kind {
         ToolKind::FileRead => "Read file".to_string(),
@@ -296,7 +292,7 @@ fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) 
         id,
         kind,
         success: false,
-        output: format!("OpenCode doom-loop permission gate blocked repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds. Patterns: {}", patterns.join(", ")),
+        output: format!("Forge doom-loop permission gate blocked repeated identical tool requests after {DOOM_LOOP_THRESHOLD} rounds. Patterns: {}", patterns.join(", ")),
         error: Some("doom_loop_permission_required".to_string()),
         duration_ms: 0,
         metadata: HashMap::from([
@@ -306,11 +302,10 @@ fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) 
             ("ruleset".to_string(), serde_json::json!("forge_safety_checker")),
             ("input".to_string(), input),
             ("recent_tool_signatures".to_string(), serde_json::json!(signatures)),
-            ("opencode_doom_loop_permission".to_string(), serde_json::json!(true)),
-            ("opencode_source".to_string(), serde_json::json!("packages/opencode/src/session/processor.ts:permission.ask({ permission: \\\"doom_loop\\\" })")),
+            ("forge_doom_loop_permission".to_string(), serde_json::json!(true)),
         ]),
     };
-    annotate_opencode_tool_state(&mut result);
+    annotate_forge_tool_state(&mut result);
     result
 }
 
@@ -322,12 +317,12 @@ fn build_system_prompt(user_message: &str) -> String {
     let lower = user_message.to_ascii_lowercase();
     let repo_work = ["repo", "repository", "inspect", "build", "fix", "patch", "webui", "test", "phase", "files", "git"].iter().any(|needle| lower.contains(needle));
     let benchmark = lower.contains("phase 3") && lower.contains(".agent_test") && lower.contains("founder report");
-    let base = "You are Forge, an OpenCode-style coding agent. Use available tools for repository work, keep file changes low-risk, and keep final answers brief.";
+    let base = "You are Forge, a coding agent. Use available tools for repository work, keep file changes low-risk, and keep final answers brief.";
     if !repo_work { return base.to_string(); }
-    let opencode = "OpenCode workflow rules: use todo_write first for any multi-step or repo task, keep the todo list current, and mark items completed immediately. For broad codebase exploration, use the task tool as a specialized subagent before direct grep-like searching. When independent operations do not depend on each other, use batch_parallel instead of sequential calls. Prefer dedicated file tools over shell for file reads/writes.";
+    let workflow = "Forge workflow rules: use todo_write first for any multi-step or repo task, keep the todo list current, and mark items completed immediately. For broad codebase exploration, use the task tool as a specialized subagent before direct grep-like searching. When independent operations do not depend on each other, use batch_parallel instead of sequential calls. Prefer dedicated file tools over shell for file reads/writes.";
     let repo = "For repository tasks, call tools before answering. Use compact, bounded shell commands for validation and real terminal-only work. Treat tool errors as evidence and repair the failed tool call or choose another tool path instead of routing to another model. Verify file operations by reading or listing files, run validation when feasible, and summarize changes, tests, risks, and confidence.";
     if benchmark {
-        return format!("{base} {opencode} {repo} This is a six-phase benchmark: start with todo_write covering all six phases. Use at least one task subagent for repo exploration and at least one batch_parallel call for independent Phase 1 inspection. Complete the phases in order and do not write the final Founder report or Technical report until Phase 3 has real file_write results for .agent_test/repo_summary.md, .agent_test/investigation.md, and .agent_test/action_plan.json, real file_read results for all three, a file_delete result for .agent_test/investigation.md, and a verification result showing only repo_summary.md and action_plan.json remain. After that, complete Phase 4 with one small real repo edit plus git diff/status and validation evidence, then final reports.");
+        return format!("{base} {workflow} {repo} This is a six-phase benchmark: start with todo_write covering all six phases. Use at least one task subagent for repo exploration and at least one batch_parallel call for independent Phase 1 inspection. Complete the phases in order and do not write the final Founder report or Technical report until Phase 3 has real file_write results for .agent_test/repo_summary.md, .agent_test/investigation.md, and .agent_test/action_plan.json, real file_read results for all three, a file_delete result for .agent_test/investigation.md, and a verification result showing only repo_summary.md and action_plan.json remain. After that, complete Phase 4 with one small real repo edit plus git diff/status and validation evidence, then final reports.");
     }
-    format!("{base} {opencode} {repo} For multi-phase prompts, complete phases in order and keep evidence concise. Do not state that a command, file operation, test, deletion, or final state succeeded unless a tool result proves it.")
+    format!("{base} {workflow} {repo} For multi-phase prompts, complete phases in order and keep evidence concise. Do not state that a command, file operation, test, deletion, or final state succeeded unless a tool result proves it.")
 }
