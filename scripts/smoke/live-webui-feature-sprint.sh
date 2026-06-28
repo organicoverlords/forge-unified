@@ -31,17 +31,33 @@ step() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$STEP_LOG"; }
 step "cargo build forge-app"
 timeout 480s cargo build -p forge-app
 step "start webui"
-RUST_BACKTRACE=1 cargo run -p forge-app -- --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
+SERVER_BIN="$ROOT/target/debug/forge"
+test -x "$SERVER_BIN"
+echo "command: $SERVER_BIN --host 127.0.0.1 --port $PORT" > "$PROOF_DIR/server-command.txt"
+RUST_BACKTRACE=1 "$SERVER_BIN" --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 PID=$!
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; git status --short > "$STATUS_OUT" 2>/dev/null || true; }
 trap cleanup EXIT
 
 step "wait health"
-for attempt in $(seq 1 60); do
-  if ! kill -0 "$PID" >/dev/null 2>&1; then tail -n 220 "$SERVER_LOG" >&2 || true; exit 1; fi
-  if curl -fsS --connect-timeout 2 --max-time 10 "$BASE/api/health" -o "$PROOF_DIR/health.json"; then break; fi
+HEALTH_OK=0
+for attempt in $(seq 1 180); do
+  if curl -fsS --connect-timeout 2 --max-time 10 "$BASE/api/health" -o "$PROOF_DIR/health.json"; then
+    HEALTH_OK=1
+    break
+  fi
+  if ! kill -0 "$PID" >/dev/null 2>&1; then
+    echo "::error::webui process exited before health became ready on attempt $attempt" >&2
+    tail -n 220 "$SERVER_LOG" >&2 || true
+    exit 1
+  fi
   sleep 1
 done
+if [ "$HEALTH_OK" != 1 ]; then
+  echo "::error::webui health never became ready after 180s" >&2
+  tail -n 220 "$SERVER_LOG" >&2 || true
+  exit 1
+fi
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$PROOF_DIR/index.html"
 for marker in "Forge Unified" "provider-model-visible" "live-browser-model-proof" "opencode-tool-lifecycle-rail" "providerExecuted-visible" "opencode-provider-tool-catalog" "apply_patch-visible"; do grep -Fq "$marker" "$PROOF_DIR/index.html"; done
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$TOOL_CATALOG_JSON"
