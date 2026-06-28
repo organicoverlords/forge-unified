@@ -24,6 +24,16 @@ REQUIRED_FILES = [
     "live-proof-status.txt",
 ]
 
+REQUIRED_BROWSER_MARKERS = [
+    "Full six-phase agentic benchmark prompt",
+    "Phase 1",
+    "Phase 2",
+    "Founder report",
+    "Technical report",
+    ".agent_test/repo_summary.md",
+    ".agent_test/action_plan.json",
+]
+
 FORBIDDEN_RUNTIME_MARKERS = [
     "\"provider\":\"local\"",
     "\"provider\": \"local\"",
@@ -43,6 +53,12 @@ def non_empty(path: Path) -> bool:
     return path.is_file() and path.stat().st_size > 0
 
 
+def png_is_nonempty_screenshot(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size < 1024:
+        return False
+    return path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def checker_passed(path: Path) -> bool:
     try:
         data = load_json(path)
@@ -57,6 +73,11 @@ def status_value(status_text: str, key: str) -> str:
         if line.startswith(prefix):
             return line[len(prefix) :].strip()
     return ""
+
+
+def status_path_exists(status_text: str, key: str, expected_name: str) -> bool:
+    value = status_value(status_text, key)
+    return bool(value) and Path(value).name == expected_name
 
 
 def main() -> int:
@@ -76,11 +97,16 @@ def main() -> int:
     stream_path = proof_dir / "full-benchmark-stream.sse"
     conversation_path = proof_dir / "full-benchmark-conversation.json"
     status_path = proof_dir / "live-proof-status.txt"
+    browser_proof_path = proof_dir / "full-benchmark-browser-proof.json"
+    screenshot_path = proof_dir / "full-benchmark-webui.png"
     stream_text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
     status_text = status_path.read_text(encoding="utf-8", errors="replace") if status_path.exists() else ""
+    browser_text = browser_proof_path.read_text(encoding="utf-8", errors="replace") if browser_proof_path.exists() else ""
 
     checks.append({"name": "full_checker_passed", "passed": checker_passed(proof_dir / "full-benchmark-checker.json")})
     checks.append({"name": "workflow_checker_passed", "passed": checker_passed(proof_dir / "opencode-workflow-checker.json")})
+    checks.append({"name": "screenshot_is_png", "passed": png_is_nonempty_screenshot(screenshot_path), "size": screenshot_path.stat().st_size if screenshot_path.exists() else 0})
+    checks.append({"name": "browser_proof_has_required_markers", "passed": all(marker in browser_text for marker in REQUIRED_BROWSER_MARKERS), "markers": REQUIRED_BROWSER_MARKERS})
     checks.append({"name": "stream_has_run_finish", "passed": "event: run-finish" in stream_text})
     checks.append({"name": "stream_has_tool_calls", "passed": stream_text.count("event: tool-call") >= 8, "count": stream_text.count("event: tool-call")})
     checks.append({"name": "stream_has_tool_results", "passed": stream_text.count("event: tool-result") >= 8, "count": stream_text.count("event: tool-result")})
@@ -94,10 +120,12 @@ def main() -> int:
         model = str(conversation.get("model") or "")
     except Exception:
         conversation = {}
+    tool_results = int(conversation.get("tool_results") or 0) if isinstance(conversation, dict) else 0
     checks.append({"name": "conversation_provider_is_nvidia_nim", "passed": provider == "nvidia_nim", "provider": provider})
     checks.append({"name": "conversation_model_recorded", "passed": bool(model), "model": model})
-    checks.append({"name": "status_records_benchmark_screenshot", "passed": bool(status_value(status_text, "benchmark_screenshot"))})
-    checks.append({"name": "status_records_workflow_checker", "passed": bool(status_value(status_text, "workflow_checker"))})
+    checks.append({"name": "conversation_has_tool_results", "passed": tool_results >= 8, "tool_results": tool_results})
+    checks.append({"name": "status_records_benchmark_screenshot", "passed": status_path_exists(status_text, "benchmark_screenshot", "full-benchmark-webui.png")})
+    checks.append({"name": "status_records_workflow_checker", "passed": status_path_exists(status_text, "workflow_checker", "opencode-workflow-checker.json")})
 
     failed = [check for check in checks if not check["passed"]]
     report = {
@@ -106,6 +134,7 @@ def main() -> int:
         "provider": provider,
         "model": model,
         "required_files": REQUIRED_FILES,
+        "required_browser_markers": REQUIRED_BROWSER_MARKERS,
         "checks": checks,
         "failed_checks": failed,
     }
