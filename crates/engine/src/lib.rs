@@ -3,6 +3,7 @@
 //! Forge Engine - Core orchestration, tool execution, provider routing, and benchmark adapter.
 
 pub mod agent;
+pub mod agentic_run;
 pub mod benchmark;
 pub mod change_bus;
 pub mod config;
@@ -20,6 +21,7 @@ pub mod tool_parts;
 pub mod types;
 
 pub use agent::*;
+pub use agentic_run::*;
 pub use benchmark::*;
 pub use change_bus::*;
 pub use config::*;
