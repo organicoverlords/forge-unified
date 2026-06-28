@@ -5,14 +5,14 @@ Updated: 2026-06-28
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current repair HEAD: `09c1335e6c8ed2d9eec6035be1cb06338a62b1e6`
+- Current repair HEAD: pending workflow proof after `cd51f6dc169f0da621ce85dc3cb1d62cdd379c5b`
 - Previous accepted proof HEAD: `25c7a993b0b7be230f9ad26cc123a153ef95e505`
 - Previous same-head workflows: CI `28302865160`, Build Proof `28302865166`, Live WebUI Feature Sprint `28302865162` all green for that older accepted proof head.
 - Previous accepted proof artifact: Live WebUI Feature Sprint artifact `7928488316`, digest `sha256:0bb285fe270c03f58dc228090c56eb97fb18e7e96ba34dfffa2268419b7f2e1b`.
-- Latest failed inspected HEAD before this update: `4a016e0024e323b8cca066f771b31cd4609b268e`; same-head Build Proof `28311822270`, CI `28311822274`, and Live WebUI Feature Sprint `28311822267` failed.
-- Latest failure diagnosis: Live WebUI job `83877891507` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 239: unexpected EOF while looking for matching '"'`, so no full benchmark conversation/stream artifacts were produced.
-- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now writes `live-proof-status.txt` with a quoted-safe heredoc and closes the final success `echo`, preserving NVIDIA NIM-only/local-shortcut rejection gates and browser screenshot checks.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-status-quote-repair-20260628T0548Z.md`.
+- Latest failed inspected HEAD before this update: `5d464d688e752af54d30c2d703ab1988aae7e98c`; same-head CI `28312998295`, Build Proof `28312998277`, and Live WebUI Feature Sprint `28312998276` failed.
+- Latest failure diagnosis: Live WebUI job `83880953227` compiled `forge-app`, then `scripts/smoke/live-webui-feature-sprint.sh` failed with `line 249: unexpected EOF while looking for matching '"'`, so no full benchmark conversation/stream artifacts were produced.
+- Latest repair: `scripts/smoke/live-webui-feature-sprint.sh` now writes `live-proof-status.txt` via a Python writer and prints final status with separate `printf` lines, preserving NVIDIA NIM-only/local-shortcut rejection gates and browser screenshot checks.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-tail-quote-repair-20260628T0655Z.md`.
 - Latest parity slice retained: `crates/engine/src/orchestrator.rs` annotates provider-selected successful file/patch tool results with OpenCode `toolResultOutput` / `completeToolCall` style normalized attachment metadata.
 
 ## Accepted live full benchmark proof
@@ -47,7 +47,7 @@ Proof requirements satisfied by the older accepted artifact:
 - Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
 - Repaired the live proof harness shell marker/predicate parsing after failed parser runs and hardened conversation/model extraction.
 - Repaired the live proof harness again after a line-127 parser failure by replacing fragile inline JQ predicates with Python assertions and safer marker checks.
-- Repaired the live proof harness final proof-status writer after a line-239 unmatched-quote failure by replacing the final single-line status echo with a heredoc and closing the success echo.
+- Repaired the live proof harness final proof-status writer after line-239 and line-249 unmatched-quote failures by replacing the fragile tail heredoc/single-line echo with a Python status writer and separate `printf` lines.
 
 ## OpenCode source anchors retained
 
@@ -78,9 +78,3 @@ Proof requirements satisfied by the older accepted artifact:
 - Live language-server process/client diagnostics are not implemented yet.
 - Full OpenCode formatter catalog/config/runtime remains partial.
 - Full NIM-backed streamed compaction remains incomplete.
-- OpenCode database-backed persistence remains partial; current part IDs are deterministic schema-shaped compatibility IDs, not database-backed rows.
-
-## Next targets
-
-1. Prove the latest HEAD with same-head CI, Build Proof, and Live WebUI Feature Sprint.
-2. If same-head proof still fails, inspect the failing current-head log before adding any new feature slice.
