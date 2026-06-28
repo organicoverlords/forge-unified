@@ -8,9 +8,9 @@ Updated: 2026-06-28
 - Latest accepted same-head proof HEAD: `0579b550bfb489a0a16289b98a6eafabcd14c0d6`
 - Accepted same-head workflows: CI `28336034206`, Build Proof `28336034212`, Live WebUI Feature Sprint `28336034202`.
 - Accepted Live WebUI artifact: `7938654225`, `live-webui-feature-sprint-proof`, digest `sha256:c631cbb7570af2563475220513924f134ec1b96d4c36b2304bb85af344c5448b`.
-- Latest hardening slice after accepted proof: `scripts/smoke/check-full-agentic-benchmark.py` now uses exact-command claim detection so required final labels like `tests run` do not create false cargo-test/build claims.
-- Latest proof doc: `docs/generated/proof/full-benchmark-exact-command-claim-checker-20260628T2245Z.md`.
-- Do not claim the new exact-command checker head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest hardening slice after accepted proof: `scripts/smoke/check-full-agentic-benchmark.py` now treats only exact `cargo check` / `cargo build` success prose as a build/check claim that requires matching ShellCommand proof.
+- Latest proof doc: `docs/generated/proof/full-benchmark-exact-cargo-build-claim-checker-20260628T2350Z.md`.
+- Do not claim the new exact cargo build/check checker head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
@@ -57,7 +57,7 @@ Proof requirements satisfied by artifact `7938654225`:
 - Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
 - Full benchmark prompt now explicitly rejects blank/JSON/tool-call final output and requires a Markdown final self-check for exact labels before sending.
 - `scripts/smoke/check-live-webui-proof-manifest.py` now requires screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, absence of local/upstream identity shortcuts, PNG screenshot bytes, browser proof markers, conversation tool-result counts, and status-path consistency.
-- `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading the required `tests run` label as a cargo-test claim.
+- `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading required labels or generic report prose as cargo command claims.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -81,7 +81,7 @@ Proof requirements satisfied by artifact `7938654225`:
 
 ## Current gaps / do not overclaim
 
-- The accepted same-head proof is for `0579b550bfb489a0a16289b98a6eafabcd14c0d6`; the latest exact-command checker commit needs its own same-head workflow run before claiming proof on that newer head.
+- The accepted same-head proof is for `0579b550bfb489a0a16289b98a6eafabcd14c0d6`; the latest exact cargo build/check claim checker commit needs its own same-head workflow run before claiming proof on that newer head.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
