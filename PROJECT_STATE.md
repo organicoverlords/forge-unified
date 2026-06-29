@@ -5,18 +5,18 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof HEAD before the formatter slice: `75296872eea904634c0eb565f7fe917de97443a0`
-- Accepted same-head workflows for that baseline: CI `28348220256`, Build Proof `28348220266`, Live WebUI Feature Sprint `28348220251`.
-- Accepted Live WebUI artifact for that baseline: `7942541939`, `live-webui-feature-sprint-proof`, digest `sha256:6a667dbf03c3232b34d263c716a0623e3f0f769c470549b7d6ab73ce81d3af03`.
-- Latest source-backed slice: formatter catalog parity in `crates/engine/src/tool/file_ops.rs`, backed by OpenCode `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts`.
-- Latest proof doc: `docs/generated/proof/source-backed-formatter-catalog-20260629T0447Z.md`.
-- Do not claim the formatter catalog head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof HEAD before this formatter-completion slice: `caa80651d173c96703dbb5df37d23a2ca1762eca`
+- Accepted same-head workflows for that baseline: CI `28349510016`, Build Proof `28349509993`, Live WebUI Feature Sprint `28349510045`.
+- Accepted Live WebUI artifact for that baseline: `7942987277`, `live-webui-feature-sprint-proof`, digest `sha256:b38e189f46a037213b7293d9c43e563b10f4bf200e03cdf6df4d5639fd71e660`.
+- Latest source-backed slice: formatter catalog completion in `crates/engine/src/tool/file_ops.rs`, backed by OpenCode `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts`.
+- Latest proof doc: `docs/generated/proof/source-backed-formatter-catalog-completion-20260629T0555Z.md`.
+- Do not claim the formatter-completion head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `75296872eea904634c0eb565f7fe917de97443a0`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `caa80651d173c96703dbb5df37d23a2ca1762eca`.
 
-Proof requirements satisfied by artifact `7942541939`:
+Proof requirements satisfied by artifact `7942987277`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -62,6 +62,7 @@ Proof requirements satisfied by artifact `7942541939`:
 - File tool and patch-event runtime metadata now emit Forge-owned contract keys (`forge_*`) rather than upstream-branded runtime metadata or package source paths; exact reference paths remain in proof/docs only.
 - Full benchmark prompt now makes the Phase 4 repository edit the immediate next operation after `.agent_test` verification and explicitly blocks the final report until a dedicated file-editing tool result outside `.agent_test` exists.
 - File write/edit formatting now uses a source-backed formatter catalog with OpenCode-derived formatter families while keeping formatter absence/failure contained in tool metadata and resynchronizing UTF-8 BOM after formatter mutation.
+- Formatter coverage now includes the remaining upstream OpenCode formatter families: Elixir/Phoenix template files via `mix`, experimental JS/TS via `oxfmt`, R via `air`, PHP via `pint`, Haskell via `ormolu`, Clojure/EDN via `cljfmt`, and D via `dfmt`.
 
 ## OpenCode source anchors retained in developer docs only
 
