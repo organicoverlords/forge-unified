@@ -5,18 +5,29 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `80d4b968221d3d76cfb53f09aecfa6d60f534cd9`
-- Latest accepted same-head proof before this finalization-stop slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head before this state update: `2d7f91619e700713d4554b967b6ccf47c70c3964`
+- Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed final report stop rule in the live benchmark prompt.
-- Latest proof doc: `docs/generated/proof/live-benchmark-final-report-stop-rule-20260629T1452Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `80d4b968221d3d76cfb53f09aecfa6d60f534cd9` or a later head containing the fix.
+- Latest source-backed slice: live benchmark quality gate now matches final-report labels case-insensitively, aligned with existing case-insensitive Founder/Technical browser proof matching and OpenCode max-step text-summary behavior.
+- Latest proof doc: `docs/generated/proof/live-benchmark-quality-label-case-insensitive-20260629T1515Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `2d7f91619e700713d4554b967b6ccf47c70c3964` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
-Latest same-head status before this finalization-stop slice:
+Latest same-head status before this quality-gate slice:
+
+- Head: `65fee6348197ee973af21809e97f9d1cc5cb966e`.
+- Build Proof `28381036315`: success.
+- CI `28381036299`: success.
+- Live WebUI Feature Sprint `28381036286`: failure.
+- Live artifact `7955936640`: `live-webui-feature-sprint-proof`, digest `sha256:59d7889e98b26db786ccd9261c0b6d4fe9144270595cc1dea0a2e08838a32c4f`.
+- Live job `84083393327` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
+- The checked script already treats `Founder report` and `Technical report` as case-insensitive in browser proof, but the quality scorer used exact case-sensitive final-report label matching.
+- The inspected OpenCode source requires text-only finalization with a summary, remaining tasks, and recommendations; it does not require exact capitalization of report headings.
+
+Previous same-head status before the finalization-stop slice:
 
 - Head: `9ad3db25c029c97f0c36b575add4ddebbe06b033`.
 - Build Proof `28378470751`: success.
@@ -53,9 +64,9 @@ Proof requirements satisfied by artifact `7945828859`:
 
 ## Latest implementation changes
 
-- Hardened `scripts/smoke/full-agentic-benchmark-prompt.txt` with an explicit OpenCode-backed stop rule: after the evidence-completing validation shell result, tools are disabled and the model must answer in text only.
-- Added source backing in the prompt for `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts`.
-- Converted Phase 6 cleanup from another tool action into a requirement to use the existing step 10 validation/status evidence, preventing post-evidence validation loops.
+- Updated `scripts/smoke/score-live-benchmark-quality.py` so final-report label matching is case-insensitive and reports `matching: case_insensitive` in scoring evidence.
+- Kept the hard checker strict while avoiding false quality-gate failures on equivalent Markdown heading capitalization.
+- Retained `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` as the source anchor for max-step no-tools text finalization behavior.
 - Existing final-report contract gate remains: `scripts/smoke/check-final-report-template-contract.py` in CI.
 - Existing fuzzy file-edit behavior remains: exact replacement first, then OpenCode-backed line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching with conservative uniqueness.
 
