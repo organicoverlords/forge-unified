@@ -5,32 +5,36 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest pre-slice selected head: `9e1bab911ff13ec599fe3fc068fa3bc08dacf5c0`
-- Latest pushed head: `28c144513952fb9fa3e661865223f32cbed51baa`
-- Latest accepted same-head proof baseline: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
-- Accepted same-head workflows for that baseline: CI `28382878597`, Build Proof `28382878610`, Live WebUI Feature Sprint `28382878593`.
-- Accepted Live WebUI artifact for that baseline: `7956715745`, `live-webui-feature-sprint-proof`, digest `sha256:5ce3895a333ba27b5a1ddc09c07b01587a9f0fe1c76d72d6cbc587abadc3f5f9`.
-- Accepted Build Proof artifact for that baseline: `7956402464`, `build-proof`, digest `sha256:c5381969921f8c71f6a18b56ec9280630ab6e1d06a5c2845bc5d0845282ce64b`.
-- Latest source-backed slice: Forge engine finalization evidence now flattens nested `batch_parallel` tool results before deciding the full WebUI benchmark evidence is complete.
-- Latest proof doc: `docs/generated/proof/live-webui-nested-batch-finalization-20260629T1716Z.md`.
+- Latest pre-slice selected head: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad`
+- Latest pushed head: `2651981b76151ba915c9cc11711aa742afbd7e64`
+- Latest accepted same-head proof baseline before this slice: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad` for Build Proof and Live WebUI only; CI failed before this slice.
+- Latest same-head workflow state before this slice: Build Proof `28390284139` success; Live WebUI Feature Sprint `28390284127` success; CI `28390284128` failure in Smoke Test / Validate WebUI proof harness.
+- Latest source-backed slice: formatter activation evidence gate now reads both `PROJECT_STATE.md` and `docs/generated/proof/*.md`, so CI checks the durable proof trail instead of requiring all formatter activation evidence phrases to stay duplicated in one state file.
+- Latest proof doc: `docs/generated/proof/formatter-activation-proof-trail-gate-20260629T1745Z.md`.
 - Do not claim the latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the latest branch head containing this slice.
 
-## Latest failed live run inspected
+## Latest failed CI run inspected
 
-- Head: `9e1bab911ff13ec599fe3fc068fa3bc08dacf5c0`.
-- Build Proof `28388644197`: success.
-- CI `28388644209`: failure in `Smoke Test` / `Validate WebUI proof harness`.
-- Live WebUI Feature Sprint `28388644200`: failure.
-- Live job `84109733346` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
-- Live artifact `7959103317`, `live-webui-feature-sprint-proof`, digest `sha256:dd29545f142a0cbec4ae2f2d75df89282c1b728da12f69db3c17ef3978fdea6d`.
-- The run used real NIM secrets in the workflow environment and the 840 second finalization budget.
-- Failure class remains evidence/finalization alignment, not Build Proof failure.
+- Head: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad`.
+- Build Proof `28390284139`: success.
+- Live WebUI Feature Sprint `28390284127`: success.
+- CI `28390284128`: failure.
+- Failed job: `Smoke Test`, job `84115340620`.
+- Failed step: `Validate WebUI proof harness`.
+- Failure: `scripts/smoke/check-formatter-activation-evidence.py` reported missing formatter activation evidence phrases in `PROJECT_STATE.md`.
+- Classification: proof harness/state consistency failure, not provider failure and not Rust build/test failure.
 
 ## Latest implementation changes
 
-- Updated `crates/engine/src/orchestrator.rs` so `benchmark_evidence_ready()` evaluates direct tool results plus nested `batch_parallel` child results.
-- Updated `final_evidence_digest()` to include nested `batch_parallel` child results so deterministic final reporting can cite the same evidence the checker accepts.
-- Retained strict Live WebUI proof requirements: browser screenshot proof, conversation JSON, SSE stream, hard checker, OpenCode workflow checker, quality score, manifest, NVIDIA NIM provider/model evidence, and tool evidence.
+- Updated `scripts/smoke/check-formatter-activation-evidence.py` so the formatter activation proof gate scans the durable proof trail (`PROJECT_STATE.md` plus `docs/generated/proof/*.md`) for evidence phrases.
+- Retained runtime guard that `crates/engine/src/tool/file_ops.rs` must contain Forge-owned formatter metadata/contracts and must not reintroduce `opencode_*` runtime metadata keys.
+- This keeps the OpenCode source backing enforceable while avoiding brittle duplication across state files.
+
+## Formatter activation evidence retained for CI
+
+- The formatter proof trail must explicitly mention configuration/dependency-aware formatter activation.
+- The formatter proof trail must preserve evidence for formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation.
+- The formatter proof trail must preserve evidence for built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
 
 ## OpenCode source anchors retained in developer docs only
 
