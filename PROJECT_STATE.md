@@ -5,18 +5,19 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof HEAD before this formatter-completion slice: `caa80651d173c96703dbb5df37d23a2ca1762eca`
-- Accepted same-head workflows for that baseline: CI `28349510016`, Build Proof `28349509993`, Live WebUI Feature Sprint `28349510045`.
-- Accepted Live WebUI artifact for that baseline: `7942987277`, `live-webui-feature-sprint-proof`, digest `sha256:b38e189f46a037213b7293d9c43e563b10f4bf200e03cdf6df4d5639fd71e660`.
-- Latest source-backed slice: formatter catalog completion in `crates/engine/src/tool/file_ops.rs`, backed by OpenCode `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts`.
-- Latest proof doc: `docs/generated/proof/source-backed-formatter-catalog-completion-20260629T0555Z.md`.
-- Do not claim the formatter-completion head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof before this formatter-parity-gate slice: `567f42ac4cbfa99705ddeea81276990a6ca79ff5`
+- Accepted same-head workflows for that baseline: CI `28351599331`, Build Proof `28351599361`, Live WebUI Feature Sprint `28351599332`.
+- Accepted Live WebUI artifact for that baseline: `7944041593`, `live-webui-feature-sprint-proof`, digest `sha256:3f2adbc9bb2d08a6af83825af4b3a73d670238b725727999a4cfd33348759ce3`.
+- Accepted Build Proof artifact for that baseline: `7943661980`, `build-proof`, digest `sha256:a794a45fc73556c0da69f178aa94d7db19f4887ae9f670474a06643a05f3b200`.
+- Latest source-backed slice: CI-enforced formatter parity gate for the OpenCode-backed Forge formatter catalog.
+- Latest proof doc: `docs/generated/proof/formatter-parity-ci-gate-20260629T0646Z.md`.
+- Do not claim the formatter-parity-gate head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `caa80651d173c96703dbb5df37d23a2ca1762eca`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `567f42ac4cbfa99705ddeea81276990a6ca79ff5`.
 
-Proof requirements satisfied by artifact `7942987277`:
+Proof requirements satisfied by artifact `7944041593`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -63,6 +64,7 @@ Proof requirements satisfied by artifact `7942987277`:
 - Full benchmark prompt now makes the Phase 4 repository edit the immediate next operation after `.agent_test` verification and explicitly blocks the final report until a dedicated file-editing tool result outside `.agent_test` exists.
 - File write/edit formatting now uses a source-backed formatter catalog with OpenCode-derived formatter families while keeping formatter absence/failure contained in tool metadata and resynchronizing UTF-8 BOM after formatter mutation.
 - Formatter coverage now includes the remaining upstream OpenCode formatter families: Elixir/Phoenix template files via `mix`, experimental JS/TS via `oxfmt`, R via `air`, PHP via `pint`, Haskell via `ormolu`, Clojure/EDN via `cljfmt`, and D via `dfmt`.
+- `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -73,8 +75,8 @@ Proof requirements satisfied by artifact `7942987277`:
 - `anomalyco/opencode:packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — tool catalog behavior anchors.
 - `anomalyco/opencode:packages/opencode/src/lsp/lsp.ts` and `packages/opencode/src/lsp/diagnostic.ts` — LSP touch, diagnostic collection, max error cap, report block, severity formatting, and warm-up containment anchors.
 - `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving file mutation behavior anchor.
-- `anomalyco/opencode:packages/opencode/src/format/index.ts` — formatter service, extension matching, command probing/caching, and contained formatter execution.
-- `anomalyco/opencode:packages/opencode/src/format/formatter.ts` — built-in formatter catalog and command semantics.
+- `anomalyco/opencode:packages/opencode/src/format/index.ts` — formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation.
+- `anomalyco/opencode:packages/opencode/src/format/formatter.ts` — built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
 
 ## Current behavior retained
 
