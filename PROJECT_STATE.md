@@ -5,18 +5,28 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `32e6f7f93243e6e7319fa3701b49584b782925ce`
-- Latest accepted same-head proof before this live-timeout recovery slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head before this state update: `690ace8cd6d4a3d60a348fde7ca2537335032f0e`
+- Latest accepted same-head proof before this fuzzy file edit slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed live WebUI max-step timeout recovery and Phase 4 browser edit-marker normalization in the live proof harness.
-- Latest proof doc: `docs/generated/proof/live-webui-max-step-timeout-recovery-20260629T1214Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `32e6f7f93243e6e7319fa3701b49584b782925ce` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed fuzzy file edit matching in `crates/engine/src/tool/file_ops.rs`.
+- Latest proof doc: `docs/generated/proof/source-backed-fuzzy-file-edit-matching-20260629T1246Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `690ace8cd6d4a3d60a348fde7ca2537335032f0e` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
-Latest failed same-head gate before the live-timeout recovery source fix:
+Latest same-head status before this fuzzy edit slice:
+
+- Head: `83b6ba30bb064d2f0aa92bb44beb3d75d69db3d8`.
+- Build Proof `28371596991`: success.
+- CI `28371597011`: success.
+- Live WebUI Feature Sprint `28371596978`: failure.
+- Live job `84050445860` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
+- The live stream used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash` and reached long-running tool activity before timeout.
+- The failure path exposed stale `file_edit` recovery followed by extra read/write work; Forge still used exact-only replacement while upstream OpenCode uses a layered edit replacement pipeline.
+
+Previous failed same-head gate before the live-timeout recovery source fix:
 
 - Head: `36f67a7fe760d54fdc10b24ad89204790a56e095`.
 - Build Proof `28370125986`: success.
@@ -25,38 +35,6 @@ Latest failed same-head gate before the live-timeout recovery source fix:
 - Live artifact metadata inspected: `7951317296`, `live-webui-feature-sprint-proof`, digest `sha256:30142c86d5d834522543331c304e5bb2dfca507ac6594eadfd22995ab957d168`.
 - Live WebUI Feature Sprint failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
 - Source mismatch found in `scripts/smoke/live-webui-feature-sprint.sh`: the live browser proof still required literal `apply_patch` even though Forge's Phase 4 evidence accepts `FileEdit`, `FileWrite`, or `ApplyPatch`; the script also hard-failed a timed-out curl before accepting salvaged hard-checker and OpenCode-workflow checker evidence from an evidence-ready max-step finalization.
-- Artifact ZIP was available, but the local automation runtime could not unpack connector-downloaded ZIP bytes during this run, so this patch is based on failing workflow metadata, checked-in harness code, and the previous PR-body diagnostics for this failure path.
-
-Previous failed same-head gate before command-claim scorer tightening:
-
-- Head: `64892c27b403b80a019cf410228bad9660defaa0`.
-- Build Proof `28368200124`: success.
-- CI `28368200120`: failure.
-- Live WebUI Feature Sprint `28368200123`: failure.
-- CI failed in `Smoke Test` / `Validate WebUI proof harness`: `max-step finalization parity check failed: fallback report includes rollback strategy`.
-- Live WebUI Feature Sprint used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash`; hard full-benchmark checker passed, OpenCode workflow checker passed, and the stream contained 19 tool-call events and 19 tool-result events before timeout.
-- Live WebUI still failed because the full benchmark stream did not finish before the outer timeout and the quality scorer treated negative or human-readable command mentions as unproven command claims.
-
-Previous failed same-head gate before Phase 4 browser marker normalization:
-
-- Head: `117a0ebe9b11c84a760190a472c02cac05f1869b`.
-- Build Proof `28367497968`: success.
-- CI `28367497919`: failure.
-- Live WebUI Feature Sprint `28367497952`: failure.
-- CI failed in `Smoke Test` / `Validate WebUI proof harness`.
-- Live WebUI Feature Sprint failed in `live-webui-feature-sprint` and `Check full benchmark evidence and quality score`.
-- Live artifact metadata inspected: `7950149603`, `live-webui-feature-sprint-proof`, digest `sha256:f7d1bce77f63d38d6adb07bdc037ed27a5baee23799f1ccd3f7a8fdd91f247bd`.
-- Source mismatch found: the quality scorer's browser usefulness gate required the literal `apply_patch` marker even though the Phase 4 evidence gate accepts a successful `FileEdit`, `FileWrite`, or `ApplyPatch` outside `.agent_test` plus status/diff command evidence.
-
-Previous failed same-head gate before command-claim normalization:
-
-- Head: `4ff7c2f6f7cfc758c3669fe59d5407163ccf70b1`.
-- Build Proof `28364990761`: success.
-- CI `28364990747`: failure.
-- Live WebUI Feature Sprint `28364990741`: failure.
-- CI failed in `Smoke Test` / `Validate WebUI proof harness`: `max-step finalization parity check failed: fallback report is conservative`.
-- Live WebUI app execution used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash`; hard checker and OpenCode workflow checker passed with 40 tool-call events and 38 tool-result events.
-- Live WebUI quality score failed on `test_and_build_claims_match_tool_commands` because human-readable validation claims were not normalized back to exact successful tool command metadata, plus a lower-weight bracket semantic check was too broad.
 
 ## Accepted live full benchmark proof
 
@@ -73,54 +51,15 @@ Proof requirements satisfied by artifact `7945828859`:
 
 ## Latest implementation changes
 
-- Exposed repo/shell/search/file tools to the provider-facing tool schema.
-- Added `scripts/smoke/full-agentic-benchmark-prompt.txt` as the benchmark fixture.
-- Added a full benchmark prompt gate to `scripts/smoke/live-webui-feature-sprint.sh`.
-- Accepted schema-shaped file path arguments like `{path: ...}` for read/delete tools.
-- Returned failed tool executions to the model as tool results instead of dropping them.
-- Normalized `/` and empty file paths to workspace root for repo-scoped file tools.
-- Added clean no-tools finalization from a compact evidence digest when the model exhausts tool rounds.
-- Added provider-executed metadata propagation for provider-selected tool results in the orchestrated model loop.
-- Added deterministic base fields to generated TextPart, ReasoningPart, SnapshotPart, CompactionPart, FilePart, ToolPart, and PatchPart payloads.
-- Added a repeated-tool doom-loop guard in `crates/engine/src/orchestrator.rs` using threshold `3`, with visible interruption text and run metadata.
-- Added a structured doom-loop permission envelope.
-- Added ToolPart-style result metadata for completed/failed tool states: status, title, call id, timing, output shape, and error fields.
-- Added normalized attachment metadata for successful file/patch tool results.
-- Repaired the live proof harness startup path so workflow artifacts include the exact launched command and useful server logs when readiness fails.
-- Rewrote the live proof harness after repeated unmatched-quote failures so it uses self linting, quote-safe marker loops, Python JSON creation, and plain status output.
-- Added provider-visible independence guards to the live proof harness for `/api/tools`.
-- Removed upstream source paths and upstream-prefixed metadata keys from WebUI runtime ToolPart lifecycle/result payloads in `crates/webui/src/events.rs`.
-- Added live conversation snapshot streaming in `crates/webui/src/events_live.rs` so long natural-language WebUI/NIM runs expose conversation, ToolPart, tool-result, file-change, and text evidence while the run is still executing.
-- Tightened the full benchmark prompt contract so the live WebUI run asks the model for the same tool-backed evidence and report labels that the checker verifies.
-- Added tolerant batch_parallel request normalization for explicit and one-key shorthand tool call shapes.
-- Added timeout artifact salvage so failed full benchmark runs still upload `full-benchmark-conversation.json` and both checker JSON files when possible.
-- Bounded the Live WebUI benchmark budget to 36 rounds / 540 seconds and tightened the prompt to stop Phase 2 once checker-required evidence exists.
-- Aligned Build Proof with the same benchmark budget and both benchmark checkers, so it no longer runs a stale longer proof contract.
-- Full benchmark and workflow checkers now count nested batch_parallel outputs as real evidence.
-- Full benchmark prompt now explicitly prevents the doom-loop/internal-search path that blocked Phase 3.
-- Orchestrator benchmark guidance now requires dedicated `file_write` evidence for temporary benchmark files and prevents unproven build/check/test claims in fallback or model-written final reports.
-- Forced finalization evidence now includes exact tool `path` and `command` fields, matching the tool-result output semantics used by the upstream source-backed ToolPart lifecycle.
-- Full benchmark prompt final-answer contract now requires an exact opening confidence block and final self-check for the uppercase labels `VERIFIED`, `LIKELY`, and `UNKNOWN`.
-- Full benchmark prompt now explicitly rejects blank/JSON/tool-call final output and requires a Markdown final self-check for exact labels before sending.
-- `scripts/smoke/check-live-webui-proof-manifest.py` now requires screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, absence of local/upstream identity shortcuts, PNG screenshot bytes, browser proof markers, conversation tool-result counts, and status-path consistency.
-- `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading required labels or generic report prose as cargo command claims.
-- `file_edit` missing-`old_string` failures now return structured stale-edit recovery metadata with path, previews, recovery hint, recommended next tools, and a Forge failure lifecycle marker.
-- File tool and patch-event runtime metadata now emit Forge-owned contract keys (`forge_*`) rather than upstream-branded runtime metadata or package source paths; exact reference paths remain in proof/docs only.
-- Full benchmark prompt now makes the Phase 4 repository edit the immediate next operation after `.agent_test` verification and explicitly blocks the final report until a dedicated file-editing tool result outside `.agent_test` exists.
-- File write/edit formatting now uses a source-backed formatter catalog with OpenCode-derived formatter families while keeping formatter absence/failure contained in tool metadata and resynchronizing UTF-8 BOM after formatter mutation.
-- Formatter coverage now includes the remaining upstream OpenCode formatter families: Elixir/Phoenix template files via `mix`, experimental JS/TS via `oxfmt`, R via `air`, PHP via `pint`, Haskell via `ormolu`, Clojure/EDN via `cljfmt`, and D via `dfmt`.
-- `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
-- `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
-- `scripts/smoke/check-formatter-config-activation-gap.py` now enforces that formatter proof docs do not overclaim config/dependency activation beyond the current source reality.
-- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI and tolerates equivalent evidence-bound conservative fallback wording, including lowercase Markdown labels.
-- `crates/engine/src/orchestrator.rs` rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
-- `scripts/smoke/score-live-benchmark-quality.py` now normalizes human-readable command claims back to successful tool command metadata, ignores prohibitive command mentions, and only rejects actual placeholder brackets.
-- `scripts/smoke/score-live-benchmark-quality.py` now accepts any real Phase 4 edit marker in browser proof (`apply_patch`, `file_edit`, `file_write`, or the matching visible tool-card titles) instead of false-failing valid `file_edit` / `file_write` repo edits.
-- `scripts/smoke/score-live-benchmark-quality.py` now tightens command-claim extraction so negative evidence disclaimers and generic `bash -n validation passed` prose do not count as unproven tool-command claims.
-- `scripts/smoke/live-webui-feature-sprint.sh` now accepts the same real Phase 4 edit marker set during full browser proof capture and can continue from preserved checker-passing diagnostics when the outer SSE curl times out after evidence-ready max-step finalization.
+- `file_edit` now attempts exact replacement first, then OpenCode-backed fuzzy replacement strategies: line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching.
+- Fuzzy replacement requires a unique matched span unless `replace_all` is explicitly requested, preserving the conservative stale-edit error path when the match is ambiguous.
+- Successful fuzzy edits now report `edit_match_strategy`, matched old-string preview, and a Forge-owned `forge_edit_replacer_contract` in tool metadata.
+- Stale edit failures now include the fuzzy-replacer contract in recovery metadata instead of only reporting exact-match failure.
+- Existing file tool behavior remains: watcher/file/LSP/diagnostic envelopes, formatter metadata, UTF-8 BOM preservation, and Forge-owned runtime metadata.
 
 ## OpenCode source anchors retained in developer docs only
 
+- `anomalyco/opencode:packages/opencode/src/tool/edit.ts` — `replace`, `SimpleReplacer`, `LineTrimmedReplacer`, `WhitespaceNormalizedReplacer`, `IndentationFlexibleReplacer`, `TrimmedBoundaryReplacer`, and conservative ambiguous/not-found edit errors.
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, provider-executed state, same-call ToolPart update semantics, complete/fail tool-call handling, tool-result output, normalized attachments, repeated-call comparison, and interrupted tool cleanup metadata.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — part base, ToolPart, ToolState, and FilePart schema shape.
 - `anomalyco/opencode:packages/schema/src/session-id.ts` — SessionID prefix semantics.
