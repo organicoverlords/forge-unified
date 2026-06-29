@@ -45,7 +45,7 @@ impl ToolExecutor {
         let write_content = join_bom(&args.content, keep_bom);
         if let Some(parent) = full_path.parent() { fs::create_dir_all(parent).await?; }
         fs::write(&full_path, write_content.as_bytes()).await.with_context(|| format!("Failed to write file: {}", full_path.display()))?;
-        let formatter_status = format_file_like_opencode(&full_path, keep_bom).await;
+        let formatter_status = format_file_like_forge(&full_path, keep_bom).await;
         let final_bytes = fs::read(&full_path).await.unwrap_or_else(|_| write_content.as_bytes().to_vec());
         let final_text = String::from_utf8_lossy(&final_bytes).to_string();
         let kind = if existed { "update" } else { "add" };
@@ -57,8 +57,8 @@ impl ToolExecutor {
         metadata.insert("bom_preserved".to_string(), serde_json::json!(keep_bom));
         metadata.insert("bom_strategy".to_string(), serde_json::json!("writeTextPreservingBom: preserve existing/input UTF-8 BOM and emit at most one BOM"));
         metadata.insert("formatter_status".to_string(), formatter_status);
-        metadata.insert("opencode_formatter_source".to_string(), opencode_formatter_source());
-        metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
+        metadata.insert("forge_formatter_contract".to_string(), forge_formatter_contract());
+        metadata.insert("forge_file_tool_contract".to_string(), forge_file_tool_contract());
         Ok(ToolResult { id: request.id, kind: ToolKind::FileWrite, success: true, output: format!("Written {} bytes to {}", final_bytes.len(), metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")), error: None, duration_ms: 0, metadata })
     }
 
@@ -87,7 +87,7 @@ impl ToolExecutor {
         let keep_bom = existing_bom || new_content.starts_with(UTF8_BOM);
         let write_content = join_bom(&new_content, keep_bom);
         fs::write(&full_path, write_content.as_bytes()).await?;
-        let formatter_status = format_file_like_opencode(&full_path, keep_bom).await;
+        let formatter_status = format_file_like_forge(&full_path, keep_bom).await;
         let final_bytes = fs::read(&full_path).await.unwrap_or_else(|_| write_content.as_bytes().to_vec());
         let final_text = String::from_utf8_lossy(&final_bytes).to_string();
         let files = vec![file_change_record(&args.path, "update", line_count(&final_text), line_count(&args.old_string), keep_bom)];
@@ -98,8 +98,8 @@ impl ToolExecutor {
         metadata.insert("bom_preserved".to_string(), serde_json::json!(existing_bom && keep_bom));
         metadata.insert("bom_strategy".to_string(), serde_json::json!("writeTextPreservingBom: preserve existing/input UTF-8 BOM and emit at most one BOM"));
         metadata.insert("formatter_status".to_string(), formatter_status);
-        metadata.insert("opencode_formatter_source".to_string(), opencode_formatter_source());
-        metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
+        metadata.insert("forge_formatter_contract".to_string(), forge_formatter_contract());
+        metadata.insert("forge_file_tool_contract".to_string(), forge_file_tool_contract());
         Ok(ToolResult { id: request.id, kind: ToolKind::FileEdit, success: true, output: format!("Edited {}", metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")), error: None, duration_ms: 0, metadata })
     }
 
@@ -110,7 +110,7 @@ impl ToolExecutor {
         let files = vec![file_change_record(&path, "delete", 0, 1, false)];
         let mut metadata = file_event_metadata(files);
         metadata.insert("path".to_string(), serde_json::json!(path.clone()));
-        metadata.insert("opencode_file_tool_source".to_string(), opencode_file_tool_source());
+        metadata.insert("forge_file_tool_contract".to_string(), forge_file_tool_contract());
         Ok(ToolResult { id: request.id, kind: ToolKind::FileDelete, success: true, output: format!("Deleted {path}"), error: None, duration_ms: 0, metadata })
     }
 
@@ -227,21 +227,70 @@ fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_j
     let diagnostic_reports = patch_events::diagnostic_reports(&files);
     let diagnostics = patch_events::diagnostics_metadata(&files);
     HashMap::from([
-        ("files".to_string(), serde_json::json!(files)), ("file_events".to_string(), serde_json::json!(file_events)),
-        ("opencode_event_publisher".to_string(), serde_json::json!("opencode.file_tool")), ("opencode_event_source".to_string(), patch_events::opencode_event_source()),
-        ("opencode_watcher_updates".to_string(), serde_json::json!(watcher_updates)), ("opencode_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
-        ("opencode_lsp_warmups".to_string(), serde_json::json!(lsp_warmups)), ("opencode_lsp_diagnostics".to_string(), serde_json::json!(diagnostic_reports)),
-        ("lsp_touches".to_string(), serde_json::json!(lsp_touches)), ("diagnostics".to_string(), diagnostics),
+        ("files".to_string(), serde_json::json!(files)),
+        ("file_events".to_string(), serde_json::json!(file_events)),
+        ("forge_event_publisher".to_string(), serde_json::json!("forge.file_tool")),
+        ("forge_event_contract".to_string(), patch_events::forge_event_contract()),
+        ("forge_watcher_updates".to_string(), serde_json::json!(watcher_updates)),
+        ("forge_filesystem_edits".to_string(), serde_json::json!(filesystem_edits)),
+        ("forge_lsp_warmups".to_string(), serde_json::json!(lsp_warmups)),
+        ("forge_lsp_diagnostics".to_string(), serde_json::json!(diagnostic_reports)),
+        ("lsp_touches".to_string(), serde_json::json!(lsp_touches)),
+        ("diagnostics".to_string(), diagnostics),
     ])
 }
 
-async fn format_file_like_opencode(path: &Path, desired_bom: bool) -> serde_json::Value {
-    let Some(formatter) = formatter_for(path) else { return serde_json::json!({"name": serde_json::Value::Null,"matched": false,"enabled": false,"applied": false,"status": "no_formatter","source": "packages/opencode/src/format/index.ts: Format.file(filepath) returns false when no formatter matches extension"}); };
-    if Command::new(formatter.command).arg("--version").output().await.is_err() { return serde_json::json!({"name": formatter.name,"matched": true,"enabled": false,"applied": false,"status": "formatter_unavailable","command": formatter.command,"extensions": formatter.extensions,"source": "packages/opencode/src/format/index.ts: formatter commands are probed and disabled when unavailable"}); }
+async fn format_file_like_forge(path: &Path, desired_bom: bool) -> serde_json::Value {
+    let Some(formatter) = formatter_for(path) else {
+        return serde_json::json!({
+            "name": serde_json::Value::Null,
+            "matched": false,
+            "enabled": false,
+            "applied": false,
+            "status": "no_formatter",
+            "contract": "formatter probe returned no matching extension"
+        });
+    };
+    if Command::new(formatter.command).arg("--version").output().await.is_err() {
+        return serde_json::json!({
+            "name": formatter.name,
+            "matched": true,
+            "enabled": false,
+            "applied": false,
+            "status": "formatter_unavailable",
+            "command": formatter.command,
+            "extensions": formatter.extensions,
+            "contract": "formatter command was probed and safely disabled when unavailable"
+        });
+    }
     let output = Command::new(formatter.command).args(formatter.args).arg(path).output().await;
     match output {
-        Ok(result) => { let _ = sync_bom_to_file(path, desired_bom).await; serde_json::json!({"name": formatter.name,"matched": true,"enabled": true,"applied": result.status.success(),"status": if result.status.success() { "formatted" } else { "formatter_failed_contained" },"exit_code": result.status.code(),"command": formatter.command,"extensions": formatter.extensions,"bom_resynced": true,"source": "packages/opencode/src/tool/write.ts and edit.ts: if format.file(filepath) succeeds, sync BOM before events"}) }
-        Err(error) => serde_json::json!({"name": formatter.name,"matched": true,"enabled": true,"applied": false,"status": "spawn_failed_contained","command": formatter.command,"extensions": formatter.extensions,"error": error.to_string(),"source": "packages/opencode/src/format/index.ts: formatter spawn errors are logged/contained"}),
+        Ok(result) => {
+            let _ = sync_bom_to_file(path, desired_bom).await;
+            serde_json::json!({
+                "name": formatter.name,
+                "matched": true,
+                "enabled": true,
+                "applied": result.status.success(),
+                "status": if result.status.success() { "formatted" } else { "formatter_failed_contained" },
+                "exit_code": result.status.code(),
+                "command": formatter.command,
+                "extensions": formatter.extensions,
+                "bom_resynced": true,
+                "contract": "write/edit formatting is contained and BOM is resynchronized before file events"
+            })
+        }
+        Err(error) => serde_json::json!({
+            "name": formatter.name,
+            "matched": true,
+            "enabled": true,
+            "applied": false,
+            "status": "spawn_failed_contained",
+            "command": formatter.command,
+            "extensions": formatter.extensions,
+            "error": error.to_string(),
+            "contract": "formatter spawn errors are contained in tool metadata"
+        }),
     }
 }
 
@@ -252,5 +301,5 @@ fn normalize_bom_bytes(bytes: &[u8], desired_bom: bool) -> Vec<u8> { let mut bod
 fn has_utf8_bom(content: &[u8]) -> bool { content.starts_with(UTF8_BOM_BYTES) }
 fn split_bom(text: &str) -> (bool, String) { let stripped = text.trim_start_matches(UTF8_BOM); (stripped.len() != text.len(), stripped.to_string()) }
 fn join_bom(text: &str, bom: bool) -> String { let (_, stripped) = split_bom(text); if bom { format!("{UTF8_BOM}{stripped}") } else { stripped } }
-fn opencode_formatter_source() -> serde_json::Value { serde_json::json!({"paths": ["packages/opencode/src/format/index.ts", "packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["Format.file(filepath) probes matching formatter commands by extension", "formatter spawn failures are contained", "write/edit call format.file after writing", "Bom.syncFile restores the desired BOM after formatter mutation"]}) }
-fn opencode_file_tool_source() -> serde_json::Value { serde_json::json!({"paths": ["packages/opencode/src/tool/write.ts", "packages/opencode/src/tool/edit.ts", "packages/opencode/src/tool/apply_patch.ts", "packages/core/src/file-mutation.ts"],"behaviors": ["events.publish(FileSystem.Event.Edited)", "events.publish(Watcher.Event.Updated)", "lsp.touchFile(document)", "lsp.diagnostics() -> LSP.Diagnostic.report", "FileMutation.writeTextPreservingBom preserves an existing/input UTF-8 BOM and emits at most one BOM", "Format.file(filepath) runs after write/edit and BOM is resynced"]}) }
+fn forge_formatter_contract() -> serde_json::Value { serde_json::json!({"behaviors": ["probe matching formatter commands by extension", "contain formatter spawn/status failures", "write/edit run formatting after mutation when a formatter is available", "resynchronize desired UTF-8 BOM after formatter mutation"]}) }
+fn forge_file_tool_contract() -> serde_json::Value { serde_json::json!({"behaviors": ["emit file edit events after write/edit/delete", "emit watcher-style update records", "touch LSP documents", "collect contained diagnostic report envelopes", "preserve an existing/input UTF-8 BOM and emit at most one BOM", "run formatting after write/edit and resynchronize BOM"]}) }
