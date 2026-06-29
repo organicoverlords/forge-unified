@@ -31,12 +31,12 @@ Added a deterministic CI smoke guard:
 - `scripts/smoke/check-formatter-config-activation-gap.py`
 - `.github/workflows/ci.yml` now compiles and runs the guard in the smoke-test job.
 
-The guard checks that Forge keeps the current limitation explicit: source-backed formatter catalog support exists, but config/dependency-aware formatter activation is not yet claimed as implemented until runtime markers such as `package.json`, `pyproject.toml`, `biome.json`, `composer.json`, `.clang-format`, `.ocamlformat`, or equivalent activation probes exist in `crates/engine/src/tool/file_ops.rs`.
+The guard keeps the current limitation explicit: source-backed formatter catalog support exists, but config/dependency-aware formatter activation is still a known runtime gap until probes such as `package.json`, `pyproject.toml`, `biome.json`, `composer.json`, `.clang-format`, `.ocamlformat`, or equivalent activation probes exist in `crates/engine/src/tool/file_ops.rs`.
 
 ## Why this is not docs-only
 
-This changes executable CI behavior. A future proof/state edit that claims full runtime formatter activation parity before the runtime probes exist will fail CI.
+This changes executable CI behavior. A future proof/state edit that overstates formatter activation support before the runtime probes exist will fail CI.
 
 ## Not claimed
 
-This does not implement full config/dependency-aware formatter activation. The next real runtime slice is still to add those probes to Forge-owned file formatting behavior while keeping runtime metadata independent from upstream OpenCode names.
+This does not implement config/dependency-aware formatter activation. The next real runtime slice is still to add those probes to Forge-owned file formatting behavior while keeping runtime metadata independent from upstream OpenCode names.
