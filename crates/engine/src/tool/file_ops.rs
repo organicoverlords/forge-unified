@@ -309,7 +309,9 @@ fn formatter_for(path: &Path) -> Option<FormatterSpec> {
 const FORMATTERS: &[FormatterSpec] = &[
     FormatterSpec { name: "rustfmt", command: "rustfmt", args: &[], extensions: &["rs"] },
     FormatterSpec { name: "gofmt", command: "gofmt", args: &["-w"], extensions: &["go"] },
+    FormatterSpec { name: "mix", command: "mix", args: &["format"], extensions: &["ex", "exs", "eex", "heex", "leex", "neex", "sface"] },
     FormatterSpec { name: "prettier", command: "prettier", args: &["--write"], extensions: &["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "html", "htm", "css", "scss", "sass", "less", "vue", "svelte", "json", "jsonc", "yaml", "yml", "toml", "xml", "md", "mdx", "graphql", "gql"] },
+    FormatterSpec { name: "oxfmt", command: "oxfmt", args: &[], extensions: &["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"] },
     FormatterSpec { name: "biome", command: "biome", args: &["format", "--write"], extensions: &["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "html", "htm", "css", "scss", "sass", "less", "vue", "svelte", "json", "jsonc", "yaml", "yml", "toml", "xml", "md", "mdx", "graphql", "gql"] },
     FormatterSpec { name: "ruff", command: "ruff", args: &["format"], extensions: &["py", "pyi"] },
     FormatterSpec { name: "uv", command: "uv", args: &["format", "--"], extensions: &["py", "pyi"] },
@@ -326,6 +328,11 @@ const FORMATTERS: &[FormatterSpec] = &[
     FormatterSpec { name: "latexindent", command: "latexindent", args: &["-w", "-s"], extensions: &["tex"] },
     FormatterSpec { name: "gleam", command: "gleam", args: &["format"], extensions: &["gleam"] },
     FormatterSpec { name: "nixfmt", command: "nixfmt", args: &[], extensions: &["nix"] },
+    FormatterSpec { name: "air", command: "air", args: &["format"], extensions: &["R"] },
+    FormatterSpec { name: "pint", command: "./vendor/bin/pint", args: &[], extensions: &["php"] },
+    FormatterSpec { name: "ormolu", command: "ormolu", args: &["-i"], extensions: &["hs"] },
+    FormatterSpec { name: "cljfmt", command: "cljfmt", args: &["fix", "--quiet"], extensions: &["clj", "cljs", "cljc", "edn"] },
+    FormatterSpec { name: "dfmt", command: "dfmt", args: &["-i"], extensions: &["d"] },
 ];
 
 async fn sync_bom_to_file(path: &Path, desired_bom: bool) -> Result<()> { let bytes = fs::read(path).await?; let normalized = normalize_bom_bytes(&bytes, desired_bom); if normalized != bytes { fs::write(path, normalized).await?; } Ok(()) }
@@ -333,5 +340,5 @@ fn normalize_bom_bytes(bytes: &[u8], desired_bom: bool) -> Vec<u8> { let mut bod
 fn has_utf8_bom(content: &[u8]) -> bool { content.starts_with(UTF8_BOM_BYTES) }
 fn split_bom(text: &str) -> (bool, String) { let stripped = text.trim_start_matches(UTF8_BOM); (stripped.len() != text.len(), stripped.to_string()) }
 fn join_bom(text: &str, bom: bool) -> String { let (_, stripped) = split_bom(text); if bom { format!("{UTF8_BOM}{stripped}") } else { stripped } }
-fn forge_formatter_contract() -> serde_json::Value { serde_json::json!({"source_backing": ["packages/opencode/src/format/index.ts", "packages/opencode/src/format/formatter.ts"], "behaviors": ["match formatter commands by extension using a catalog", "probe matching formatter commands and safely disable unavailable commands", "run write/edit formatting after mutation when a formatter is available", "contain formatter spawn/status failures in metadata instead of failing the file tool", "resynchronize desired UTF-8 BOM after formatter mutation"]}) }
+fn forge_formatter_contract() -> serde_json::Value { serde_json::json!({"source_backing": ["packages/opencode/src/format/index.ts", "packages/opencode/src/format/formatter.ts"], "behaviors": ["match formatter commands by extension using a catalog", "probe matching formatter commands and safely disable unavailable commands", "run write/edit formatting after mutation when a formatter is available", "contain formatter spawn/status failures in metadata instead of failing the file tool", "resynchronize desired UTF-8 BOM after formatter mutation", "cover upstream formatter families for Rust, Go, Elixir, JS/TS/web/data/doc, Python, C/C++, shell, Terraform, Zig, Dart, Kotlin, Ruby, OCaml, LaTeX, Gleam, Nix, R, PHP, Haskell, Clojure, and D"]}) }
 fn forge_file_tool_contract() -> serde_json::Value { serde_json::json!({"behaviors": ["emit file edit events after write/edit/delete", "emit watcher-style update records", "touch LSP documents", "collect contained diagnostic report envelopes", "preserve an existing/input UTF-8 BOM and emit at most one BOM", "run formatting after write/edit and resynchronize BOM"]}) }
