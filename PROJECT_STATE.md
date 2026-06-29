@@ -5,13 +5,26 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof before this max-step-finalization-parity slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head: `df3980bd5d13f6c5077e5eb88b08e8672e198352`
+- Latest accepted same-head proof before this quality-fallback slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: CI-enforced max-step/evidence-ready finalization parity gate for Forge's OpenCode-backed no-tools final report behavior.
-- Latest proof doc: `docs/generated/proof/max-step-finalization-parity-ci-gate-20260629T0946Z.md`.
-- Do not claim the max-step-finalization-parity head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest source-backed slice: OpenCode-backed max-step/evidence-ready final report quality fallback for the Live WebUI benchmark scorer.
+- Latest proof doc: `docs/generated/proof/live-benchmark-quality-fallback-final-report-20260629T1012Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `df3980bd5d13f6c5077e5eb88b08e8672e198352` or a later head containing the fix.
+
+## Latest failed live run inspected
+
+Latest failed same-head gate before the source fix:
+
+- Head: `a013b616aac1b390acdc99c97b618a7c7d2cc609`.
+- CI `28363463733`: success.
+- Build Proof `28363463678`: success.
+- Live WebUI Feature Sprint `28363463759`: failure.
+- Failed Live artifact: `7948375599`, digest `sha256:c191e7bad52c8f1978841ceb9e6492fe714bca59a6b3c9621f76fa58c03ad5af`.
+- Failed step: `Check full benchmark evidence and quality score`.
+- The app execution step itself completed successfully; the failure was proof-quality scoring.
 
 ## Accepted live full benchmark proof
 
@@ -68,6 +81,7 @@ Proof requirements satisfied by artifact `7945828859`:
 - `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
 - `scripts/smoke/check-formatter-config-activation-gap.py` now enforces that formatter proof docs do not overclaim config/dependency activation beyond the current source reality.
 - `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI.
+- `crates/engine/src/orchestrator.rs` now rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
 
 ## OpenCode source anchors retained in developer docs only
 
