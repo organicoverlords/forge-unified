@@ -8,23 +8,12 @@ on:
 jobs:
   app-build-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     env:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_NATURAL_OUT: forge-proof/app-build-proof
-      FORGE_NATURAL_TITLE: build one proof artifact with Forge WebUI
-      FORGE_NATURAL_MAX_ROUNDS: "5"
-      FORGE_NATURAL_TIMEOUT_SECONDS: "240"
-      FORGE_NATURAL_PROMPT: |
-        Build exactly one tiny repo artifact through the normal WebUI tools. Do not do broad repo analysis.
-
-        Required steps:
-        1. Read `PROJECT_STATE.md` once.
-        2. Create or update `docs/generated/proof/app-built-one-file.md` with this exact marker: `APP_BUILD_PROOF_WEBUI_NIM`.
-        3. Update `PROJECT_STATE.md` with one dated bullet saying the app-build proof created `docs/generated/proof/app-built-one-file.md` through the WebUI.
-        4. Run exactly: `bash -n scripts/smoke/natural-feature-work.sh 2>&1`.
-        5. Final answer must include files modified, tests run, unresolved risks, and confidence.
+      FORGE_APP_BUILD_OUT: forge-proof/app-build-proof
+      FORGE_APP_BUILD_TIMEOUT_SECONDS: "220"
     steps:
       - uses: actions/checkout@v4
 
@@ -44,8 +33,8 @@ jobs:
             ${{ runner.os }}-app-build-cargo-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-app-build-cargo-
 
-      - name: Build something through WebUI
-        run: bash scripts/smoke/natural-feature-work.sh
+      - name: Build one file through WebUI
+        run: bash scripts/smoke/app-build-one-file.sh
 
       - name: Upload app build proof
         if: always()
