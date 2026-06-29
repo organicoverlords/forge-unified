@@ -7,7 +7,9 @@ OpenCode source anchors:
 
 This guard is intentionally source-backed and UI-facing: final browser proof must
 render stable, readable part cards and route/metadata proof instead of relying on
-raw JSON or raw tool identifiers as the primary user-visible evidence.
+raw JSON or raw tool identifiers as the primary user-visible evidence. It also
+keeps todo/plan status summaries visible, mirroring OpenCode's dedicated
+TodoWriteTool status presentation.
 """
 
 from __future__ import annotations
@@ -34,6 +36,12 @@ REQUIRED_UI_TOKENS = [
     "technical details",
     "if(proofFinal)return;",
     "body.proof-final details{display:none}",
+    "function todoItems(obj)",
+    "function todoSummary(todos)",
+    "function addTodoStatus(el,p)",
+    "todo-status-summary",
+    "todo-counts",
+    "Plan updated",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -44,6 +52,7 @@ REQUIRED_HUMAN_LABELS = [
     "Run tools in parallel",
     "Delegate subtask",
     "Apply patch",
+    "Update plan",
 ]
 
 FORBIDDEN_PRIMARY_MARKERS = [
@@ -56,6 +65,8 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "packages/web/src/components/share/part.module.css",
     "proof-final",
     "human label",
+    "todo status",
+    "todowritetool",
 ]
 
 
@@ -91,6 +102,10 @@ def main() -> int:
     checks.append({
         "name": "final_proof_has_digest_before_messages",
         "passed": "if(proofFinal)box.appendChild(proofDigest());" in ui,
+    })
+    checks.append({
+        "name": "todo_write_gets_status_summary_not_generic_json",
+        "passed": "if(n==='todo_write')return `Plan updated" in ui and "if(n==='todo_write')addTodoStatus(d,p);" in ui,
     })
 
     failed = [check for check in checks if not check["passed"]]
