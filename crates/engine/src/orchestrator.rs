@@ -122,7 +122,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_batch_nested_evidence_finalization".to_string(), serde_json::json!(true)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -158,40 +158,22 @@ async fn model_messages(conversation_mgr: &Arc<RwLock<ConversationManager>>, con
 
 async fn final_evidence_digest(conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> String {
     let conv_mgr = conversation_mgr.read().await;
-    let messages = conv_mgr.get_messages(conversation_id);
-    let results = conversation_tool_results(messages);
-    let mut lines = Vec::new();
-    let mut tool_count = 0usize;
-    let mut failure_count = 0usize;
-    for result in &results {
-        tool_count += 1;
-        if !result.success { failure_count += 1; }
-        lines.push(result_evidence_line(result));
-    }
+    let results = collect_tool_results(conv_mgr.get_messages(conversation_id));
+    let tool_count = results.len();
+    let failure_count = results.iter().filter(|result| !result.success).count();
     let mut digest = format!("provider/model-backed tool loop completed. tool_results={tool_count}; tool_failures={failure_count}.\n");
-    digest.push_str(&lines.into_iter().rev().take(36).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
+    digest.push_str(&results.iter().map(result_evidence_line).rev().take(36).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
     digest
 }
 
 async fn benchmark_evidence_ready(conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> bool {
     let conv_mgr = conversation_mgr.read().await;
-    let messages = conv_mgr.get_messages(conversation_id);
-    let results = conversation_tool_results(messages);
+    let results = collect_tool_results(conv_mgr.get_messages(conversation_id));
     let has_kind = |kind: ToolKind| results.iter().any(|result| result.success && result.kind == kind);
     let has_shell = |needle: &str| results.iter().any(|result| result.success && matches!(result.kind, ToolKind::ShellCommand | ToolKind::TerminalRun) && result_metadata_command(result).unwrap_or("").to_ascii_lowercase().contains(needle));
     let has_path_kind = |kind: ToolKind, path: &str| results.iter().any(|result| result.success && result.kind == kind && result_metadata_path(result) == Some(path));
-    let has_repo_edit = results.iter().any(|result| {
-        result.success
-            && matches!(result.kind, ToolKind::FileEdit | ToolKind::FileWrite | ToolKind::ApplyPatch)
-            && result_metadata_path(result).map(|path| !path.starts_with(".agent_test/")).unwrap_or(true)
-    });
-    let verifies_remaining_files = results.iter().any(|result| {
-        result.success
-            && matches!(result.kind, ToolKind::FileList | ToolKind::ShellCommand | ToolKind::TerminalRun)
-            && result.output.contains(".agent_test/repo_summary.md")
-            && result.output.contains(".agent_test/action_plan.json")
-            && !result.output.contains(".agent_test/investigation.md")
-    });
+    let has_repo_edit = results.iter().any(|result| result.success && matches!(result.kind, ToolKind::FileEdit | ToolKind::FileWrite | ToolKind::ApplyPatch) && result_metadata_path(result).map(|path| !path.starts_with(".agent_test/")).unwrap_or(true));
+    let verifies_remaining_files = results.iter().any(|result| result.success && matches!(result.kind, ToolKind::FileList | ToolKind::ShellCommand | ToolKind::TerminalRun) && result.output.contains(".agent_test/repo_summary.md") && result.output.contains(".agent_test/action_plan.json") && !result.output.contains(".agent_test/investigation.md"));
     has_kind(ToolKind::Task)
         && has_kind(ToolKind::BatchParallel)
         && (has_kind(ToolKind::RepoInfo) || has_kind(ToolKind::FileList))
@@ -208,23 +190,26 @@ async fn benchmark_evidence_ready(conversation_mgr: &Arc<RwLock<ConversationMana
         && (has_shell("bash -n") || has_shell("cargo check") || has_shell("cargo test") || has_shell("cargo build"))
 }
 
-fn conversation_tool_results(messages: &[Message]) -> Vec<ToolResult> {
-    let mut results: Vec<ToolResult> = messages.iter().filter_map(|message| message.tool_results.as_ref()).flatten().cloned().collect();
-    let nested = expand_batch_parallel_results(&results);
-    results.extend(nested);
-    results
+fn collect_tool_results(messages: &[Message]) -> Vec<ToolResult> {
+    let mut out = Vec::new();
+    for message in messages {
+        if let Some(results) = &message.tool_results {
+            for result in results {
+                out.push(result.clone());
+                expand_batch_result(result, &mut out);
+            }
+        }
+    }
+    out
 }
 
-fn expand_batch_parallel_results(results: &[ToolResult]) -> Vec<ToolResult> {
-    let mut expanded = Vec::new();
-    for result in results {
-        if result.kind != ToolKind::BatchParallel { continue; }
-        let Ok(nested) = serde_json::from_str::<Vec<ToolResult>>(&result.output) else { continue; };
-        let deeper = expand_batch_parallel_results(&nested);
-        expanded.extend(nested);
-        expanded.extend(deeper);
+fn expand_batch_result(result: &ToolResult, out: &mut Vec<ToolResult>) {
+    if result.kind != ToolKind::BatchParallel || result.output.trim().is_empty() { return; }
+    let Ok(nested) = serde_json::from_str::<Vec<ToolResult>>(&result.output) else { return; };
+    for item in nested {
+        expand_batch_result(&item, out);
+        out.push(item);
     }
-    expanded
 }
 
 fn result_evidence_line(result: &ToolResult) -> String {
