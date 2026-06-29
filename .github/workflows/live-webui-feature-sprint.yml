@@ -38,11 +38,13 @@ jobs:
           checker="$proof_dir/full-benchmark-checker.json"
           workflow_checker="$proof_dir/opencode-workflow-checker.json"
           quality_score="$proof_dir/quality-score.json"
+          proof_manifest="$proof_dir/live-webui-proof-manifest.json"
           if [ ! -s "$conversation" ] || [ ! -s "$stream" ]; then
             mkdir -p "$proof_dir"
             printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$checker"
             printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$workflow_checker"
             printf '{"passed":false,"percent":0,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$quality_score"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$proof_manifest"
             echo "::error::missing full benchmark conversation or stream artifact"
             exit 1
           fi
@@ -52,6 +54,8 @@ jobs:
           jq -e '.passed == true' "$workflow_checker" >/dev/null
           python3 scripts/smoke/score-live-benchmark-quality.py "$proof_dir" "$quality_score"
           jq -e '.passed == true and .percent >= 85' "$quality_score" >/dev/null
+          python3 scripts/smoke/check-live-webui-proof-manifest.py "$proof_dir" "$proof_manifest"
+          jq -e '.passed == true' "$proof_manifest" >/dev/null
 
       - name: Upload feature sprint proof
         if: always()
