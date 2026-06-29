@@ -18,6 +18,12 @@ test -s "$WEBUI_PNG"
 if [ "$MODE" = "model" ]; then
   for marker in "live-browser-model-proof" "provider-model-visible" "provider: nvidia_nim" "MODEL ROUTE" "LIVE_NIM_BROWSER_PROOF" "$MODEL_ID"; do grep -Fq "$marker" "$BROWSER_JSON"; done
 fi
+if printf '%s' "$QUERY_SUFFIX" | grep -Fq 'proof=final'; then
+  for marker in "Run proof summary" "Final answer" "actions used" "proof-digest-visible" "human-tool-label"; do grep -Fq "$marker" "$BROWSER_JSON"; done
+fi
+if [ "$MODE" = "tool" ]; then
+  for marker in "Write file" "Edit file" "Delete file" "technical details" "human-tool-label"; do grep -Fq "$marker" "$BROWSER_JSON"; done
+fi
 
 if curl -fsS --connect-timeout 2 --max-time 60 -X POST "$BASE/api/browser-proof" -H 'content-type: application/json' -d "{\"url\":\"$BASE/events?static=1\",\"width\":1440,\"height\":1000,\"capture_dom\":true}" > "$EVENT_JSON"; then
   if jq -e '.success == true' "$EVENT_JSON" >/dev/null; then
