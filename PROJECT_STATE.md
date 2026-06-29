@@ -5,19 +5,18 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof HEAD: `c12789a7b7c59ba7bfe0ba22118892396356fc7c`
-- Accepted same-head workflows: CI `28343848325`, Build Proof `28343848326`, Live WebUI Feature Sprint `28343848306`.
-- Accepted Live WebUI artifact: `7941120525`, `live-webui-feature-sprint-proof`, digest `sha256:7f9758084a3701b759191daad22b04fae6eed8b259429be665a174e5aaa9c5c5`.
-- Latest inspected failure: Live WebUI `28346413121` on head `2f02415c3008f4e476b6176a9028fec7cb3293f1` failed only `phase4_real_low_risk_edit`; CI `28346413124` and Build Proof `28346413122` passed.
-- Latest source-backed slice: phase4 benchmark ordering hardening. The live benchmark prompt now blocks final reporting until a dedicated Phase 4 repository file-editing tool result outside `.agent_test` exists, and makes the Phase 4 edit the immediate next operation after `.agent_test` verification.
-- Latest proof doc: `docs/generated/proof/live-benchmark-phase4-edit-ordering-20260629T0350Z.md`.
-- Do not claim the latest Phase 4 ordering head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the newer commit.
+- Latest accepted same-head proof HEAD before the formatter slice: `75296872eea904634c0eb565f7fe917de97443a0`
+- Accepted same-head workflows for that baseline: CI `28348220256`, Build Proof `28348220266`, Live WebUI Feature Sprint `28348220251`.
+- Accepted Live WebUI artifact for that baseline: `7942541939`, `live-webui-feature-sprint-proof`, digest `sha256:6a667dbf03c3232b34d263c716a0623e3f0f769c470549b7d6ab73ce81d3af03`.
+- Latest source-backed slice: formatter catalog parity in `crates/engine/src/tool/file_ops.rs`, backed by OpenCode `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts`.
+- Latest proof doc: `docs/generated/proof/source-backed-formatter-catalog-20260629T0447Z.md`.
+- Do not claim the formatter catalog head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `c12789a7b7c59ba7bfe0ba22118892396356fc7c`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `75296872eea904634c0eb565f7fe917de97443a0`.
 
-Proof requirements satisfied by artifact `7941120525`:
+Proof requirements satisfied by artifact `7942541939`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -62,6 +61,7 @@ Proof requirements satisfied by artifact `7941120525`:
 - `file_edit` missing-`old_string` failures now return structured stale-edit recovery metadata with path, previews, recovery hint, recommended next tools, and a Forge failure lifecycle marker.
 - File tool and patch-event runtime metadata now emit Forge-owned contract keys (`forge_*`) rather than upstream-branded runtime metadata or package source paths; exact reference paths remain in proof/docs only.
 - Full benchmark prompt now makes the Phase 4 repository edit the immediate next operation after `.agent_test` verification and explicitly blocks the final report until a dedicated file-editing tool result outside `.agent_test` exists.
+- File write/edit formatting now uses a source-backed formatter catalog with OpenCode-derived formatter families while keeping formatter absence/failure contained in tool metadata and resynchronizing UTF-8 BOM after formatter mutation.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -72,6 +72,8 @@ Proof requirements satisfied by artifact `7941120525`:
 - `anomalyco/opencode:packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — tool catalog behavior anchors.
 - `anomalyco/opencode:packages/opencode/src/lsp/lsp.ts` and `packages/opencode/src/lsp/diagnostic.ts` — LSP touch, diagnostic collection, max error cap, report block, severity formatting, and warm-up containment anchors.
 - `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving file mutation behavior anchor.
+- `anomalyco/opencode:packages/opencode/src/format/index.ts` — formatter service, extension matching, command probing/caching, and contained formatter execution.
+- `anomalyco/opencode:packages/opencode/src/format/formatter.ts` — built-in formatter catalog and command semantics.
 
 ## Current behavior retained
 
