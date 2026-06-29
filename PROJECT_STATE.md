@@ -5,18 +5,28 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `690ace8cd6d4a3d60a348fde7ca2537335032f0e`
-- Latest accepted same-head proof before this fuzzy file edit slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head before this state update: `15233c6466a8f9cec24055485dff83fd6a9fcc90`
+- Latest accepted same-head proof before this final-report gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed fuzzy file edit matching in `crates/engine/src/tool/file_ops.rs`.
-- Latest proof doc: `docs/generated/proof/source-backed-fuzzy-file-edit-matching-20260629T1246Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `690ace8cd6d4a3d60a348fde7ca2537335032f0e` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed final report template CI contract gate.
+- Latest proof doc: `docs/generated/proof/final-report-template-contract-ci-gate-20260629T1358Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `15233c6466a8f9cec24055485dff83fd6a9fcc90` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
-Latest same-head status before this fuzzy edit slice:
+Latest same-head status before this final-report contract gate:
+
+- Head: `6d020ea0458273046eca089db654d336718db9c3`.
+- Build Proof `28373524856`: success.
+- CI `28373524848`: success.
+- Live WebUI Feature Sprint `28373524809`: failure.
+- Live job `84061799401` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
+- The benchmark reached and passed Phase 1 repo evidence, Phase 2 long-tool-loop evidence, Phase 3 file write/read/delete evidence, Phase 4 real low-risk edit evidence, and Phase 4 validation-command evidence.
+- Remaining failed checks were final-answer/report quality checks: confidence labels, risk/rollback wording, Founder report, Technical report, and final report files/tests/risks/confidence sections.
+
+Previous same-head status before the fuzzy file edit slice:
 
 - Head: `83b6ba30bb064d2f0aa92bb44beb3d75d69db3d8`.
 - Build Proof `28371596991`: success.
@@ -25,16 +35,6 @@ Latest same-head status before this fuzzy edit slice:
 - Live job `84050445860` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
 - The live stream used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash` and reached long-running tool activity before timeout.
 - The failure path exposed stale `file_edit` recovery followed by extra read/write work; Forge still used exact-only replacement while upstream OpenCode uses a layered edit replacement pipeline.
-
-Previous failed same-head gate before the live-timeout recovery source fix:
-
-- Head: `36f67a7fe760d54fdc10b24ad89204790a56e095`.
-- Build Proof `28370125986`: success.
-- CI `28370125998`: success.
-- Live WebUI Feature Sprint `28370126001`: failure.
-- Live artifact metadata inspected: `7951317296`, `live-webui-feature-sprint-proof`, digest `sha256:30142c86d5d834522543331c304e5bb2dfca507ac6594eadfd22995ab957d168`.
-- Live WebUI Feature Sprint failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
-- Source mismatch found in `scripts/smoke/live-webui-feature-sprint.sh`: the live browser proof still required literal `apply_patch` even though Forge's Phase 4 evidence accepts `FileEdit`, `FileWrite`, or `ApplyPatch`; the script also hard-failed a timed-out curl before accepting salvaged hard-checker and OpenCode-workflow checker evidence from an evidence-ready max-step finalization.
 
 ## Accepted live full benchmark proof
 
@@ -51,11 +51,12 @@ Proof requirements satisfied by artifact `7945828859`:
 
 ## Latest implementation changes
 
-- `file_edit` now attempts exact replacement first, then OpenCode-backed fuzzy replacement strategies: line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching.
-- Fuzzy replacement requires a unique matched span unless `replace_all` is explicitly requested, preserving the conservative stale-edit error path when the match is ambiguous.
-- Successful fuzzy edits now report `edit_match_strategy`, matched old-string preview, and a Forge-owned `forge_edit_replacer_contract` in tool metadata.
-- Stale edit failures now include the fuzzy-replacer contract in recovery metadata instead of only reporting exact-match failure.
-- Existing file tool behavior remains: watcher/file/LSP/diagnostic envelopes, formatter metadata, UTF-8 BOM preservation, and Forge-owned runtime metadata.
+- Added `scripts/smoke/check-final-report-template-contract.py`.
+- Wired the final-report contract gate into `.github/workflows/ci.yml` smoke validation.
+- The gate enforces that Forge max-step finalization keeps the exact final Markdown labels required by the live benchmark.
+- The gate enforces that the forced finalizer disables tools with `tools: None` and `tool_choice: None`.
+- The gate enforces that malformed or empty provider final text is rejected by `looks_like_final_report` and replaced by deterministic `fallback_final_report` Markdown.
+- Existing fuzzy file-edit behavior remains: exact replacement first, then OpenCode-backed line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching with conservative uniqueness.
 
 ## OpenCode source anchors retained in developer docs only
 
