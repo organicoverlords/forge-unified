@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Validate that a Live WebUI Feature Sprint proof directory is complete.
 
+OpenCode source anchor:
+- anomalyco/opencode:packages/core/src/session/runner/max-steps.ts
+
 This is intentionally artifact-first: a green workflow is not enough unless the
 uploaded directory contains the browser screenshot, browser JSON, stream,
-conversation, status, and both checker JSON files that prove the natural WebUI
-run used NVIDIA NIM and completed the full benchmark.
+conversation, status, and checker JSON files that prove the natural WebUI run
+used NVIDIA NIM and completed the full benchmark. The OpenCode max-step source
+requires a text-only final response after tools are disabled, so Forge must keep
+browser-visible final-report evidence instead of accepting hidden local success.
 """
 
 from __future__ import annotations
@@ -14,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+OPENCODE_SOURCE = "packages/core/src/session/runner/max-steps.ts"
+
 REQUIRED_FILES = [
     "full-benchmark-webui.png",
     "full-benchmark-browser-proof.json",
@@ -21,6 +28,8 @@ REQUIRED_FILES = [
     "full-benchmark-conversation.json",
     "full-benchmark-checker.json",
     "opencode-workflow-checker.json",
+    "quality-score.json",
+    "live-webui-proof-manifest.json",
     "live-proof-status.txt",
 ]
 
@@ -67,6 +76,14 @@ def checker_passed(path: Path) -> bool:
     return data.get("passed") is True and not data.get("failed_checks")
 
 
+def quality_passed(path: Path) -> bool:
+    try:
+        data = load_json(path)
+    except Exception:
+        return False
+    return data.get("passed") is True and float(data.get("percent") or 0) >= 85
+
+
 def status_value(status_text: str, key: str) -> str:
     prefix = f"{key}="
     for line in status_text.splitlines():
@@ -80,6 +97,10 @@ def status_path_exists(status_text: str, key: str, expected_name: str) -> bool:
     return bool(value) and Path(value).name == expected_name
 
 
+def manifest_self_reference_ok(proof_dir: Path, output_path: Path) -> bool:
+    return output_path.name == "live-webui-proof-manifest.json" and output_path.parent == proof_dir
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: check-live-webui-proof-manifest.py PROOF_DIR OUTPUT_JSON", file=sys.stderr)
@@ -87,6 +108,9 @@ def main() -> int:
 
     proof_dir = Path(sys.argv[1])
     output_path = Path(sys.argv[2])
+
+    if manifest_self_reference_ok(proof_dir, output_path):
+        output_path.write_text("{}\n", encoding="utf-8")
 
     checks: list[dict[str, Any]] = []
 
@@ -105,6 +129,7 @@ def main() -> int:
 
     checks.append({"name": "full_checker_passed", "passed": checker_passed(proof_dir / "full-benchmark-checker.json")})
     checks.append({"name": "workflow_checker_passed", "passed": checker_passed(proof_dir / "opencode-workflow-checker.json")})
+    checks.append({"name": "quality_score_passed", "passed": quality_passed(proof_dir / "quality-score.json")})
     checks.append({"name": "screenshot_is_png", "passed": png_is_nonempty_screenshot(screenshot_path), "size": screenshot_path.stat().st_size if screenshot_path.exists() else 0})
     checks.append({"name": "browser_proof_has_required_markers", "passed": all(marker in browser_text for marker in REQUIRED_BROWSER_MARKERS), "markers": REQUIRED_BROWSER_MARKERS})
     checks.append({"name": "stream_has_run_finish", "passed": "event: run-finish" in stream_text})
@@ -135,6 +160,7 @@ def main() -> int:
         "model": model,
         "required_files": REQUIRED_FILES,
         "required_browser_markers": REQUIRED_BROWSER_MARKERS,
+        "opencode_sources": [OPENCODE_SOURCE],
         "checks": checks,
         "failed_checks": failed,
     }
