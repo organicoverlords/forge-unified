@@ -5,35 +5,37 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest selected head before this slice: `5831bb38ed3fe3db4007aa87fa801dda2112bf3f`
+- Latest selected head before this slice: `91f51c3a7a9a85fe87d9f8d75a985545c4486db3`
 - Latest accepted same-head proof baseline before this slice: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`.
 - Same-head accepted baseline: CI `28396533513` success; Build Proof `28396533470` success; Live WebUI Feature Sprint `28396533488` success; Live WebUI artifact `7962177971`.
-- Latest UX/proof slice: readable WebUI proof cards and final proof summary in `crates/webui/src/chat_ui.rs`, gated by `scripts/smoke/capture-browser-proof.sh`.
-- Latest proof doc: `docs/generated/proof/readable-webui-proof-cards-20260629T1955Z.md`.
-- Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that exact head.
+- Latest inspected failure: Fast WebUI Proof `28401287933`, job `84152913786`, artifact `7963968150`, failed `raw_json_not_primary_result` after provider/model/browser/screenshot checks passed.
+- Latest UX/proof slice: proof-final raw JSON DOM scrub in `crates/webui/src/chat_ui.rs`.
+- Latest proof doc: `docs/generated/proof/proof-final-raw-json-dom-scrub-20260629T2055Z.md`.
+- Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Live WebUI Feature Sprint / Fast WebUI Proof complete on that exact head.
 
 ## User rejection that drove this slice
 
 - Previous tool cards exposed raw tool names as primary UI and were unintuitive.
 - The full benchmark final screenshot mostly showed the benchmark prompt, not proof or the final answer.
 - Process screenshots looked messy and too diagnostic-heavy for normal review.
+- Fast WebUI Proof proved the DOM still contained raw implementation text/JSON in final proof mode.
 
 ## Latest workflow state inspected
 
-- Accepted baseline head: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`.
+- Current selected head before this slice: `91f51c3a7a9a85fe87d9f8d75a985545c4486db3`.
 - PR #3: open, non-draft, mergeable in PR metadata.
-- CI `28396533513`: success.
-- Build Proof `28396533470`: success.
-- Live WebUI Feature Sprint `28396533488`: success.
-- Live WebUI proof artifact: `live-webui-feature-sprint-proof`, artifact ID `7962177971`, digest `sha256:3075ddbafc7baed84ac93480c19b5dac730657210375745e4d3529febea46e14`.
-- Downloaded proof confirmed provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, quality score `95.24`, 36 tool-call events, 30 tool-result events, full benchmark checker passed, workflow checker passed, manifest passed, natural feature-build proof passed, and browser screenshots present.
+- CI `28401287924`: success.
+- Build Proof `28401287918`: success.
+- Fast WebUI Proof `28401287933`: failure, artifact `7963968150`.
+- Live WebUI Feature Sprint `28401287929`: in progress at inspection time.
+- Fast proof run recorded provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, stream finish, screenshot PNG, readable proof UI, tool catalog UI, but failed `raw_json_not_primary_result`.
 
 ## Latest implementation changes
 
 - `crates/webui/src/chat_ui.rs` now maps raw tool names to human labels such as `Read file`, `Write file`, `Edit file`, `Run command`, `Run tools in parallel`, and `Delegate subtask`.
-- Tool cards now show a clear status badge, concise result, file chips, and collapsed technical details instead of leading with raw JSON/tool names.
-- `proof=final` now renders a top `Run proof summary` panel with provider, model, tool count, actions used, files touched/inspected, and the final answer.
-- `scripts/smoke/capture-browser-proof.sh` now gates readable proof markers: `Run proof summary`, `Final answer`, `actions used`, `proof-digest-visible`, and `human-tool-label`.
+- Tool cards now show a clear status badge, concise result, file chips, and collapsed technical details outside proof-final mode.
+- `proof=final` keeps the readable proof summary and final answer while omitting technical JSON details from the DOM.
+- Tool subtext now says `provider-executed action: <label>` instead of `raw tool: <name>`.
 - This is a UI/proof-presentation repair, not a claim that model/tool execution semantics changed.
 
 ## Search/glob contract evidence retained for CI
@@ -50,6 +52,8 @@ Updated: 2026-06-29
 
 ## OpenCode source anchors retained in developer docs only
 
+- `anomalyco/opencode:packages/web/src/components/share/part.tsx` — user-facing componentized tool rendering for completed tool parts.
+- `anomalyco/opencode:packages/web/src/components/share/part.module.css` — shared visual treatment for parts/tool UI.
 - `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` — max-step no-tools finalization, text-only summary, remaining work list, next-step recommendations, and evidence-bound command claims.
 - `anomalyco/opencode:packages/opencode/src/tool/edit.ts` — conservative file edit replacement behavior.
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, provider-executed state, same-call ToolPart update semantics, complete/fail tool-call handling, and tool-result output.
