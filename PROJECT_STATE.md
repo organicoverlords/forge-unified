@@ -5,18 +5,30 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `15233c6466a8f9cec24055485dff83fd6a9fcc90`
-- Latest accepted same-head proof before this final-report gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head before this state update: `80d4b968221d3d76cfb53f09aecfa6d60f534cd9`
+- Latest accepted same-head proof before this finalization-stop slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed final report template CI contract gate.
-- Latest proof doc: `docs/generated/proof/final-report-template-contract-ci-gate-20260629T1358Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `15233c6466a8f9cec24055485dff83fd6a9fcc90` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed final report stop rule in the live benchmark prompt.
+- Latest proof doc: `docs/generated/proof/live-benchmark-final-report-stop-rule-20260629T1452Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `80d4b968221d3d76cfb53f09aecfa6d60f534cd9` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
-Latest same-head status before this final-report contract gate:
+Latest same-head status before this finalization-stop slice:
+
+- Head: `9ad3db25c029c97f0c36b575add4ddebbe06b033`.
+- Build Proof `28378470751`: success.
+- CI `28378470831`: success.
+- Live WebUI Feature Sprint `28378470554`: failure.
+- Live job `84074310768` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
+- The stream used real `nvidia_nim` with model `deepseek-ai/deepseek-v4-flash` and reached 28 tool-call/tool-result events.
+- The benchmark passed Phase 1 repo evidence, Phase 2 long-tool-loop evidence, Phase 3 file write/read/delete evidence, Phase 4 real low-risk edit evidence, Phase 4 validation-command evidence, and cleanup/state evidence.
+- Remaining failed checks were final-answer/report quality checks: confidence labels, risk/rollback wording, Founder report, Technical report, and final report files/tests/risks/confidence sections.
+- The observed failure mode was extra tool-loop continuation after the evidence-completing validation command instead of immediate text-only final report.
+
+Previous same-head status before the final-report contract gate:
 
 - Head: `6d020ea0458273046eca089db654d336718db9c3`.
 - Build Proof `28373524856`: success.
@@ -25,16 +37,6 @@ Latest same-head status before this final-report contract gate:
 - Live job `84061799401` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
 - The benchmark reached and passed Phase 1 repo evidence, Phase 2 long-tool-loop evidence, Phase 3 file write/read/delete evidence, Phase 4 real low-risk edit evidence, and Phase 4 validation-command evidence.
 - Remaining failed checks were final-answer/report quality checks: confidence labels, risk/rollback wording, Founder report, Technical report, and final report files/tests/risks/confidence sections.
-
-Previous same-head status before the fuzzy file edit slice:
-
-- Head: `83b6ba30bb064d2f0aa92bb44beb3d75d69db3d8`.
-- Build Proof `28371596991`: success.
-- CI `28371597011`: success.
-- Live WebUI Feature Sprint `28371596978`: failure.
-- Live job `84050445860` failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
-- The live stream used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash` and reached long-running tool activity before timeout.
-- The failure path exposed stale `file_edit` recovery followed by extra read/write work; Forge still used exact-only replacement while upstream OpenCode uses a layered edit replacement pipeline.
 
 ## Accepted live full benchmark proof
 
@@ -51,11 +53,10 @@ Proof requirements satisfied by artifact `7945828859`:
 
 ## Latest implementation changes
 
-- Added `scripts/smoke/check-final-report-template-contract.py`.
-- Wired the final-report contract gate into `.github/workflows/ci.yml` smoke validation.
-- The gate enforces that Forge max-step finalization keeps the exact final Markdown labels required by the live benchmark.
-- The gate enforces that the forced finalizer disables tools with `tools: None` and `tool_choice: None`.
-- The gate enforces that malformed or empty provider final text is rejected by `looks_like_final_report` and replaced by deterministic `fallback_final_report` Markdown.
+- Hardened `scripts/smoke/full-agentic-benchmark-prompt.txt` with an explicit OpenCode-backed stop rule: after the evidence-completing validation shell result, tools are disabled and the model must answer in text only.
+- Added source backing in the prompt for `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts`.
+- Converted Phase 6 cleanup from another tool action into a requirement to use the existing step 10 validation/status evidence, preventing post-evidence validation loops.
+- Existing final-report contract gate remains: `scripts/smoke/check-final-report-template-contract.py` in CI.
 - Existing fuzzy file-edit behavior remains: exact replacement first, then OpenCode-backed line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching with conservative uniqueness.
 
 ## OpenCode source anchors retained in developer docs only
