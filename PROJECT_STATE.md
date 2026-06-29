@@ -1,22 +1,22 @@
 # Forge Unified — Current State
 
-Updated: 2026-06-28
+Updated: 2026-06-29
 
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof HEAD: `0579b550bfb489a0a16289b98a6eafabcd14c0d6`
-- Accepted same-head workflows: CI `28336034206`, Build Proof `28336034212`, Live WebUI Feature Sprint `28336034202`.
-- Accepted Live WebUI artifact: `7938654225`, `live-webui-feature-sprint-proof`, digest `sha256:c631cbb7570af2563475220513924f134ec1b96d4c36b2304bb85af344c5448b`.
-- Latest hardening slice after accepted proof: `scripts/smoke/check-full-agentic-benchmark.py` now treats only exact `cargo check` / `cargo build` success prose as a build/check claim that requires matching ShellCommand proof.
-- Latest proof doc: `docs/generated/proof/full-benchmark-exact-cargo-build-claim-checker-20260628T2350Z.md`.
-- Do not claim the new exact cargo build/check checker head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof HEAD: `74a5b5aa8836075fd187c2da404f25ac14c83229`
+- Accepted same-head workflows: CI `28340198388`, Build Proof `28340198385`, Live WebUI Feature Sprint `28340198381`.
+- Accepted Live WebUI artifact: `7939934286`, `live-webui-feature-sprint-proof`, digest `sha256:5a1fbb5801736071e85a8ea15ba7828adea5f1568c05c391684cfe3ab9d0cab4`.
+- Latest source-backed slice: stale `file_edit` recovery now returns structured Forge-owned failure metadata instead of a bare `Old string not found` result.
+- Latest proof doc: `docs/generated/proof/stale-file-edit-recovery-metadata-20260629T0147Z.md`.
+- Do not claim the latest stale-edit recovery head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `0579b550bfb489a0a16289b98a6eafabcd14c0d6`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `74a5b5aa8836075fd187c2da404f25ac14c83229`.
 
-Proof requirements satisfied by artifact `7938654225`:
+Proof requirements satisfied by artifact `7939934286`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -58,6 +58,7 @@ Proof requirements satisfied by artifact `7938654225`:
 - Full benchmark prompt now explicitly rejects blank/JSON/tool-call final output and requires a Markdown final self-check for exact labels before sending.
 - `scripts/smoke/check-live-webui-proof-manifest.py` now requires screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, absence of local/upstream identity shortcuts, PNG screenshot bytes, browser proof markers, conversation tool-result counts, and status-path consistency.
 - `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading required labels or generic report prose as cargo command claims.
+- `file_edit` missing-`old_string` failures now return structured stale-edit recovery metadata with path, previews, recovery hint, recommended next tools, and a Forge failure lifecycle marker.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -81,7 +82,8 @@ Proof requirements satisfied by artifact `7938654225`:
 
 ## Current gaps / do not overclaim
 
-- The accepted same-head proof is for `0579b550bfb489a0a16289b98a6eafabcd14c0d6`; the latest exact cargo build/check claim checker commit needs its own same-head workflow run before claiming proof on that newer head.
+- The accepted same-head proof is for `74a5b5aa8836075fd187c2da404f25ac14c83229`; the latest stale-edit recovery commit needs its own same-head workflow run before claiming proof on that newer head.
+- The new stale-edit recovery metadata still needs same-head WebUI/NIM proof showing it helps the live benchmark recover rather than repeat the stale edit.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
