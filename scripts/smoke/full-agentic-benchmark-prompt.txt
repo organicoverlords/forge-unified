@@ -4,6 +4,8 @@ Complete all six phases before reporting. This is a live NVIDIA NIM/WebUI proof 
 
 Hard rule: after the batch_parallel call and one task call below, do not inspect any more source files for Phase 2. Go directly to Phase 3 file operations. Do not read these timeout-prone implementation files during this benchmark: `crates/engine/src/orchestrator.rs`, `crates/webui/src/agent_benchmark.rs`, `crates/engine/src/tool/file_ops.rs`, or `scripts/smoke/live-webui-feature-sprint.sh`. Validate the script only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 
+OpenCode max-step reference behavior: after the evidence-completing validation shell result exists, tools are disabled. Any additional tool call after that validation result is a failure. Respond with text only, summarizing work done, remaining tasks, and next recommendations. Source backing: `packages/core/src/session/runner/max-steps.ts`.
+
 Use real tools only. Do not print tool JSON in prose. Tool failures must be repaired with the correct file/shell/repo tool; do not switch models because a repo tool fails.
 
 # Required exact fast path
@@ -32,7 +34,8 @@ Use real tools only. Do not print tool JSON in prose. Tool failures must be repa
 8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
 9. Phase 4 is mandatory and must be the very next tool operation after that `.agent_test` verification. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result. A final answer before this dedicated Phase 4 edit tool result is a failed run.
 10. Validate and inspect state with exactly this `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
-11. Only after the Phase 4 edit tool and validation shell result exist, write the final answer. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from your tool evidence that you have a successful dedicated file-editing tool result outside `.agent_test`; if not, continue with the Phase 4 edit instead of answering.
+11. STOP USING TOOLS after the validation shell result in step 10. Do not run the validation command again. Do not inspect git status again. Do not write another file. Do not ask for more evidence. Write the final Markdown answer immediately.
+12. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from existing tool evidence that you have a successful dedicated file-editing tool result outside `.agent_test`; if not, continue with the Phase 4 edit instead of answering.
 
 # Phase 1 — Environment + repo inspection
 
@@ -56,7 +59,7 @@ Read all three files back with actual file_read tool calls before deleting anyth
 
 # Phase 4 — Judgment test
 
-Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`. Do not send the Founder report or Technical report until the successful Phase 4 file-editing tool result exists.
+Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with the exact step 10 shell command and inspect `git status`/`git diff` in that same single tool result. Do not send the Founder report or Technical report until the successful Phase 4 file-editing tool result exists.
 
 # Phase 5 — Writing quality
 
@@ -120,6 +123,6 @@ confidence (0-100)
 
 # Phase 6 — Cleanup discipline
 
-Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include these exact strings: `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `evidence`, `assumptions`, `failed hypotheses`, `rollback strategy`, `blast radius`, `implementation difficulty`, `rollback difficulty`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks`.
+Before final answer, use only the existing step 10 tool evidence to verify repo state and `.agent_test` contents. Do not call another tool for Phase 6 after step 10. Final answer must include these exact strings: `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `evidence`, `assumptions`, `failed hypotheses`, `rollback strategy`, `blast radius`, `implementation difficulty`, `rollback difficulty`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks`.
 
 Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from that list, rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run. You are not done after Phase 3: a Phase 4 file-editing tool result outside `.agent_test`, validation shell result, and final Markdown report are all required.
