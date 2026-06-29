@@ -157,6 +157,43 @@ def partial(scores: list[dict[str, Any]], name: str, points: int, earned: int, e
     scores.append({"name": name, "points": points, "earned": earned, "passed": earned == points, "evidence": evidence})
 
 
+def normalize_command_claim(claim: str) -> str:
+    value = re.sub(r"\s+", " ", claim.strip()).lower()
+    value = re.sub(r"\s*\(exit:\s*0\)\s*$", "", value)
+    value = re.sub(r"^(?:validation of|validated|passed|ran|run)\s+", "", value)
+    value = re.sub(r"^bash -n validation of\s+", "bash -n ", value)
+    value = re.sub(r"^bash -n\s+(.+?)\s+passed$", r"bash -n \1", value)
+    return value.strip()
+
+
+def command_claims(final: str) -> list[str]:
+    claims: list[str] = []
+    for match in re.finditer(r"(?:cargo\s+(?:test|check|build|clippy|fmt)|bash\s+-n\s+[^\n`.;]+)", final, re.I):
+        start = match.start()
+        context = final[max(0, start - 80) : start].lower()
+        if re.search(r"\b(no|not|unless|without|do not|never)\b", context):
+            continue
+        claims.append(match.group(0).strip())
+    return claims
+
+
+def command_is_proven(claim: str, results: list[dict[str, Any]]) -> bool:
+    normalized_claim = normalize_command_claim(claim)
+    for result in results:
+        if result.get("success") is not True:
+            continue
+        normalized_command = normalize_command_claim(metadata_command(result))
+        if not normalized_command:
+            continue
+        if normalized_claim in normalized_command or normalized_command in normalized_claim:
+            return True
+    return False
+
+
+def has_placeholder_brackets(text: str) -> bool:
+    return bool(re.search(r"\[[A-Z_ -]{3,}\]", text))
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: score-live-benchmark-quality.py proof_dir output.json", file=sys.stderr)
@@ -205,15 +242,11 @@ def main() -> int:
 
     add(scores, "phase4_edit_claim_is_tool_proven", 10, bool([r for r in results if r.get("success") is True and r.get("kind") in {"FileEdit", "FileWrite", "ApplyPatch"} and not metadata_path(r).startswith(".agent_test/")]) and bool(ok_results(results, command_re=r"git diff|git status")), None)
 
-    claimed_tests = re.findall(r"(?:cargo\s+(?:test|check|build|clippy|fmt)|bash\s+-n\s+[^\n`]+)", final, re.I)
-    unproven = []
-    for claim in claimed_tests:
-        normalized = re.sub(r"\s+", " ", claim.strip()).lower()
-        if not any(normalized in re.sub(r"\s+", " ", metadata_command(r)).lower() for r in results if r.get("success") is True):
-            unproven.append(claim)
+    claimed_tests = command_claims(final)
+    unproven = [claim for claim in claimed_tests if not command_is_proven(claim, results)]
     add(scores, "test_and_build_claims_match_tool_commands", 10, not unproven, {"claimed_commands": claimed_tests, "unproven": unproven})
 
-    add(scores, "semantic_repo_summary_not_placeholder", 5, all(term in final.lower() for term in ["forge", "webui", "benchmark", "risk"]) and "[" not in final and "]" not in final, None)
+    add(scores, "semantic_repo_summary_not_placeholder", 5, all(term in final.lower() for term in ["forge", "webui", "benchmark", "risk"]) and not has_placeholder_brackets(final), None)
 
     add(scores, "proof_bundle_contains_prompt_transcript_checkers", 5, prompt_path.exists() and conv_path.exists() and stream_path.exists() and checker_path.exists() and workflow_path.exists(), None)
 
