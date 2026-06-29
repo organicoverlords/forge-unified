@@ -49,7 +49,9 @@ impl Orchestrator {
         let mut doom_loop_permission_recorded = false;
         let mut evidence_ready_finalized = false;
         let mut premature_final_repairs = 0u32;
+        let mut required_tool_sequence_repairs = 0u32;
         let benchmark_prompt = is_full_agentic_benchmark_prompt(&user_message);
+        let required_tool_sequence = RequiredToolSequence::from_prompt(&user_message);
         let mut tool_signature_history: Vec<Vec<String>> = Vec::new();
         {
             let mut mgr = self.conversation_mgr.write().await;
@@ -68,6 +70,15 @@ impl Orchestrator {
             self.conversation_mgr.write().await.add_assistant_message_with_tools(&conversation_id, response.message.content.clone(), response.message.tool_calls.clone());
             if response.message.tool_calls.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
                 stopped_on_tool_cap = false;
+                if let Some(sequence) = &required_tool_sequence {
+                    if required_tool_sequence_repairs < 3 {
+                        if let Some(repair_prompt) = sequence.missing_prompt(&self.conversation_mgr, &conversation_id).await {
+                            required_tool_sequence_repairs += 1;
+                            self.conversation_mgr.write().await.add_user_message(&conversation_id, repair_prompt);
+                            continue;
+                        }
+                    }
+                }
                 if benchmark_prompt && !benchmark_evidence_ready(&self.conversation_mgr, &conversation_id).await {
                     premature_final_repairs += 1;
                     self.conversation_mgr.write().await.add_user_message(&conversation_id, benchmark_missing_evidence_prompt());
@@ -122,7 +133,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_batch_nested_evidence_finalization".to_string(), serde_json::json!(true)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("forge_required_tool_sequence_guard".to_string(), serde_json::json!(required_tool_sequence.is_some())), ("forge_required_tool_sequence_repairs".to_string(), serde_json::json!(required_tool_sequence_repairs)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_batch_nested_evidence_finalization".to_string(), serde_json::json!(true)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -344,6 +355,61 @@ fn doom_loop_permission_result(requests: &[ToolRequest], signatures: &[String]) 
 
 fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
     ToolResult { id: req.id, kind: req.kind, success: false, output: format!("Tool execution failed: {error}"), error: Some(error), duration_ms: 0, metadata: HashMap::from([("tool_execution_error".to_string(), serde_json::json!(true))]) }
+}
+
+#[derive(Debug, Clone)]
+struct RequiredToolSequence {
+    min_file_writes: usize,
+    validation_command: Option<String>,
+}
+
+impl RequiredToolSequence {
+    fn from_prompt(user_message: &str) -> Option<Self> {
+        let lower = user_message.to_ascii_lowercase();
+        let wants_sequence = lower.contains("file_write")
+            && lower.contains("shell_command")
+            && (lower.contains("tool sequence") || lower.contains("run exactly") || lower.contains("final answer before") || lower.contains("do not stop after"));
+        if !wants_sequence { return None; }
+        let file_write_mentions = lower.matches("file_write").count();
+        Some(Self { min_file_writes: file_write_mentions.max(1).min(4), validation_command: extract_validation_command(user_message) })
+    }
+
+    async fn missing_prompt(&self, conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> Option<String> {
+        let conv_mgr = conversation_mgr.read().await;
+        let results = collect_tool_results(conv_mgr.get_messages(conversation_id));
+        let successful_writes = results.iter().filter(|result| result.success && result.kind == ToolKind::FileWrite).count();
+        let validation_done = self.validation_command.as_ref().map(|command| {
+            results.iter().any(|result| {
+                result.success
+                    && matches!(result.kind, ToolKind::ShellCommand | ToolKind::TerminalRun)
+                    && result_metadata_command(result).map(|seen| normalize_command(seen) == normalize_command(command)).unwrap_or(false)
+            })
+        }).unwrap_or(true);
+        drop(conv_mgr);
+        if successful_writes < self.min_file_writes {
+            return Some(format!("Required tool sequence is incomplete. You produced a final answer before the required file_write steps. Continue now with tools only. Need at least {} successful file_write results; current successful file_write results: {}. Do not answer in prose until the required tool sequence is complete.", self.min_file_writes, successful_writes));
+        }
+        if !validation_done {
+            let command = self.validation_command.clone().unwrap_or_default();
+            return Some(format!("Required tool sequence is incomplete. The file writes are done, but the required validation command has not run. Continue now with tools only: call shell_command exactly with command `{command}`. Do not produce the final answer until that shell_command result exists."));
+        }
+        None
+    }
+}
+
+fn extract_validation_command(user_message: &str) -> Option<String> {
+    for line in user_message.lines() {
+        let lower = line.to_ascii_lowercase();
+        if let Some(pos) = lower.find("run exactly:") {
+            let command = line[pos + "run exactly:".len()..].trim().trim_matches(|ch| ch == '`' || ch == ' ' || ch == '"' || ch == '\'');
+            if !command.is_empty() { return Some(command.to_string()); }
+        }
+    }
+    None
+}
+
+fn normalize_command(command: &str) -> String {
+    command.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn benchmark_missing_evidence_prompt() -> String {
