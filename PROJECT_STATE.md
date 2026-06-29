@@ -8,9 +8,10 @@ Updated: 2026-06-29
 - Latest accepted same-head proof HEAD: `c12789a7b7c59ba7bfe0ba22118892396356fc7c`
 - Accepted same-head workflows: CI `28343848325`, Build Proof `28343848326`, Live WebUI Feature Sprint `28343848306`.
 - Accepted Live WebUI artifact: `7941120525`, `live-webui-feature-sprint-proof`, digest `sha256:7f9758084a3701b759191daad22b04fae6eed8b259429be665a174e5aaa9c5c5`.
-- Latest source-backed slice: runtime file-tool metadata independence. File/write/edit/delete and patch-event metadata now use Forge-owned runtime contract keys instead of upstream-branded metadata keys or package path strings.
-- Latest proof doc: `docs/generated/proof/runtime-file-tool-metadata-independence-20260629T0250Z.md`.
-- Do not claim the latest metadata-independence head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the newer commit.
+- Latest inspected failure: Live WebUI `28346413121` on head `2f02415c3008f4e476b6176a9028fec7cb3293f1` failed only `phase4_real_low_risk_edit`; CI `28346413124` and Build Proof `28346413122` passed.
+- Latest source-backed slice: phase4 benchmark ordering hardening. The live benchmark prompt now blocks final reporting until a dedicated Phase 4 repository file-editing tool result outside `.agent_test` exists, and makes the Phase 4 edit the immediate next operation after `.agent_test` verification.
+- Latest proof doc: `docs/generated/proof/live-benchmark-phase4-edit-ordering-20260629T0350Z.md`.
+- Do not claim the latest Phase 4 ordering head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the newer commit.
 
 ## Accepted live full benchmark proof
 
@@ -60,6 +61,7 @@ Proof requirements satisfied by artifact `7941120525`:
 - `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading required labels or generic report prose as cargo command claims.
 - `file_edit` missing-`old_string` failures now return structured stale-edit recovery metadata with path, previews, recovery hint, recommended next tools, and a Forge failure lifecycle marker.
 - File tool and patch-event runtime metadata now emit Forge-owned contract keys (`forge_*`) rather than upstream-branded runtime metadata or package source paths; exact reference paths remain in proof/docs only.
+- Full benchmark prompt now makes the Phase 4 repository edit the immediate next operation after `.agent_test` verification and explicitly blocks the final report until a dedicated file-editing tool result outside `.agent_test` exists.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -78,17 +80,3 @@ Proof requirements satisfied by artifact `7941120525`:
 - Natural WebUI tool prompt renders live ToolPart lifecycle cards with provider metadata.
 - File-change and EventV2Bridge receipts are visible in chat.
 - Normal file tools emit file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and normalized tool attachment metadata.
-- Repeated identical tool-call batches are interrupted after three rounds to avoid infinite loops.
-- Native watcher publishes `watcher.started` and live `watcher.updated` events.
-- LSP diagnostic envelopes and report blocks are visible in the event rail, but live language-server collection remains incomplete.
-- Conversation compaction emits compaction started/ended receipts.
-
-## Current gaps / do not overclaim
-
-- The accepted same-head proof is for `c12789a7b7c59ba7bfe0ba22118892396356fc7c`; the latest metadata-independence commits need their own same-head workflow run before claiming proof on that newer head.
-- The new runtime metadata independence slice still needs same-head WebUI/NIM proof showing file tools no longer emit upstream-branded runtime metadata during natural prompts.
-- The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
-- The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
-- Full provider-side processor semantics need more proof beyond metadata propagation.
-- Live language-server process/client diagnostics are not implemented yet.
-- Full formatter catalog/config/runtime remains partial.
