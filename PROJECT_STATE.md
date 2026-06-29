@@ -5,26 +5,26 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head: `df3980bd5d13f6c5077e5eb88b08e8672e198352`
-- Latest accepted same-head proof before this quality-fallback slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head: `40040ece4f8482b43bc02b86c4abfca7d0eb1a0e`
+- Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed max-step/evidence-ready final report quality fallback for the Live WebUI benchmark scorer.
-- Latest proof doc: `docs/generated/proof/live-benchmark-quality-fallback-final-report-20260629T1012Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `df3980bd5d13f6c5077e5eb88b08e8672e198352` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed max-step/live-quality command-claim normalization for the Live WebUI benchmark scorer.
+- Latest proof doc: `docs/generated/proof/live-quality-command-claim-normalizer-20260629T1047Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `40040ece4f8482b43bc02b86c4abfca7d0eb1a0e` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
 Latest failed same-head gate before the source fix:
 
-- Head: `a013b616aac1b390acdc99c97b618a7c7d2cc609`.
-- CI `28363463733`: success.
-- Build Proof `28363463678`: success.
-- Live WebUI Feature Sprint `28363463759`: failure.
-- Failed Live artifact: `7948375599`, digest `sha256:c191e7bad52c8f1978841ceb9e6492fe714bca59a6b3c9621f76fa58c03ad5af`.
-- Failed step: `Check full benchmark evidence and quality score`.
-- The app execution step itself completed successfully; the failure was proof-quality scoring.
+- Head: `4ff7c2f6f7cfc758c3669fe59d5407163ccf70b1`.
+- Build Proof `28364990761`: success.
+- CI `28364990747`: failure.
+- Live WebUI Feature Sprint `28364990741`: failure.
+- CI failed in `Smoke Test` / `Validate WebUI proof harness`: `max-step finalization parity check failed: fallback report is conservative`.
+- Live WebUI app execution used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash`; hard checker and OpenCode workflow checker passed with 40 tool-call events and 38 tool-result events.
+- Live WebUI quality score failed on `test_and_build_claims_match_tool_commands` because human-readable validation claims were not normalized back to exact successful tool command metadata, plus a lower-weight bracket semantic check was too broad.
 
 ## Accepted live full benchmark proof
 
@@ -80,8 +80,9 @@ Proof requirements satisfied by artifact `7945828859`:
 - `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
 - `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
 - `scripts/smoke/check-formatter-config-activation-gap.py` now enforces that formatter proof docs do not overclaim config/dependency activation beyond the current source reality.
-- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI.
-- `crates/engine/src/orchestrator.rs` now rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
+- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI and tolerates equivalent evidence-bound conservative fallback wording.
+- `crates/engine/src/orchestrator.rs` rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
+- `scripts/smoke/score-live-benchmark-quality.py` now normalizes human-readable command claims back to successful tool command metadata, ignores prohibitive command mentions, and only rejects actual placeholder brackets.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -94,7 +95,7 @@ Proof requirements satisfied by artifact `7945828859`:
 - `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving file mutation behavior anchor.
 - `anomalyco/opencode:packages/opencode/src/format/index.ts` — formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation.
 - `anomalyco/opencode:packages/opencode/src/format/formatter.ts` — built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
-- `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` — max-step no-tools finalization, text-only summary, remaining work list, and next-step recommendations.
+- `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` — max-step no-tools finalization, text-only summary, remaining work list, next-step recommendations, and evidence-bound command claims.
 
 ## Current behavior retained
 
