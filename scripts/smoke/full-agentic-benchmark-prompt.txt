@@ -30,9 +30,9 @@ Use real tools only. Do not print tool JSON in prose. Tool failures must be repa
    - `.agent_test/repo_summary.md`
 7. Delete only `.agent_test/investigation.md` with `file_delete`.
 8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
-9. Phase 4: make one tiny safe repository edit outside `.agent_test`. Prefer appending one dated benchmark note to `PROJECT_STATE.md` with `file_edit` or `apply_patch`. Do not edit source code.
-10. Validate and inspect state with `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
-11. Final answer only after all required tool evidence exists. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message.
+9. Phase 4 is mandatory and comes before any final answer. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result.
+10. Validate and inspect state with exactly this `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
+11. Only after the Phase 4 edit tool and validation shell result exist, write the final answer. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message.
 
 # Phase 1 — Environment + repo inspection
 
@@ -56,7 +56,7 @@ Read all three files back with actual file_read tool calls before deleting anyth
 
 # Phase 4 — Judgment test
 
-Before the tiny edit, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
+Before the tiny edit, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
 
 # Phase 5 — Writing quality
 
@@ -122,4 +122,4 @@ confidence (0-100)
 
 Before final answer, use tool evidence to verify repo state and `.agent_test` contents. Final answer must include these exact strings: `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `evidence`, `assumptions`, `failed hypotheses`, `rollback strategy`, `blast radius`, `implementation difficulty`, `rollback difficulty`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks`.
 
-Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from that list, rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run.
+Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from that list, rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run. You are not done after Phase 3: a Phase 4 file-editing tool result outside `.agent_test`, validation shell result, and final Markdown report are all required.
