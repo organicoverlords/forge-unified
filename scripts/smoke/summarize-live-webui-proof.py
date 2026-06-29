@@ -59,6 +59,24 @@ def checker_status(path: Path) -> dict[str, Any]:
     }
 
 
+def natural_feature_status(proof_dir: Path) -> dict[str, Any]:
+    root = proof_dir / "natural-feature-work"
+    summary = checker_status(root / "summary.json")
+    screenshot = screenshot_status(root / "webui.png")
+    stream_counts = parse_sse_counts(root / "chat-stream.sse")
+    data = load_json(root / "summary.json")
+    return {
+        "summary": summary,
+        "screenshot": screenshot,
+        "stream_counts": stream_counts,
+        "provider": data.get("provider"),
+        "model": data.get("model"),
+        "tool_call_events": data.get("tool_call_events"),
+        "tool_result_events": data.get("tool_result_events"),
+        "normal_webui_path": data.get("normal_webui_path") is True,
+    }
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: summarize-live-webui-proof.py PROOF_DIR", file=sys.stderr)
@@ -73,6 +91,7 @@ def main() -> int:
     workflow_checker = checker_status(proof_dir / "opencode-workflow-checker.json")
     quality_checker = checker_status(proof_dir / "quality-score.json")
     manifest_checker = checker_status(proof_dir / "live-webui-proof-manifest.json")
+    natural_feature = natural_feature_status(proof_dir)
 
     screenshots = {
         "full_benchmark": screenshot_status(proof_dir / "full-benchmark-webui.png"),
@@ -86,7 +105,12 @@ def main() -> int:
         "quality_score": quality_checker,
         "manifest": manifest_checker,
     }
-    passed = all(item["passed"] for item in checkers.values()) and all(item["present"] and item["png_header"] for item in screenshots.values())
+    natural_ok = natural_feature["summary"]["passed"] and natural_feature["screenshot"]["present"] and natural_feature["screenshot"]["png_header"]
+    passed = (
+        all(item["passed"] for item in checkers.values())
+        and all(item["present"] and item["png_header"] for item in screenshots.values())
+        and natural_ok
+    )
     summary = {
         "passed": passed,
         "provider": conversation.get("provider"),
@@ -96,6 +120,7 @@ def main() -> int:
         "stream_counts": stream_counts,
         "screenshots": screenshots,
         "checkers": checkers,
+        "natural_feature_build": natural_feature,
         "manifest_passed": manifest.get("passed") is True,
         "opencode_sources": [OPENCODE_SOURCE],
     }
@@ -116,6 +141,13 @@ def main() -> int:
     ]
     for name, item in checkers.items():
         md.append(f"- {name}: `{str(item['passed']).lower()}` failed_count=`{item['failed_count']}`")
+    md.extend(["", "## Natural feature-build prompt"])
+    md.append(f"- passed: `{str(natural_feature['summary']['passed']).lower()}`")
+    md.append(f"- provider: `{natural_feature.get('provider')}`")
+    md.append(f"- model: `{natural_feature.get('model')}`")
+    md.append(f"- tool-call events: `{natural_feature.get('tool_call_events')}`")
+    md.append(f"- tool-result events: `{natural_feature.get('tool_result_events')}`")
+    md.append(f"- screenshot: `{natural_feature['screenshot']['path']}` present=`{str(natural_feature['screenshot']['present']).lower()}` size=`{natural_feature['screenshot']['size_bytes']}`")
     md.extend(["", "## Screenshots"])
     for name, item in screenshots.items():
         md.append(f"- {name}: `{item['path']}` present=`{str(item['present']).lower()}` size=`{item['size_bytes']}`")
