@@ -104,6 +104,7 @@ jobs:
           python3 -m py_compile scripts/smoke/check-final-report-template-contract.py
           python3 -m py_compile scripts/smoke/check-live-webui-time-budget.py
           python3 -m py_compile scripts/smoke/check-opencode-search-glob-contract.py
+          python3 -m py_compile scripts/smoke/summarize-live-webui-proof.py
           python3 scripts/smoke/check-formatter-parity.py
           python3 scripts/smoke/check-formatter-activation-evidence.py
           python3 scripts/smoke/check-formatter-config-activation-gap.py
