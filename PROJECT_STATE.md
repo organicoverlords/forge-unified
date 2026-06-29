@@ -5,18 +5,18 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof HEAD: `74a5b5aa8836075fd187c2da404f25ac14c83229`
-- Accepted same-head workflows: CI `28340198388`, Build Proof `28340198385`, Live WebUI Feature Sprint `28340198381`.
-- Accepted Live WebUI artifact: `7939934286`, `live-webui-feature-sprint-proof`, digest `sha256:5a1fbb5801736071e85a8ea15ba7828adea5f1568c05c391684cfe3ab9d0cab4`.
-- Latest source-backed slice: stale `file_edit` recovery now returns structured Forge-owned failure metadata instead of a bare `Old string not found` result.
-- Latest proof doc: `docs/generated/proof/stale-file-edit-recovery-metadata-20260629T0147Z.md`.
-- Do not claim the latest stale-edit recovery head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof HEAD: `c12789a7b7c59ba7bfe0ba22118892396356fc7c`
+- Accepted same-head workflows: CI `28343848325`, Build Proof `28343848326`, Live WebUI Feature Sprint `28343848306`.
+- Accepted Live WebUI artifact: `7941120525`, `live-webui-feature-sprint-proof`, digest `sha256:7f9758084a3701b759191daad22b04fae6eed8b259429be665a174e5aaa9c5c5`.
+- Latest source-backed slice: runtime file-tool metadata independence. File/write/edit/delete and patch-event metadata now use Forge-owned runtime contract keys instead of upstream-branded metadata keys or package path strings.
+- Latest proof doc: `docs/generated/proof/runtime-file-tool-metadata-independence-20260629T0250Z.md`.
+- Do not claim the latest metadata-independence head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `74a5b5aa8836075fd187c2da404f25ac14c83229`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `c12789a7b7c59ba7bfe0ba22118892396356fc7c`.
 
-Proof requirements satisfied by artifact `7939934286`:
+Proof requirements satisfied by artifact `7941120525`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -59,6 +59,7 @@ Proof requirements satisfied by artifact `7939934286`:
 - `scripts/smoke/check-live-webui-proof-manifest.py` now requires screenshot/browser/stream/conversation/checker/status artifacts, NIM provider/model evidence, tool-call/tool-result counts, absence of local/upstream identity shortcuts, PNG screenshot bytes, browser proof markers, conversation tool-result counts, and status-path consistency.
 - `scripts/smoke/check-full-agentic-benchmark.py` now detects cargo test/build/check claims from exact command prose only, preserving strict overclaim rejection without misreading required labels or generic report prose as cargo command claims.
 - `file_edit` missing-`old_string` failures now return structured stale-edit recovery metadata with path, previews, recovery hint, recommended next tools, and a Forge failure lifecycle marker.
+- File tool and patch-event runtime metadata now emit Forge-owned contract keys (`forge_*`) rather than upstream-branded runtime metadata or package source paths; exact reference paths remain in proof/docs only.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -67,6 +68,8 @@ Proof requirements satisfied by artifact `7939934286`:
 - `anomalyco/opencode:packages/schema/src/session-id.ts` — SessionID prefix semantics.
 - `anomalyco/opencode:packages/opencode/src/event-v2-bridge.ts` — EventV2Bridge receipt behavior.
 - `anomalyco/opencode:packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — tool catalog behavior anchors.
+- `anomalyco/opencode:packages/opencode/src/lsp/lsp.ts` and `packages/opencode/src/lsp/diagnostic.ts` — LSP touch, diagnostic collection, max error cap, report block, severity formatting, and warm-up containment anchors.
+- `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving file mutation behavior anchor.
 
 ## Current behavior retained
 
@@ -82,8 +85,8 @@ Proof requirements satisfied by artifact `7939934286`:
 
 ## Current gaps / do not overclaim
 
-- The accepted same-head proof is for `74a5b5aa8836075fd187c2da404f25ac14c83229`; the latest stale-edit recovery commit needs its own same-head workflow run before claiming proof on that newer head.
-- The new stale-edit recovery metadata still needs same-head WebUI/NIM proof showing it helps the live benchmark recover rather than repeat the stale edit.
+- The accepted same-head proof is for `c12789a7b7c59ba7bfe0ba22118892396356fc7c`; the latest metadata-independence commits need their own same-head workflow run before claiming proof on that newer head.
+- The new runtime metadata independence slice still needs same-head WebUI/NIM proof showing file tools no longer emit upstream-branded runtime metadata during natural prompts.
 - The attachment envelope is schema/metadata parity only; it does not implement image resizing or database-backed FilePart persistence.
 - The doom-loop guard now has a permission-envelope record, but it does not yet implement interactive allow/deny recovery.
 - Full provider-side processor semantics need more proof beyond metadata propagation.
