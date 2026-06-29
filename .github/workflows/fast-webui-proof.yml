@@ -8,16 +8,29 @@ on:
 jobs:
   fast-webui-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     env:
       NIM_KEY: ${{ secrets['NIM_KEY'] }}
       NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
-      FORGE_FAST_TIMEOUT_SECONDS: "220"
+      FORGE_FAST_TIMEOUT_SECONDS: "140"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-fast-webui-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('crates/**/*.rs', 'Cargo.toml', 'crates/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-fast-webui-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-fast-webui-cargo-
 
       - name: Run fast WebUI proof
         run: bash scripts/smoke/fast-webui-proof.sh
