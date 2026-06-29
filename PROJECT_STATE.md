@@ -5,18 +5,29 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `2d7f91619e700713d4554b967b6ccf47c70c3964`
-- Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
-- Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
-- Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
-- Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: live benchmark quality gate now matches final-report labels case-insensitively, aligned with existing case-insensitive Founder/Technical browser proof matching and OpenCode max-step text-summary behavior.
-- Latest proof doc: `docs/generated/proof/live-benchmark-quality-label-case-insensitive-20260629T1515Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `2d7f91619e700713d4554b967b6ccf47c70c3964` or a later head containing the fix.
+- Latest pre-slice verified head: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
+- Latest accepted same-head proof before this manifest-gate slice: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
+- Accepted same-head workflows for that baseline: CI `28382878597`, Build Proof `28382878610`, Live WebUI Feature Sprint `28382878593`.
+- Accepted Live WebUI artifact for that baseline: `7956715745`, `live-webui-feature-sprint-proof`, digest `sha256:5ce3895a333ba27b5a1ddc09c07b01587a9f0fe1c76d72d6cbc587abadc3f5f9`.
+- Accepted Build Proof artifact for that baseline: `7956402464`, `build-proof`, digest `sha256:c5381969921f8c71f6a18b56ec9280630ab6e1d06a5c2845bc5d0845282ce64b`.
+- Latest source-backed slice: Live WebUI proof manifest gate now runs inside the Live WebUI workflow and requires the browser screenshot, browser proof JSON, stream, conversation, hard checker, workflow checker, quality score, and manifest JSON to be uploaded together.
+- Latest proof doc: `docs/generated/proof/live-webui-proof-manifest-gate-20260629T1546Z.md`.
+- Do not claim this latest manifest-gate head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `14fff66d9847599c2f2bf08a4c66d582eea198c0` or a later head containing the gate.
 
-## Latest failed live run inspected
+## Latest verified live state
 
-Latest same-head status before this quality-gate slice:
+Latest same-head status before the manifest-gate slice:
+
+- Head: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`.
+- Build Proof `28382878610`: success.
+- CI `28382878597`: success.
+- Live WebUI Feature Sprint `28382878593`: success.
+- Live artifact `7956715745`: `live-webui-feature-sprint-proof`, digest `sha256:5ce3895a333ba27b5a1ddc09c07b01587a9f0fe1c76d72d6cbc587abadc3f5f9`.
+- Build artifact `7956402464`: `build-proof`, digest `sha256:c5381969921f8c71f6a18b56ec9280630ab6e1d06a5c2845bc5d0845282ce64b`.
+
+## Previous failed live runs inspected
+
+Previous same-head status before the quality-gate slice:
 
 - Head: `65fee6348197ee973af21809e97f9d1cc5cb966e`.
 - Build Proof `28381036315`: success.
@@ -51,22 +62,23 @@ Previous same-head status before the final-report contract gate:
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `8c20dbcc317b51ab69f16beeaf621cebaad939d6`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `59f9d4a71625d0dfe7125df9c816b8f47930fce5`.
 
-Proof requirements satisfied by artifact `7945828859`:
+Proof requirements satisfied by artifact `7956715745`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
 - The run uses real `nvidia_nim` with model recorded in conversation/stream artifacts.
 - The full benchmark stream contains real `tool-call` and `tool-result` events.
 - Browser proof includes `Full six-phase agentic benchmark prompt`, `Phase 1`, `Phase 2`, `Founder report`, and `Technical report`.
-- Artifact includes `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `full-benchmark-checker.json`, `opencode-workflow-checker.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
+- Artifact includes `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `full-benchmark-checker.json`, `opencode-workflow-checker.json`, `quality-score.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
 
 ## Latest implementation changes
 
-- Updated `scripts/smoke/score-live-benchmark-quality.py` so final-report label matching is case-insensitive and reports `matching: case_insensitive` in scoring evidence.
-- Kept the hard checker strict while avoiding false quality-gate failures on equivalent Markdown heading capitalization.
-- Retained `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` as the source anchor for max-step no-tools text finalization behavior.
+- Updated `scripts/smoke/check-live-webui-proof-manifest.py` so it is a first-class artifact gate for Live WebUI proof bundles.
+- Updated `.github/workflows/live-webui-feature-sprint.yml` so the Live WebUI workflow runs the manifest gate after the hard checker, OpenCode workflow checker, and quality score.
+- The manifest gate requires non-empty PNG screenshot proof, browser JSON markers, full benchmark stream/conversation, both checkers, quality score, provider/model/tool evidence, and a generated manifest artifact.
+- Retained `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` as the source anchor for no-tools text finalization behavior and browser-visible final-report proof requirements.
 - Existing final-report contract gate remains: `scripts/smoke/check-final-report-template-contract.py` in CI.
 - Existing fuzzy file-edit behavior remains: exact replacement first, then OpenCode-backed line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching with conservative uniqueness.
 
