@@ -5,18 +5,29 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head before this state update: `e9bd495d9e1386157923f27744fe39c9b30b1d44`
-- Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Latest source-fix head before this state update: `32e6f7f93243e6e7319fa3701b49584b782925ce`
+- Latest accepted same-head proof before this live-timeout recovery slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed max-step and live-quality command-claim scorer tightening.
-- Latest proof doc: `docs/generated/proof/max-step-command-claim-scorer-tightening-20260629T1150Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `e9bd495d9e1386157923f27744fe39c9b30b1d44` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed live WebUI max-step timeout recovery and Phase 4 browser edit-marker normalization in the live proof harness.
+- Latest proof doc: `docs/generated/proof/live-webui-max-step-timeout-recovery-20260629T1214Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `32e6f7f93243e6e7319fa3701b49584b782925ce` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
-Latest failed same-head gate before the source fix:
+Latest failed same-head gate before the live-timeout recovery source fix:
+
+- Head: `36f67a7fe760d54fdc10b24ad89204790a56e095`.
+- Build Proof `28370125986`: success.
+- CI `28370125998`: success.
+- Live WebUI Feature Sprint `28370126001`: failure.
+- Live artifact metadata inspected: `7951317296`, `live-webui-feature-sprint-proof`, digest `sha256:30142c86d5d834522543331c304e5bb2dfca507ac6594eadfd22995ab957d168`.
+- Live WebUI Feature Sprint failed in `Run live WebUI feature sprint` and `Check full benchmark evidence and quality score`.
+- Source mismatch found in `scripts/smoke/live-webui-feature-sprint.sh`: the live browser proof still required literal `apply_patch` even though Forge's Phase 4 evidence accepts `FileEdit`, `FileWrite`, or `ApplyPatch`; the script also hard-failed a timed-out curl before accepting salvaged hard-checker and OpenCode-workflow checker evidence from an evidence-ready max-step finalization.
+- Artifact ZIP was available, but the local automation runtime could not unpack connector-downloaded ZIP bytes during this run, so this patch is based on failing workflow metadata, checked-in harness code, and the previous PR-body diagnostics for this failure path.
+
+Previous failed same-head gate before command-claim scorer tightening:
 
 - Head: `64892c27b403b80a019cf410228bad9660defaa0`.
 - Build Proof `28368200124`: success.
@@ -106,6 +117,7 @@ Proof requirements satisfied by artifact `7945828859`:
 - `scripts/smoke/score-live-benchmark-quality.py` now normalizes human-readable command claims back to successful tool command metadata, ignores prohibitive command mentions, and only rejects actual placeholder brackets.
 - `scripts/smoke/score-live-benchmark-quality.py` now accepts any real Phase 4 edit marker in browser proof (`apply_patch`, `file_edit`, `file_write`, or the matching visible tool-card titles) instead of false-failing valid `file_edit` / `file_write` repo edits.
 - `scripts/smoke/score-live-benchmark-quality.py` now tightens command-claim extraction so negative evidence disclaimers and generic `bash -n validation passed` prose do not count as unproven tool-command claims.
+- `scripts/smoke/live-webui-feature-sprint.sh` now accepts the same real Phase 4 edit marker set during full browser proof capture and can continue from preserved checker-passing diagnostics when the outer SSE curl times out after evidence-ready max-step finalization.
 
 ## OpenCode source anchors retained in developer docs only
 
