@@ -224,6 +224,10 @@ def browser_has_phase4_edit_marker(browser_text: str) -> bool:
     return any(marker in browser_text for marker in PHASE4_BROWSER_EDIT_MARKERS)
 
 
+def label_present(final_lower: str, label: str) -> bool:
+    return label.lower() in final_lower
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: score-live-benchmark-quality.py proof_dir output.json", file=sys.stderr)
@@ -245,6 +249,7 @@ def main() -> int:
     workflow = load_json(workflow_path)
     browser_json = load_json(browser_json_path) if browser_json_path.exists() else {}
     final = final_text(conv)
+    final_lower = final.lower()
     results = all_tool_results(conv)
     stream_text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
     browser_text = json.dumps(browser_json, sort_keys=True)
@@ -263,8 +268,8 @@ def main() -> int:
     tool_results = stream_text.count("event: tool-result")
     partial(scores, "long_tool_loop_depth", 10, min(10, tool_events // 3 + tool_results // 3), {"tool_call_events": tool_events, "tool_result_events": tool_results})
 
-    labels_present = [label for label in REQUIRED_FINAL_LABELS if label in final]
-    partial(scores, "final_markdown_contract", 10, int(10 * len(labels_present) / len(REQUIRED_FINAL_LABELS)), {"present": labels_present, "missing": sorted(set(REQUIRED_FINAL_LABELS) - set(labels_present))})
+    labels_present = [label for label in REQUIRED_FINAL_LABELS if label_present(final_lower, label)]
+    partial(scores, "final_markdown_contract", 10, int(10 * len(labels_present) / len(REQUIRED_FINAL_LABELS)), {"present": labels_present, "missing": sorted(set(REQUIRED_FINAL_LABELS) - set(labels_present)), "matching": "case_insensitive"})
 
     founder = re.search(r"## Founder report\s*(.*?)(?:## Technical report|$)", final, re.I | re.S)
     founder_text = founder.group(1).strip() if founder else ""
@@ -278,7 +283,7 @@ def main() -> int:
     unproven = [claim for claim in claimed_tests if not command_is_proven(claim, results)]
     add(scores, "test_and_build_claims_match_tool_commands", 10, not unproven, {"claimed_commands": claimed_tests, "unproven": unproven})
 
-    add(scores, "semantic_repo_summary_not_placeholder", 5, all(term in final.lower() for term in ["forge", "webui", "benchmark", "risk"]) and not has_placeholder_brackets(final), None)
+    add(scores, "semantic_repo_summary_not_placeholder", 5, all(term in final_lower for term in ["forge", "webui", "benchmark", "risk"]) and not has_placeholder_brackets(final), None)
 
     add(scores, "proof_bundle_contains_prompt_transcript_checkers", 5, prompt_path.exists() and conv_path.exists() and stream_path.exists() and checker_path.exists() and workflow_path.exists(), None)
 
