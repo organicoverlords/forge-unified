@@ -61,26 +61,57 @@ impl ToolExecutor {
 
     async fn execute_todo_payload(&self, request: ToolRequest) -> Result<ToolResult> {
         #[derive(serde::Deserialize)]
-        struct Args { todos: Vec<TodoItem> }
-        #[derive(serde::Deserialize, serde::Serialize, Clone)]
-        struct TodoItem { content: String, status: String, priority: Option<String> }
+        struct Args { todos: Vec<RawTodoItem> }
+        #[derive(serde::Deserialize)]
+        struct RawTodoItem { content: String, status: Option<String>, priority: Option<String> }
+        #[derive(serde::Serialize, Clone)]
+        struct TodoItem { content: String, status: String, priority: String }
 
         let args: Args = serde_json::from_value(request.args)?;
         if args.todos.is_empty() { anyhow::bail!("todo_write requires at least one todo"); }
-        let valid = ["pending", "in_progress", "completed"];
-        for todo in &args.todos {
+        let valid_status = ["pending", "in_progress", "completed", "cancelled"];
+        let valid_priority = ["high", "medium", "low"];
+        let mut normalized = Vec::new();
+        let mut repaired = false;
+        for todo in args.todos {
             if todo.content.trim().is_empty() { anyhow::bail!("todo content cannot be empty"); }
-            if !valid.contains(&todo.status.as_str()) { anyhow::bail!("invalid todo status: {}", todo.status); }
+            let mut status = todo.status.clone();
+            let mut priority = todo.priority.clone();
+            if status.as_ref().map(|s| !valid_status.contains(&s.as_str())).unwrap_or(true) {
+                if let Some(p) = &priority {
+                    if valid_status.contains(&p.as_str()) {
+                        status = Some(p.clone());
+                        priority = None;
+                        repaired = true;
+                    }
+                }
+            }
+            let status = status.unwrap_or_else(|| {
+                repaired = true;
+                "pending".to_string()
+            });
+            if !valid_status.contains(&status.as_str()) { anyhow::bail!("invalid todo status: {}", status); }
+            let priority = match priority {
+                Some(value) if valid_priority.contains(&value.as_str()) => value,
+                _ => {
+                    repaired = true;
+                    "medium".to_string()
+                }
+            };
+            normalized.push(TodoItem { content: todo.content, status, priority });
         }
-        let completed = args.todos.iter().filter(|t| t.status == "completed").count();
-        let in_progress = args.todos.iter().filter(|t| t.status == "in_progress").count();
-        let pending = args.todos.iter().filter(|t| t.status == "pending").count();
+        let completed = normalized.iter().filter(|t| t.status == "completed").count();
+        let in_progress = normalized.iter().filter(|t| t.status == "in_progress").count();
+        let pending = normalized.iter().filter(|t| t.status == "pending").count();
+        let cancelled = normalized.iter().filter(|t| t.status == "cancelled").count();
         let output = serde_json::json!({
             "status": "updated",
             "tool_alias": "todo_write",
-            "todos": args.todos,
-            "counts": { "completed": completed, "in_progress": in_progress, "pending": pending },
-            "behavior": "Checklist updated; mark items completed immediately as work finishes."
+            "todos": normalized,
+            "counts": { "completed": completed, "in_progress": in_progress, "pending": pending, "cancelled": cancelled },
+            "repaired_malformed_payload": repaired,
+            "opencode_source": "packages/schema/src/session-todo.ts",
+            "behavior": "Checklist updated; mark items completed immediately as work finishes. Todo status and priority are normalized to match OpenCode's todo schema."
         }).to_string();
         Ok(ToolResult {
             id: request.id,
@@ -91,10 +122,13 @@ impl ToolExecutor {
             duration_ms: 0,
             metadata: HashMap::from([
                 ("tool_alias".to_string(), serde_json::json!("todo_write")),
-                ("todo_count".to_string(), serde_json::json!(completed + in_progress + pending)),
+                ("todo_count".to_string(), serde_json::json!(completed + in_progress + pending + cancelled)),
                 ("completed".to_string(), serde_json::json!(completed)),
                 ("in_progress".to_string(), serde_json::json!(in_progress)),
                 ("pending".to_string(), serde_json::json!(pending)),
+                ("cancelled".to_string(), serde_json::json!(cancelled)),
+                ("repaired_malformed_payload".to_string(), serde_json::json!(repaired)),
+                ("opencode_todo_source".to_string(), serde_json::json!("packages/schema/src/session-todo.ts")),
             ]),
         })
     }
