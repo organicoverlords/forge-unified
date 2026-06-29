@@ -50,6 +50,7 @@ impl Orchestrator {
         let mut evidence_ready_finalized = false;
         let mut premature_final_repairs = 0u32;
         let mut required_tool_sequence_repairs = 0u32;
+        let mut required_tool_sequence_denied_writes = 0u32;
         let benchmark_prompt = is_full_agentic_benchmark_prompt(&user_message);
         let required_tool_sequence = RequiredToolSequence::from_prompt(&user_message);
         let mut tool_signature_history: Vec<Vec<String>> = Vec::new();
@@ -90,7 +91,19 @@ impl Orchestrator {
             let tool_requests = response.message.tool_calls.unwrap();
             let decision = self.strategy.decide_for_requests(&provider, &model, &tool_requests);
             let mut allowed_requests = Vec::new();
-            for req in tool_requests { if self.safety.check_tool(&req.kind).await { allowed_requests.push(req); } else { total_tool_failures += 1; } }
+            let mut denied_results = Vec::new();
+            for req in tool_requests {
+                if let Some(sequence) = &required_tool_sequence {
+                    if let Some(mut denied) = sequence.deny_extra_file_write(&req) {
+                        required_tool_sequence_denied_writes += 1;
+                        total_tool_failures += 1;
+                        annotate_provider_executed_result(&req, &mut denied);
+                        denied_results.push(denied);
+                        continue;
+                    }
+                }
+                if self.safety.check_tool(&req.kind).await { allowed_requests.push(req); } else { total_tool_failures += 1; }
+            }
             let current_tool_signatures = tool_request_signatures(&allowed_requests);
             if repeated_tool_signature_window(&tool_signature_history, &current_tool_signatures) {
                 doom_loop_interrupted = true;
@@ -103,7 +116,7 @@ impl Orchestrator {
                 break;
             }
             remember_tool_signatures(&mut tool_signature_history, current_tool_signatures);
-            let results = if decision.strategy == crate::model_caps::ToolStrategy::Serial {
+            let mut results = if decision.strategy == crate::model_caps::ToolStrategy::Serial {
                 let mut results = Vec::new();
                 for req in allowed_requests {
                     total_tool_calls += 1;
@@ -122,6 +135,10 @@ impl Orchestrator {
                 total_tool_failures += results.iter().filter(|r| !r.success).count() as u32;
                 results
             };
+            if !denied_results.is_empty() {
+                denied_results.extend(results);
+                results = denied_results;
+            }
             self.conversation_mgr.write().await.add_tool_results(&conversation_id, results);
             if benchmark_prompt && benchmark_evidence_ready(&self.conversation_mgr, &conversation_id).await {
                 stopped_on_tool_cap = false;
@@ -133,7 +150,7 @@ impl Orchestrator {
         if stopped_on_tool_cap { self.force_final_answer(&conversation_id, &provider, &model, &user_message).await; }
 
         let started_at = chrono::Utc::now();
-        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("forge_required_tool_sequence_guard".to_string(), serde_json::json!(required_tool_sequence.is_some())), ("forge_required_tool_sequence_repairs".to_string(), serde_json::json!(required_tool_sequence_repairs)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_batch_nested_evidence_finalization".to_string(), serde_json::json!(true)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
+        Ok(RunRecord { id: run_id, conversation_id, task: user_message, status: RunStatus::Completed, provider, model, tool_calls: total_tool_calls, tool_failures: total_tool_failures, started_at, completed_at: Some(chrono::Utc::now()), metadata: HashMap::from([("rounds".to_string(), serde_json::json!(round)), ("forced_final_after_tool_cap".to_string(), serde_json::json!(stopped_on_tool_cap)), ("forge_evidence_ready_finalized".to_string(), serde_json::json!(evidence_ready_finalized)), ("forge_premature_final_repairs".to_string(), serde_json::json!(premature_final_repairs)), ("forge_required_tool_sequence_guard".to_string(), serde_json::json!(required_tool_sequence.is_some())), ("forge_required_tool_sequence_repairs".to_string(), serde_json::json!(required_tool_sequence_repairs)), ("forge_required_tool_sequence_denied_writes".to_string(), serde_json::json!(required_tool_sequence_denied_writes)), ("opencode_max_steps_source".to_string(), serde_json::json!(OPENCODE_MAX_STEPS_SOURCE)), ("opencode_session_prompt_source".to_string(), serde_json::json!(OPENCODE_SESSION_PROMPT_SOURCE)), ("forge_batch_nested_evidence_finalization".to_string(), serde_json::json!(true)), ("forge_doom_loop_interrupted".to_string(), serde_json::json!(doom_loop_interrupted)), ("forge_doom_loop_permission_recorded".to_string(), serde_json::json!(doom_loop_permission_recorded)), ("forge_doom_loop_threshold".to_string(), serde_json::json!(DOOM_LOOP_THRESHOLD)), ("forge_tool_state_result_envelope".to_string(), serde_json::json!("complete/fail state envelopes")), ("forge_tool_attachments_envelope".to_string(), serde_json::json!("normalized file attachments")), ("forge_final_evidence_digest".to_string(), serde_json::json!("path/command-aware evidence digest"))]) })
     }
 
     async fn force_final_answer(&self, conversation_id: &ConversationId, provider: &ProviderId, model: &ModelId, user_message: &str) {
@@ -361,6 +378,7 @@ fn tool_error_result(req: ToolRequest, error: String) -> ToolResult {
 struct RequiredToolSequence {
     min_file_writes: usize,
     validation_command: Option<String>,
+    allowed_file_write_paths: Vec<String>,
 }
 
 impl RequiredToolSequence {
@@ -370,8 +388,10 @@ impl RequiredToolSequence {
             && lower.contains("shell_command")
             && (lower.contains("tool sequence") || lower.contains("run exactly") || lower.contains("final answer before") || lower.contains("do not stop after"));
         if !wants_sequence { return None; }
+        let allowed_file_write_paths = extract_file_write_paths(user_message);
         let file_write_mentions = lower.matches("file_write").count();
-        Some(Self { min_file_writes: file_write_mentions.max(1).min(4), validation_command: extract_validation_command(user_message) })
+        let min_file_writes = if allowed_file_write_paths.is_empty() { file_write_mentions.max(1).min(4) } else { allowed_file_write_paths.len() };
+        Some(Self { min_file_writes, validation_command: extract_validation_command(user_message), allowed_file_write_paths })
     }
 
     async fn missing_prompt(&self, conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> Option<String> {
@@ -395,6 +415,37 @@ impl RequiredToolSequence {
         }
         None
     }
+
+    fn deny_extra_file_write(&self, request: &ToolRequest) -> Option<ToolResult> {
+        if request.kind != ToolKind::FileWrite || self.allowed_file_write_paths.is_empty() { return None; }
+        let path = request.args.get("path").and_then(|value| value.as_str()).unwrap_or("");
+        if self.allowed_file_write_paths.iter().any(|allowed| allowed == path) { return None; }
+        Some(ToolResult {
+            id: request.id.clone(),
+            kind: request.kind.clone(),
+            success: false,
+            output: format!("Denied extra file_write path `{path}`. Required tool sequence only allows: {}", self.allowed_file_write_paths.join(", ")),
+            error: Some("required_tool_sequence_extra_file_write_denied".to_string()),
+            duration_ms: 0,
+            metadata: HashMap::from([
+                ("forge_required_tool_sequence_denied".to_string(), serde_json::json!(true)),
+                ("path".to_string(), serde_json::json!(path)),
+                ("allowed_file_write_paths".to_string(), serde_json::json!(self.allowed_file_write_paths)),
+            ]),
+        })
+    }
+}
+
+fn extract_file_write_paths(user_message: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    for line in user_message.lines() {
+        let lower = line.to_ascii_lowercase();
+        let Some(pos) = lower.find("use file_write to create ") else { continue; };
+        let rest = line[pos + "use file_write to create ".len()..].trim();
+        let path = rest.split_whitespace().next().unwrap_or("").trim_matches(|ch| ch == '`' || ch == ':' || ch == ',' || ch == '.' || ch == '"' || ch == '\'');
+        if !path.is_empty() && !paths.iter().any(|seen| seen == path) { paths.push(path.to_string()); }
+    }
+    paths
 }
 
 fn extract_validation_command(user_message: &str) -> Option<String> {
