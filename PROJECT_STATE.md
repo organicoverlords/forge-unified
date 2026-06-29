@@ -5,18 +5,29 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head: `40040ece4f8482b43bc02b86c4abfca7d0eb1a0e`
+- Latest source-fix head: `eefd4d03c8285d1528614c605d669a8c0b809230`
 - Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed max-step/live-quality command-claim normalization for the Live WebUI benchmark scorer.
-- Latest proof doc: `docs/generated/proof/live-quality-command-claim-normalizer-20260629T1047Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `40040ece4f8482b43bc02b86c4abfca7d0eb1a0e` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed live-quality browser proof marker normalization for Phase 4 repo edits.
+- Latest proof doc: `docs/generated/proof/phase4-browser-marker-20260629T1116Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `eefd4d03c8285d1528614c605d669a8c0b809230` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
 Latest failed same-head gate before the source fix:
+
+- Head: `117a0ebe9b11c84a760190a472c02cac05f1869b`.
+- Build Proof `28367497968`: success.
+- CI `28367497919`: failure.
+- Live WebUI Feature Sprint `28367497952`: failure.
+- CI failed in `Smoke Test` / `Validate WebUI proof harness`.
+- Live WebUI Feature Sprint failed in `live-webui-feature-sprint` and `Check full benchmark evidence and quality score`.
+- Live artifact metadata inspected: `7950149603`, `live-webui-feature-sprint-proof`, digest `sha256:f7d1bce77f63d38d6adb07bdc037ed27a5baee23799f1ccd3f7a8fdd91f247bd`.
+- Source mismatch found: the quality scorer's browser usefulness gate required the literal `apply_patch` marker even though the Phase 4 evidence gate accepts a successful `FileEdit`, `FileWrite`, or `ApplyPatch` outside `.agent_test` plus status/diff command evidence.
+
+Previous failed same-head gate before command-claim normalization:
 
 - Head: `4ff7c2f6f7cfc758c3669fe59d5407163ccf70b1`.
 - Build Proof `28364990761`: success.
@@ -83,6 +94,7 @@ Proof requirements satisfied by artifact `7945828859`:
 - `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI and tolerates equivalent evidence-bound conservative fallback wording.
 - `crates/engine/src/orchestrator.rs` rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
 - `scripts/smoke/score-live-benchmark-quality.py` now normalizes human-readable command claims back to successful tool command metadata, ignores prohibitive command mentions, and only rejects actual placeholder brackets.
+- `scripts/smoke/score-live-benchmark-quality.py` now accepts any real Phase 4 edit marker in browser proof (`apply_patch`, `file_edit`, `file_write`, or the matching visible tool-card titles) instead of false-failing valid `file_edit` / `file_write` repo edits.
 
 ## OpenCode source anchors retained in developer docs only
 
