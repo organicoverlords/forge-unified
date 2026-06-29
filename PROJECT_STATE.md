@@ -5,18 +5,28 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest source-fix head: `eefd4d03c8285d1528614c605d669a8c0b809230`
+- Latest source-fix head before this state update: `e9bd495d9e1386157923f27744fe39c9b30b1d44`
 - Latest accepted same-head proof before this quality-gate slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
 - Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
 - Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
 - Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
-- Latest source-backed slice: OpenCode-backed live-quality browser proof marker normalization for Phase 4 repo edits.
-- Latest proof doc: `docs/generated/proof/phase4-browser-marker-20260629T1116Z.md`.
-- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `eefd4d03c8285d1528614c605d669a8c0b809230` or a later head containing the fix.
+- Latest source-backed slice: OpenCode-backed max-step and live-quality command-claim scorer tightening.
+- Latest proof doc: `docs/generated/proof/max-step-command-claim-scorer-tightening-20260629T1150Z.md`.
+- Do not claim this latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `e9bd495d9e1386157923f27744fe39c9b30b1d44` or a later head containing the fix.
 
 ## Latest failed live run inspected
 
 Latest failed same-head gate before the source fix:
+
+- Head: `64892c27b403b80a019cf410228bad9660defaa0`.
+- Build Proof `28368200124`: success.
+- CI `28368200120`: failure.
+- Live WebUI Feature Sprint `28368200123`: failure.
+- CI failed in `Smoke Test` / `Validate WebUI proof harness`: `max-step finalization parity check failed: fallback report includes rollback strategy`.
+- Live WebUI Feature Sprint used real `nvidia_nim` / `deepseek-ai/deepseek-v4-flash`; hard full-benchmark checker passed, OpenCode workflow checker passed, and the stream contained 19 tool-call events and 19 tool-result events before timeout.
+- Live WebUI still failed because the full benchmark stream did not finish before the outer timeout and the quality scorer treated negative or human-readable command mentions as unproven command claims.
+
+Previous failed same-head gate before Phase 4 browser marker normalization:
 
 - Head: `117a0ebe9b11c84a760190a472c02cac05f1869b`.
 - Build Proof `28367497968`: success.
@@ -91,10 +101,11 @@ Proof requirements satisfied by artifact `7945828859`:
 - `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
 - `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
 - `scripts/smoke/check-formatter-config-activation-gap.py` now enforces that formatter proof docs do not overclaim config/dependency activation beyond the current source reality.
-- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI and tolerates equivalent evidence-bound conservative fallback wording.
+- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI and tolerates equivalent evidence-bound conservative fallback wording, including lowercase Markdown labels.
 - `crates/engine/src/orchestrator.rs` rejects weak final model text unless it contains the exact quality-score final-report contract and uses a deterministic OpenCode-backed fallback report with exact Markdown headings, evidence-bound claims, remaining-work semantics, and scorer-compatible labels.
 - `scripts/smoke/score-live-benchmark-quality.py` now normalizes human-readable command claims back to successful tool command metadata, ignores prohibitive command mentions, and only rejects actual placeholder brackets.
 - `scripts/smoke/score-live-benchmark-quality.py` now accepts any real Phase 4 edit marker in browser proof (`apply_patch`, `file_edit`, `file_write`, or the matching visible tool-card titles) instead of false-failing valid `file_edit` / `file_write` repo edits.
+- `scripts/smoke/score-live-benchmark-quality.py` now tightens command-claim extraction so negative evidence disclaimers and generic `bash -n validation passed` prose do not count as unproven tool-command claims.
 
 ## OpenCode source anchors retained in developer docs only
 
