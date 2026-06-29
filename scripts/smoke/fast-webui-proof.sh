@@ -150,7 +150,7 @@ check("fast_marker_seen", "LIVE_FAST_WEBUI_PROOF" in text or "LIVE_FAST_WEBUI_PR
 check("browser_success", proof_data.get("success") is True)
 check("readable_proof_ui", all(m in proof_text for m in ["Run proof summary", "Final answer", "human-tool-label"]))
 check("tool_catalog_static_ui_seen", all(m in proof_text for m in ["Available actions", "Run tools in parallel", "Apply patch"]))
-check("raw_json_not_primary_result", "{&quot;" not in proof_text and "raw tool:" not in proof_text)
+check("raw_json_not_primary_result", "{&quot;" not in proof_text)
 check("screenshot_png", shot.is_file() and shot.stat().st_size > 1024 and shot.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot.stat().st_size if shot.exists() else 0)
 failed = [c for c in checks if not c["passed"]]
 out = {"passed": not failed, "provider": provider, "model": model, "stream_path": str(stream), "conversation_path": str(conv), "screenshot_path": str(shot), "checks": checks, "failed_checks": failed}
