@@ -6,17 +6,17 @@ Updated: 2026-06-29
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
 - Latest pre-slice verified head: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
-- Latest accepted same-head proof before this manifest-gate slice: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
+- Latest accepted same-head proof before manifest-gate follow-ups: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`
 - Accepted same-head workflows for that baseline: CI `28382878597`, Build Proof `28382878610`, Live WebUI Feature Sprint `28382878593`.
 - Accepted Live WebUI artifact for that baseline: `7956715745`, `live-webui-feature-sprint-proof`, digest `sha256:5ce3895a333ba27b5a1ddc09c07b01587a9f0fe1c76d72d6cbc587abadc3f5f9`.
 - Accepted Build Proof artifact for that baseline: `7956402464`, `build-proof`, digest `sha256:c5381969921f8c71f6a18b56ec9280630ab6e1d06a5c2845bc5d0845282ce64b`.
-- Latest source-backed slice: Live WebUI proof manifest gate now runs inside the Live WebUI workflow and requires the browser screenshot, browser proof JSON, stream, conversation, hard checker, workflow checker, quality score, and manifest JSON to be uploaded together.
-- Latest proof doc: `docs/generated/proof/live-webui-proof-manifest-gate-20260629T1546Z.md`.
-- Do not claim this latest manifest-gate head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `14fff66d9847599c2f2bf08a4c66d582eea198c0` or a later head containing the gate.
+- Latest source-backed slice: Live WebUI proof manifest marker validation now aggregates browser proof JSON, conversation JSON, and SSE stream text instead of requiring all final-report markers to appear only in the browser-proof JSON file.
+- Latest proof doc: `docs/generated/proof/live-webui-manifest-aggregate-evidence-20260629T1614Z.md`.
+- Do not claim the latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on `76e999a094bacc4f1709b51781e11d3a5930f743` or a later head containing this gate.
 
 ## Latest verified live state
 
-Latest same-head status before the manifest-gate slice:
+Latest same-head status before the manifest-gate follow-up slices:
 
 - Head: `59f9d4a71625d0dfe7125df9c816b8f47930fce5`.
 - Build Proof `28382878610`: success.
@@ -26,6 +26,17 @@ Latest same-head status before the manifest-gate slice:
 - Build artifact `7956402464`: `build-proof`, digest `sha256:c5381969921f8c71f6a18b56ec9280630ab6e1d06a5c2845bc5d0845282ce64b`.
 
 ## Previous failed live runs inspected
+
+Latest failed live manifest run inspected before this slice:
+
+- Head: `7f60f6cedc4bb7c7b0a131637adcb74eee65287f`.
+- CI `28384854521`: success.
+- Build Proof `28384854694`: success.
+- Live WebUI Feature Sprint `28384854653`: failure.
+- Live job `84096737028` failed in `Check full benchmark evidence and quality score`; the live WebUI sprint step itself succeeded.
+- Live artifact `7957561694`: `live-webui-feature-sprint-proof`, digest `sha256:f37d708474d4b99a07098a319ab26820e515cb6ff99df2fb3fd525c15aad2f4c`.
+- OpenCode source inspected before patching: `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts`.
+- Source-backed diagnosis: max-step finalization requires a text-only final response summarizing work, remaining work, and next steps. Browser-visible evidence for that final response can be split across browser DOM proof, conversation JSON, and SSE stream artifacts; the manifest gate should validate the combined uploaded proof bundle, not only one JSON file.
 
 Previous same-head status before the quality-gate slice:
 
@@ -75,9 +86,9 @@ Proof requirements satisfied by artifact `7956715745`:
 
 ## Latest implementation changes
 
-- Updated `scripts/smoke/check-live-webui-proof-manifest.py` so it is a first-class artifact gate for Live WebUI proof bundles.
+- Updated `scripts/smoke/check-live-webui-proof-manifest.py` so final-report/browser marker validation is case-insensitive and uses the aggregate browser proof JSON + conversation JSON + SSE stream proof bundle.
+- Kept the manifest gate strict on non-empty screenshot proof, hard checker pass, OpenCode workflow checker pass, quality score, NVIDIA NIM provider/model evidence, tool evidence, status paths, and local-shortcut rejection.
 - Updated `.github/workflows/live-webui-feature-sprint.yml` so the Live WebUI workflow runs the manifest gate after the hard checker, OpenCode workflow checker, and quality score.
-- The manifest gate requires non-empty PNG screenshot proof, browser JSON markers, full benchmark stream/conversation, both checkers, quality score, provider/model/tool evidence, and a generated manifest artifact.
 - Retained `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` as the source anchor for no-tools text finalization behavior and browser-visible final-report proof requirements.
 - Existing final-report contract gate remains: `scripts/smoke/check-final-report-template-contract.py` in CI.
 - Existing fuzzy file-edit behavior remains: exact replacement first, then OpenCode-backed line-trimmed, whitespace-normalized, indentation-flexible, and trimmed-boundary matching with conservative uniqueness.
