@@ -102,11 +102,13 @@ jobs:
           python3 -m py_compile scripts/smoke/check-formatter-config-activation-gap.py
           python3 -m py_compile scripts/smoke/check-max-step-finalization-parity.py
           python3 -m py_compile scripts/smoke/check-final-report-template-contract.py
+          python3 -m py_compile scripts/smoke/check-live-webui-time-budget.py
           python3 scripts/smoke/check-formatter-parity.py
           python3 scripts/smoke/check-formatter-activation-evidence.py
           python3 scripts/smoke/check-formatter-config-activation-gap.py
           python3 scripts/smoke/check-max-step-finalization-parity.py
           python3 scripts/smoke/check-final-report-template-contract.py
+          python3 scripts/smoke/check-live-webui-time-budget.py
           if [ -f scripts/smoke/check-live-webui-proof-manifest.py ]; then
             python3 -m py_compile scripts/smoke/check-live-webui-proof-manifest.py
           fi
