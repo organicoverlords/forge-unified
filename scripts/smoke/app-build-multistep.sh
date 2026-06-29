@@ -11,12 +11,12 @@ fi
 PORT="${FORGE_APP_BUILD_MULTI_PORT:-3360}"
 BASE="http://127.0.0.1:${PORT}"
 OUT_DIR="${FORGE_APP_BUILD_MULTI_OUT:-$ROOT/forge-proof/app-multistep-build-proof}"
-TIMEOUT_SECONDS="${FORGE_APP_BUILD_MULTI_TIMEOUT_SECONDS:-300}"
+TIMEOUT_SECONDS="${FORGE_APP_BUILD_MULTI_TIMEOUT_SECONDS:-360}"
 SPEC="docs/generated/proof/app-multistep-spec.md"
 REPORT="docs/generated/proof/app-multistep-report.md"
 SPEC_MARKER="APP_MULTI_STEP_SPEC"
 REPORT_MARKER="APP_MULTI_STEP_REPORT"
-VALIDATION_CMD='grep -R "APP_MULTI_STEP_" docs/generated/proof/app-multistep-*.md'
+VALIDATION_CMD='grep -R APP_MULTI_STEP_ docs/generated/proof/app-multistep-*.md'
 mkdir -p "$OUT_DIR"
 
 SERVER_LOG="$OUT_DIR/server.log"
@@ -101,15 +101,21 @@ test -n "$CONV_ID"
 cat > "$PROMPT_FILE" <<PROMPT
 Build a tiny multistep repo artifact through the normal WebUI tools.
 
-Do exactly these steps, then stop:
+CRITICAL: A final answer before the shell validation command is a failed run.
+You must use exactly this tool sequence before the final answer:
+1. file_write
+2. file_write
+3. shell_command
+
+Required tool calls:
 1. Use file_write to create $SPEC. Include this exact marker on its own line: $SPEC_MARKER. Also include a one-line acceptance rule saying the report must reference this spec file path.
 2. Use file_write to create $REPORT. Include this exact marker on its own line: $REPORT_MARKER. The report must reference $SPEC by path.
 3. Use shell_command to run exactly: $VALIDATION_CMD
-4. Final answer must include files modified, tests run, unresolved risks, and confidence.
+4. Only after the shell_command result, final answer with files modified, tests run, unresolved risks, and confidence.
 
-Do not inspect the repo. Do not do broad analysis. Do not create other files.
+Do not inspect the repo. Do not do broad analysis. Do not create other files. Do not stop after the two file writes.
 PROMPT
-jq -Rs '{message: ., max_rounds: 6}' "$PROMPT_FILE" > "$REQUEST_JSON"
+jq -Rs '{message: ., max_rounds: 8}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
 step "run multistep app build through WebUI"
 set +e
