@@ -159,17 +159,14 @@ async fn model_messages(conversation_mgr: &Arc<RwLock<ConversationManager>>, con
 async fn final_evidence_digest(conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> String {
     let conv_mgr = conversation_mgr.read().await;
     let messages = conv_mgr.get_messages(conversation_id);
+    let results = conversation_tool_results(messages);
     let mut lines = Vec::new();
     let mut tool_count = 0usize;
     let mut failure_count = 0usize;
-    for message in messages {
-        if let Some(results) = &message.tool_results {
-            for result in results {
-                tool_count += 1;
-                if !result.success { failure_count += 1; }
-                lines.push(result_evidence_line(result));
-            }
-        }
+    for result in &results {
+        tool_count += 1;
+        if !result.success { failure_count += 1; }
+        lines.push(result_evidence_line(result));
     }
     let mut digest = format!("provider/model-backed tool loop completed. tool_results={tool_count}; tool_failures={failure_count}.\n");
     digest.push_str(&lines.into_iter().rev().take(36).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
@@ -179,7 +176,7 @@ async fn final_evidence_digest(conversation_mgr: &Arc<RwLock<ConversationManager
 async fn benchmark_evidence_ready(conversation_mgr: &Arc<RwLock<ConversationManager>>, conversation_id: &ConversationId) -> bool {
     let conv_mgr = conversation_mgr.read().await;
     let messages = conv_mgr.get_messages(conversation_id);
-    let results: Vec<&ToolResult> = messages.iter().filter_map(|message| message.tool_results.as_ref()).flatten().collect();
+    let results = conversation_tool_results(messages);
     let has_kind = |kind: ToolKind| results.iter().any(|result| result.success && result.kind == kind);
     let has_shell = |needle: &str| results.iter().any(|result| result.success && matches!(result.kind, ToolKind::ShellCommand | ToolKind::TerminalRun) && result_metadata_command(result).unwrap_or("").to_ascii_lowercase().contains(needle));
     let has_path_kind = |kind: ToolKind, path: &str| results.iter().any(|result| result.success && result.kind == kind && result_metadata_path(result) == Some(path));
@@ -209,6 +206,25 @@ async fn benchmark_evidence_ready(conversation_mgr: &Arc<RwLock<ConversationMana
         && has_repo_edit
         && (has_shell("git diff") || has_shell("git status"))
         && (has_shell("bash -n") || has_shell("cargo check") || has_shell("cargo test") || has_shell("cargo build"))
+}
+
+fn conversation_tool_results(messages: &[Message]) -> Vec<ToolResult> {
+    let mut results: Vec<ToolResult> = messages.iter().filter_map(|message| message.tool_results.as_ref()).flatten().cloned().collect();
+    let nested = expand_batch_parallel_results(&results);
+    results.extend(nested);
+    results
+}
+
+fn expand_batch_parallel_results(results: &[ToolResult]) -> Vec<ToolResult> {
+    let mut expanded = Vec::new();
+    for result in results {
+        if result.kind != ToolKind::BatchParallel { continue; }
+        let Ok(nested) = serde_json::from_str::<Vec<ToolResult>>(&result.output) else { continue; };
+        let deeper = expand_batch_parallel_results(&nested);
+        expanded.extend(nested);
+        expanded.extend(deeper);
+    }
+    expanded
 }
 
 fn result_evidence_line(result: &ToolResult) -> String {
