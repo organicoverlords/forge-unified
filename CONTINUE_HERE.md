@@ -16,10 +16,9 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - PR branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3, base `master`
-- Latest accepted fully green proof HEAD: `74a5b5aa8836075fd187c2da404f25ac14c83229`.
-- Accepted workflows at that head: CI `28340198388`, Build Proof `28340198385`, Live WebUI Feature Sprint `28340198381`.
-- Accepted artifact: `7939934286`, digest `sha256:5a1fbb5801736071e85a8ea15ba7828adea5f1568c05c391684cfe3ab9d0cab4`.
-- Later screenshot-capture work moved HEAD to `ed308b67a10a63392e00c693a99bdc08e66e8d05`; CI and Build Proof passed there, but strict Live WebUI proof failed because the model repeated a stale exact `file_edit` replacement instead of repairing with current-file/apply-patch semantics.
+- Latest accepted fully green proof HEAD: `a49747de437d0f8e54ee5011861329f0423fef3b`.
+- Accepted workflows at that head: CI `28347368236`, Build Proof `28347368380`, Live WebUI Feature Sprint `28347368238`.
+- Accepted artifact: `7942306628`, digest `sha256:2ea7f6463189c3e90ec16a43e672626fdb35d31602923180baf86ffacfedcbd3`.
 - Do not call any later head accepted until CI, Build Proof, and Live WebUI Feature Sprint are all green on that same head.
 
 ## Current instruction from user
@@ -28,13 +27,13 @@ Stop patching benchmark prompts as the main fix. Fix Forge code to behave like O
 
 Immediate OpenCode source-backed target:
 
-- Forge stale `file_edit` failure handling should copy OpenCode-style tool failure lifecycle behavior.
-- Upstream source already inspected: `anomalyco/opencode:packages/opencode/src/session/processor.ts`, especially `failToolCall`, `completeToolCall`, and ToolPart state transitions.
-- Relevant semantics: failed tool calls are first-class tool parts with `state.status = "error"`, original input, explicit error text, and call settlement; the agent should get enough state to recover with a different operation instead of repeating the same failed edit.
+- Continue OpenCode formatter catalog/config/runtime parity.
+- Upstream source inspected this run: `anomalyco/opencode:packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts`.
+- Relevant semantics: OpenCode keeps a formatter registry, matches by extension, probes formatter commands, safely disables unavailable formatters, contains formatter failures, and returns formatting availability/status without making unrelated file mutations fail.
 
 ## Latest accepted proof slice
 
-Forge has real live browser proof for the full six-phase benchmark prompt through the WebUI at `74a5b5aa8836075fd187c2da404f25ac14c83229`.
+Forge has same-head green proof for the full six-phase benchmark prompt through the WebUI at `a49747de437d0f8e54ee5011861329f0423fef3b`.
 
 The accepted artifact proves:
 
@@ -45,6 +44,7 @@ The accepted artifact proves:
 - Browser and artifact proof files include `full-benchmark-webui.png`, `full-benchmark-browser-proof.json`, `full-benchmark-stream.sse`, `full-benchmark-conversation.json`, `tool-lifecycle-webui.png`, `webui.png`, and `event-rail.png`.
 - `full-benchmark-checker.json` passed with no failed checks.
 - `opencode-workflow-checker.json` passed with no failed checks.
+- Phase 4 repository edit ordering is accepted on the same head.
 
 ## Recent implementation fixes
 
@@ -55,6 +55,8 @@ The accepted artifact proves:
 - Failed tool executions are recorded back to the model as tool results.
 - `/` and empty paths normalize to workspace root for repo-scoped file tools.
 - When tool rounds are exhausted, the orchestrator uses a clean no-tools finalization pass from a compact evidence digest so the WebUI can show final Founder/Technical reports.
+- Stale exact `file_edit` failures now return first-class error metadata with current-file preview and recovery guidance.
+- Phase 4 benchmark proof now requires a successful dedicated repository edit result outside `.agent_test` before final reporting.
 
 ## Source-backed OpenCode anchors
 
@@ -62,9 +64,12 @@ The accepted artifact proves:
 - `packages/schema/src/v1/session.ts` — ToolPart, ToolState, FilePart schema shape.
 - `packages/opencode/src/event-v2-bridge.ts` — visible EventV2Bridge receipt stream.
 - `packages/opencode/src/tool/write.ts`, `edit.ts`, `read.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `ls.ts`, `webfetch.ts`, and `apply_patch.ts` — provider-visible tool catalog behavior anchors.
+- `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts` — formatter registry, extension matching, command probing, and contained formatter failures.
 
 ## Previous proven slices
 
+- `a49747de437d0f8e54ee5011861329f0423fef3b` — accepted same-head CI, Build Proof, and Live WebUI proof for full benchmark; artifact `7942306628`.
+- `c12789a7b7c59ba7bfe0ba22118892396356fc7c` — accepted same-head stale edit recovery proof; artifact `7941120525`.
 - `74a5b5aa8836075fd187c2da404f25ac14c83229` — accepted same-head CI, Build Proof, and Live WebUI proof for full benchmark; artifact `7939934286`.
 - `7a1951ec9b706bca9a3dea3d7204fff1e01f87cf` — earlier real full six-phase benchmark prompt through WebUI; artifact `7928099674`.
 - `332b5bbf98c4faaa481fe8a63cd64bb2b1359f92` — live NIM model proof plus visible OpenCode ToolPart lifecycle proof; artifact `7927706533`.
@@ -73,7 +78,6 @@ The accepted artifact proves:
 
 ## Still incomplete / do not overclaim
 
-- Stale exact `file_edit` replacement recovery is not OpenCode-grade yet.
 - True providerExecuted tool calls from provider-side execution are still incomplete for Forge-owned tools.
 - OpenCode database-backed part IDs are not fully copied.
 - Live LSP server/client diagnostics are not implemented yet.
@@ -82,8 +86,7 @@ The accepted artifact proves:
 
 ## Next source-backed targets
 
-1. Patch Forge stale edit failure behavior using upstream `packages/opencode/src/session/processor.ts` semantics already inspected.
+1. Patch full formatter registry/config/runtime parity using upstream `packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts` semantics already inspected.
 2. Check same-head Actions after the patch.
 3. Continue live LSP diagnostics.
-4. Continue full formatter registry/config/runtime parity.
-5. Continue deeper watcher parity or NIM-backed compaction.
+4. Continue deeper watcher parity or NIM-backed compaction.
