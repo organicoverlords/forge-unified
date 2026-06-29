@@ -5,19 +5,19 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof before this formatter-activation-evidence slice: `5e528fe4aa147b565327a7dc3c6ee4ba930a05c9`
-- Accepted same-head workflows for that baseline: CI `28354019180`, Build Proof `28354019177`, Live WebUI Feature Sprint `28354019207`.
-- Accepted Live WebUI artifact for that baseline: `7944644902`, `live-webui-feature-sprint-proof`, digest `sha256:2f650d46532b91bba6c0f348e62c145ee2d70a86e6f622e97605f1a7c05a6110`.
-- Accepted Build Proof artifact for that baseline: `7944553884`, `build-proof`, digest `sha256:6d080b888bcfb4a5c1c0161ebc1efed60fdeee9f15797cd9666c1459fa35204f`.
-- Latest source-backed slice: CI-enforced formatter activation evidence gate for the OpenCode-backed Forge formatter catalog proof trail.
-- Latest proof doc: `docs/generated/proof/formatter-activation-evidence-ci-gate-20260629T0750Z.md`.
-- Do not claim the formatter-activation-evidence head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof before this max-step-finalization-parity slice: `8c20dbcc317b51ab69f16beeaf621cebaad939d6`
+- Accepted same-head workflows for that baseline: CI `28356929367`, Build Proof `28356929398`, Live WebUI Feature Sprint `28356929402`.
+- Accepted Live WebUI artifact for that baseline: `7945828859`, `live-webui-feature-sprint-proof`, digest `sha256:14420500e647c221a08c4c1873ded70797b1a5a8f3ec74a8d5806f1b45fec79f`.
+- Accepted Build Proof artifact for that baseline: `7945709891`, `build-proof`, digest `sha256:cab73986015524f5256b56d6767b4ae86d338deefe461dbc355d4a1e720aa9dc`.
+- Latest source-backed slice: CI-enforced max-step/evidence-ready finalization parity gate for Forge's OpenCode-backed no-tools final report behavior.
+- Latest proof doc: `docs/generated/proof/max-step-finalization-parity-ci-gate-20260629T0946Z.md`.
+- Do not claim the max-step-finalization-parity head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `5e528fe4aa147b565327a7dc3c6ee4ba930a05c9`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `8c20dbcc317b51ab69f16beeaf621cebaad939d6`.
 
-Proof requirements satisfied by artifact `7944644902`:
+Proof requirements satisfied by artifact `7945828859`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -66,6 +66,8 @@ Proof requirements satisfied by artifact `7944644902`:
 - Formatter coverage now includes the remaining upstream OpenCode formatter families: Elixir/Phoenix template files via `mix`, experimental JS/TS via `oxfmt`, R via `air`, PHP via `pint`, Haskell via `ormolu`, Clojure/EDN via `cljfmt`, and D via `dfmt`.
 - `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
 - `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
+- `scripts/smoke/check-formatter-config-activation-gap.py` now enforces that formatter proof docs do not overclaim config/dependency activation beyond the current source reality.
+- `scripts/smoke/check-max-step-finalization-parity.py` now enforces the OpenCode-backed max-step/evidence-ready no-tools finalization contract in CI.
 
 ## OpenCode source anchors retained in developer docs only
 
@@ -78,6 +80,7 @@ Proof requirements satisfied by artifact `7944644902`:
 - `anomalyco/opencode:packages/core/src/file-mutation.ts` — BOM-preserving file mutation behavior anchor.
 - `anomalyco/opencode:packages/opencode/src/format/index.ts` — formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation.
 - `anomalyco/opencode:packages/opencode/src/format/formatter.ts` — built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
+- `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` — max-step no-tools finalization, text-only summary, remaining work list, and next-step recommendations.
 
 ## Current behavior retained
 
