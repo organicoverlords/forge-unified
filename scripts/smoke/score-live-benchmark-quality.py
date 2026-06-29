@@ -42,6 +42,15 @@ EXPECTED_FILES = {
     ".agent_test/action_plan.json",
 }
 
+PHASE4_BROWSER_EDIT_MARKERS = [
+    "apply_patch",
+    "file_edit",
+    "file_write",
+    "Applied patch",
+    "Edited file",
+    "Wrote file",
+]
+
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -194,6 +203,10 @@ def has_placeholder_brackets(text: str) -> bool:
     return bool(re.search(r"\[[A-Z_ -]{3,}\]", text))
 
 
+def browser_has_phase4_edit_marker(browser_text: str) -> bool:
+    return any(marker in browser_text for marker in PHASE4_BROWSER_EDIT_MARKERS)
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: score-live-benchmark-quality.py proof_dir output.json", file=sys.stderr)
@@ -225,7 +238,9 @@ def main() -> int:
     add(scores, "opencode_workflow_checker_passed", 10, workflow.get("passed") is True, workflow.get("failed_checks"))
     add(scores, "nvidia_nim_only_with_model", 10, conv.get("provider") == "nvidia_nim" and isinstance(conv.get("model"), str) and bool(conv.get("model")) and "provider\":\"local" not in stream_text, {"provider": conv.get("provider"), "model": conv.get("model")})
 
-    add(scores, "browser_proof_complete_and_useful", 10, browser_png_path.exists() and browser_json_path.exists() and all(marker in browser_text for marker in ["Full six-phase agentic benchmark prompt", "## Founder report", "## Technical report", "apply_patch", ".agent_test/repo_summary.md"]), {"png": browser_png_path.exists(), "json": browser_json_path.exists()})
+    browser_markers = ["Full six-phase agentic benchmark prompt", "## Founder report", "## Technical report", ".agent_test/repo_summary.md"]
+    browser_useful = browser_png_path.exists() and browser_json_path.exists() and all(marker in browser_text for marker in browser_markers) and browser_has_phase4_edit_marker(browser_text)
+    add(scores, "browser_proof_complete_and_useful", 10, browser_useful, {"png": browser_png_path.exists(), "json": browser_json_path.exists(), "required_markers": browser_markers, "phase4_edit_markers": PHASE4_BROWSER_EDIT_MARKERS})
 
     tool_events = stream_text.count("event: tool-call")
     tool_results = stream_text.count("event: tool-result")
