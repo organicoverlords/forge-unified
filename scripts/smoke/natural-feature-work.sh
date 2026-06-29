@@ -173,12 +173,49 @@ def load_json(path: Path) -> dict[str, Any]:
         return {}
     return data if isinstance(data, dict) else {}
 
+
+def parse_sse_events(text: str) -> list[tuple[str, Any]]:
+    events: list[tuple[str, Any]] = []
+    event_name = "message"
+    data_lines: list[str] = []
+    for raw in text.splitlines() + [""]:
+        if not raw:
+            if data_lines:
+                payload = "\n".join(data_lines)
+                try:
+                    data: Any = json.loads(payload)
+                except json.JSONDecodeError:
+                    data = payload
+                events.append((event_name, data))
+            event_name = "message"
+            data_lines = []
+            continue
+        if raw.startswith("event: "):
+            event_name = raw[len("event: ") :]
+        elif raw.startswith("data: "):
+            data_lines.append(raw[len("data: ") :])
+    return events
+
+
+def runtime_shortcut_seen(events: list[tuple[str, Any]]) -> bool:
+    for event_name, data in events:
+        if event_name == "benchmark-phase":
+            return True
+        if isinstance(data, dict):
+            if data.get("provider") == "local":
+                return True
+            if data.get("local_shortcut") is True:
+                return True
+    return False
+
+
 stream_text = read_text(stream_path)
 conversation = load_json(conversation_path)
 proof = load_json(proof_path)
 prompt = read_text(prompt_path)
 conversation_text = json.dumps(conversation, sort_keys=True)
 evidence = "\n".join([prompt, stream_text, conversation_text, json.dumps(proof, sort_keys=True)])
+events = parse_sse_events(stream_text)
 
 checks: list[dict[str, Any]] = []
 
@@ -194,13 +231,6 @@ model = str(conversation.get("model") or "")
 tool_calls = stream_text.count("event: tool-call")
 tool_results = stream_text.count("event: tool-result")
 edit_markers = ["file_edit", "file_write", "apply_patch", "Applied patch", "Edited file", "Wrote file"]
-forbidden = [
-    '"provider":"local"',
-    '"provider": "local"',
-    '"local_shortcut":true',
-    '"local_shortcut": true',
-    "event: benchmark-phase",
-]
 
 check("stream_exit_code_zero", stream_rc == 0, stream_rc)
 check("provider_is_nvidia_nim", provider == "nvidia_nim" or '"provider":"nvidia_nim"' in stream_text, provider)
@@ -218,7 +248,7 @@ check(
     screenshot_path.is_file() and screenshot_path.stat().st_size > 1024 and screenshot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n",
     screenshot_path.stat().st_size if screenshot_path.exists() else 0,
 )
-check("no_runtime_shortcut_markers", not any(marker in stream_text for marker in forbidden))
+check("no_runtime_shortcut_markers", not runtime_shortcut_seen(events))
 check("final_answer_reports_files_tests_risks", all(token in evidence.lower() for token in ["files", "tests", "risks", "confidence"]))
 
 failed = [item for item in checks if not item["passed"]]
