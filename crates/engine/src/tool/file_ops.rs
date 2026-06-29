@@ -208,7 +208,6 @@ fn stale_file_edit_metadata(path: &str, old_string: &str, current_content: &str)
         ("recovery_hint".to_string(), serde_json::json!("The old_string did not match the current file. Read the current file and retry with the current exact text, or use apply_patch with current context.")),
         ("recommended_next_tools".to_string(), serde_json::json!(["file_read", "file_edit", "apply_patch"])),
         ("forge_tool_failure_lifecycle".to_string(), serde_json::json!("failed file_edit is returned as first-class error state with original input, explicit error, current-file preview, and recovery guidance")),
-        ("opencode_failure_source".to_string(), serde_json::json!({"path":"packages/opencode/src/session/processor.ts","functions":["failToolCall","completeToolCall"],"behavior":"failed running tool calls keep their input, record error text, settle the call, and let the next model round recover from concrete tool state"})),
     ])
 }
 
