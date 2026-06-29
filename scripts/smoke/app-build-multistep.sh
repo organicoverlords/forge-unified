@@ -18,7 +18,7 @@ SPEC_MARKER="APP_MULTI_STEP_SPEC"
 REPORT_MARKER="APP_MULTI_STEP_REPORT"
 VALIDATION_CMD='grep -R APP_MULTI_STEP_ docs/generated/proof/app-multistep-*.md'
 mkdir -p "$OUT_DIR"
-rm -f "$SPEC" "$REPORT"
+rm -f docs/generated/proof/app-multistep-*.md
 
 SERVER_LOG="$OUT_DIR/server.log"
 STEP_LOG="$OUT_DIR/steps.log"
@@ -35,6 +35,7 @@ SPEC_COPY="$OUT_DIR/app-multistep-spec.md"
 REPORT_COPY="$OUT_DIR/app-multistep-report.md"
 DIFF_FILE="$OUT_DIR/app-multistep.diff"
 STATUS_OUT="$OUT_DIR/git-status.txt"
+CREATED_LIST="$OUT_DIR/app-multistep-files.txt"
 : > "$STEP_LOG"
 
 step() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" | tee -a "$STEP_LOG"; }
@@ -56,6 +57,7 @@ cleanup() {
   fi
   git status --short > "$STATUS_OUT" 2>/dev/null || true
   git diff -- "$SPEC" "$REPORT" > "$DIFF_FILE" 2>/dev/null || true
+  find docs/generated/proof -maxdepth 1 -type f -name 'app-multistep-*.md' -print | sort > "$CREATED_LIST" 2>/dev/null || true
   [ -f "$SPEC" ] && cp "$SPEC" "$SPEC_COPY" || true
   [ -f "$REPORT" ] && cp "$REPORT" "$REPORT_COPY" || true
 }
@@ -137,6 +139,7 @@ STREAM_RC=$?
 set -e
 
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON" || true
+find docs/generated/proof -maxdepth 1 -type f -name 'app-multistep-*.md' -print | sort > "$CREATED_LIST" 2>/dev/null || true
 
 step "capture browser proof"
 curl -fsS --connect-timeout 2 --max-time 60 \
@@ -147,7 +150,7 @@ if jq -e '.success == true and (.screenshot_base64 | length > 1000)' "$BROWSER_J
   jq -r '.screenshot_base64' "$BROWSER_JSON" | base64 -d > "$SCREENSHOT" || true
 fi
 
-python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SPEC" "$REPORT" "$SPEC_MARKER" "$REPORT_MARKER" "$VALIDATION_CMD" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
+python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SPEC" "$REPORT" "$SPEC_MARKER" "$REPORT_MARKER" "$VALIDATION_CMD" "$CREATED_LIST" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
 import json, sys
 from pathlib import Path
 stream_path = Path(sys.argv[1])
@@ -159,9 +162,10 @@ report_path = Path(sys.argv[6])
 spec_marker = sys.argv[7]
 report_marker = sys.argv[8]
 validation_cmd = sys.argv[9]
-summary_path = Path(sys.argv[10])
-md_path = Path(sys.argv[11])
-rc = int(sys.argv[12])
+created_list_path = Path(sys.argv[10])
+summary_path = Path(sys.argv[11])
+md_path = Path(sys.argv[12])
+rc = int(sys.argv[13])
 text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
 conversation = json.loads(conv_path.read_text(encoding="utf-8", errors="replace")) if conv_path.exists() and conv_path.stat().st_size else {}
 proof = json.loads(proof_path.read_text(encoding="utf-8", errors="replace")) if proof_path.exists() and proof_path.stat().st_size else {}
@@ -172,6 +176,8 @@ spec_exists = spec_path.is_file()
 report_exists = report_path.is_file()
 spec_text = spec_path.read_text(encoding="utf-8", errors="replace") if spec_exists else ""
 report_text = report_path.read_text(encoding="utf-8", errors="replace") if report_exists else ""
+created_files = [line.strip() for line in created_list_path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()] if created_list_path.exists() else []
+expected_files = sorted([str(spec_path), str(report_path)])
 
 def has_exact_line(body, line):
     return line in [part.strip() for part in body.splitlines()]
@@ -191,6 +197,7 @@ check("two_file_write_steps_seen", all(p in all_text for p in [str(spec_path), s
 check("shell_validation_seen", "shell_command" in all_text and validation_cmd in all_text)
 check("spec_file_exists", spec_exists, str(spec_path))
 check("report_file_exists", report_exists, str(report_path))
+check("no_extra_app_multistep_files", created_files == expected_files, created_files)
 check("spec_marker_exact_line", has_exact_line(spec_text, spec_marker))
 check("report_marker_exact_line", has_exact_line(report_text, report_marker))
 check("no_placeholder_content", "PLACEHOLDER" not in spec_text and "PLACEHOLDER" not in report_text)
@@ -199,7 +206,7 @@ check("final_answer_shape", all(tok in all_text.lower() for tok in ["files", "te
 check("browser_success", proof.get("success") is True)
 check("screenshot_png", shot_path.is_file() and shot_path.stat().st_size > 1024 and shot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot_path.stat().st_size if shot_path.exists() else 0)
 failed = [c for c in checks if not c["passed"]]
-out = {"passed": not failed, "provider": provider, "model": model, "spec": str(spec_path), "report": str(report_path), "checks": checks, "failed_checks": failed, "screenshot_path": str(shot_path)}
+out = {"passed": not failed, "provider": provider, "model": model, "spec": str(spec_path), "report": str(report_path), "created_app_multistep_files": created_files, "checks": checks, "failed_checks": failed, "screenshot_path": str(shot_path)}
 summary_path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 md_path.write_text("# App multistep build proof\n\n" + "\n".join(f"- {c['name']}: `{str(c['passed']).lower()}`" for c in checks) + "\n", encoding="utf-8")
 print(json.dumps(out, indent=2, sort_keys=True))
