@@ -72,7 +72,17 @@ impl ToolExecutor {
         let replace_all = args.replace_all.unwrap_or(false);
         let new_content = if replace_all { content.replace(&args.old_string, &args.new_string) } else { content.replacen(&args.old_string, &args.new_string, 1) };
         if new_content == content {
-            return Ok(ToolResult { id: request.id, kind: ToolKind::FileEdit, success: false, output: "Old string not found in file".to_string(), error: Some("Old string not found".to_string()), duration_ms: 0, metadata: HashMap::new() });
+            let mut metadata = stale_file_edit_metadata(&args.path, &args.old_string, &content);
+            metadata.insert("replace_all".to_string(), serde_json::json!(replace_all));
+            return Ok(ToolResult {
+                id: request.id,
+                kind: ToolKind::FileEdit,
+                success: false,
+                output: "file_edit failed: old_string was not found in the current file. Treat this as stale edit evidence: read the current file, then retry with the current exact text or use apply_patch with current context.".to_string(),
+                error: Some("stale_exact_replacement_old_string_not_found".to_string()),
+                duration_ms: 0,
+                metadata,
+            });
         }
         let keep_bom = existing_bom || new_content.starts_with(UTF8_BOM);
         let write_content = join_bom(&new_content, keep_bom);
@@ -186,6 +196,28 @@ fn path_arg(value: &serde_json::Value) -> Result<String> {
 
 fn line_count(value: &str) -> usize { value.lines().count().max(1) }
 fn file_change_record(path: &str, kind: &str, additions: usize, deletions: usize, bom: bool) -> serde_json::Value { serde_json::json!({"type": kind, "path": path, "relativePath": path, "additions": additions, "deletions": deletions, "bom": bom}) }
+
+fn stale_file_edit_metadata(path: &str, old_string: &str, current_content: &str) -> HashMap<String, serde_json::Value> {
+    HashMap::from([
+        ("path".to_string(), serde_json::json!(path)),
+        ("stale_exact_replacement".to_string(), serde_json::json!(true)),
+        ("current_file_lines".to_string(), serde_json::json!(line_count(current_content))),
+        ("old_string_lines".to_string(), serde_json::json!(line_count(old_string))),
+        ("old_string_preview".to_string(), serde_json::json!(preview_text(old_string, 240))),
+        ("current_file_preview".to_string(), serde_json::json!(preview_text(current_content, 360))),
+        ("recovery_hint".to_string(), serde_json::json!("The old_string did not match the current file. Read the current file and retry with the current exact text, or use apply_patch with current context.")),
+        ("recommended_next_tools".to_string(), serde_json::json!(["file_read", "file_edit", "apply_patch"])),
+        ("forge_tool_failure_lifecycle".to_string(), serde_json::json!("failed file_edit is returned as first-class error state with original input, explicit error, current-file preview, and recovery guidance")),
+        ("opencode_failure_source".to_string(), serde_json::json!({"path":"packages/opencode/src/session/processor.ts","functions":["failToolCall","completeToolCall"],"behavior":"failed running tool calls keep their input, record error text, settle the call, and let the next model round recover from concrete tool state"})),
+    ])
+}
+
+fn preview_text(value: &str, limit: usize) -> String {
+    let normalized = value.lines().take(24).collect::<Vec<_>>().join("\n");
+    let mut out = normalized.chars().take(limit).collect::<String>();
+    if normalized.chars().count() > limit { out.push_str("..."); }
+    out
+}
 
 fn file_event_metadata(files: Vec<serde_json::Value>) -> HashMap<String, serde_json::Value> {
     let file_events = patch_events::file_change_events(&files);
