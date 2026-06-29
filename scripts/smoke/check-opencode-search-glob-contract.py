@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gate OpenCode-backed search/glob tool contract evidence.
 
-This is intentionally deterministic CI smoke coverage.  The live WebUI workflow
+This is intentionally deterministic CI smoke coverage. The live WebUI workflow
 proves behavior through NVIDIA NIM; this gate keeps the source/proof contract from
 regressing between expensive live runs.
 """
@@ -20,6 +20,17 @@ REQUIRED_SOURCE_TOKENS = [
     "pattern",
     "count",
     "matches",
+    "forge_search_glob_contract",
+    "packages/opencode/src/tool/glob.ts",
+    "packages/opencode/src/tool/grep.ts",
+]
+
+REQUIRED_OUTPUT_CONTRACT_TOKENS = [
+    "No files found",
+    "Results are truncated",
+    "Found {total} matches",
+    "Line {line}",
+    "truncated",
 ]
 
 REQUIRED_PROOF_TOKENS = [
@@ -28,6 +39,8 @@ REQUIRED_PROOF_TOKENS = [
     "result count metadata",
     "No files found",
     "path resolution",
+    "bounded output",
+    "human-readable output",
 ]
 
 
@@ -41,6 +54,13 @@ def main() -> int:
     if missing_source:
         print("Missing file_ops search/glob source tokens:")
         for token in missing_source:
+            print(f"- {token}")
+        return 1
+
+    missing_output_contract = [token for token in REQUIRED_OUTPUT_CONTRACT_TOKENS if token not in source]
+    if missing_output_contract:
+        print("Missing OpenCode-style search/glob output contract tokens in file_ops:")
+        for token in missing_output_contract:
             print(f"- {token}")
         return 1
 
