@@ -5,30 +5,33 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest pre-slice selected head: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad`
-- Latest pushed head: `2651981b76151ba915c9cc11711aa742afbd7e64`
-- Latest accepted same-head proof baseline before this slice: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad` for Build Proof and Live WebUI only; CI failed before this slice.
-- Latest same-head workflow state before this slice: Build Proof `28390284139` success; Live WebUI Feature Sprint `28390284127` success; CI `28390284128` failure in Smoke Test / Validate WebUI proof harness.
-- Latest source-backed slice: formatter activation evidence gate now reads both `PROJECT_STATE.md` and `docs/generated/proof/*.md`, so CI checks the durable proof trail instead of requiring all formatter activation evidence phrases to stay duplicated in one state file.
-- Latest proof doc: `docs/generated/proof/formatter-activation-proof-trail-gate-20260629T1745Z.md`.
+- Latest selected head before this slice: `5b5e97c42a0c6b2daff1b23cfadf0360b8b7dc97`
+- Latest accepted same-head proof baseline before this slice: `5b5e97c42a0c6b2daff1b23cfadf0360b8b7dc97`.
+- Same-head workflow state before this slice: CI `28391729746` success; Build Proof `28391729720` success; Live WebUI Feature Sprint `28391729702` success; Live WebUI artifact `7960159157`.
+- Latest source-backed slice: OpenCode search/glob contract evidence gate in `scripts/smoke/check-opencode-search-glob-contract.py`.
+- Latest proof doc: `docs/generated/proof/opencode-search-glob-contract-gate-20260629T1850Z.md`.
 - Do not claim the latest head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on the latest branch head containing this slice.
 
-## Latest failed CI run inspected
+## Latest workflow state inspected
 
-- Head: `a9517aad7cfa6dfcb6b62794b13529a70f38e5ad`.
-- Build Proof `28390284139`: success.
-- Live WebUI Feature Sprint `28390284127`: success.
-- CI `28390284128`: failure.
-- Failed job: `Smoke Test`, job `84115340620`.
-- Failed step: `Validate WebUI proof harness`.
-- Failure: `scripts/smoke/check-formatter-activation-evidence.py` reported missing formatter activation evidence phrases in `PROJECT_STATE.md`.
-- Classification: proof harness/state consistency failure, not provider failure and not Rust build/test failure.
+- Head: `5b5e97c42a0c6b2daff1b23cfadf0360b8b7dc97`.
+- PR #3: open, non-draft, mergeable in PR metadata.
+- CI `28391729746`: success.
+- Build Proof `28391729720`: success.
+- Live WebUI Feature Sprint `28391729702`: success.
+- Live WebUI proof artifact: `live-webui-feature-sprint-proof`, artifact ID `7960159157`, digest `sha256:5ee681bf905142972ad7af4677af9c427f345bad04937b2eb06c50838e3972b5`.
 
 ## Latest implementation changes
 
-- Updated `scripts/smoke/check-formatter-activation-evidence.py` so the formatter activation proof gate scans the durable proof trail (`PROJECT_STATE.md` plus `docs/generated/proof/*.md`) for evidence phrases.
-- Retained runtime guard that `crates/engine/src/tool/file_ops.rs` must contain Forge-owned formatter metadata/contracts and must not reintroduce `opencode_*` runtime metadata keys.
-- This keeps the OpenCode source backing enforceable while avoiding brittle duplication across state files.
+- Added `scripts/smoke/check-opencode-search-glob-contract.py` so CI can deterministically guard OpenCode-backed search/glob evidence without re-running the expensive provider benchmark inside CI.
+- The gate validates that Forge keeps source-level `execute_file_glob` / `execute_file_search` coverage and that durable proof/state files record the OpenCode source paths and behavior tokens.
+- This is not a parity claim by itself; same-head Live WebUI/NVIDIA NIM proof is still required after the new head is pushed.
+
+## Search/glob contract evidence retained for CI
+
+- OpenCode source backing: `anomalyco/opencode:packages/opencode/src/tool/glob.ts` and `anomalyco/opencode:packages/opencode/src/tool/grep.ts`.
+- Required behavior tokens: path resolution, result count metadata, `No files found`, bounded result behavior, and grep/glob proof trail retention.
+- Forge source path under guard: `crates/engine/src/tool/file_ops.rs`.
 
 ## Formatter activation evidence retained for CI
 
@@ -43,6 +46,7 @@ Updated: 2026-06-29
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, provider-executed state, same-call ToolPart update semantics, complete/fail tool-call handling, and tool-result output.
 - `anomalyco/opencode:packages/schema/src/v1/session.ts` — part base, ToolPart, ToolState, and FilePart schema shape.
 - `anomalyco/opencode:packages/opencode/src/format/index.ts` and `packages/opencode/src/format/formatter.ts` — formatter catalog and activation behavior.
+- `anomalyco/opencode:packages/opencode/src/tool/glob.ts` and `packages/opencode/src/tool/grep.ts` — search/glob path resolution, result count metadata, bounded output, and `No files found` behavior.
 
 ## Current behavior retained
 
