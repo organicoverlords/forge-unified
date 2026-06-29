@@ -1,0 +1,30 @@
+name: Fast WebUI Proof
+
+on:
+  pull_request:
+    branches: [master, main, dev]
+  workflow_dispatch:
+
+jobs:
+  fast-webui-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
+      FORGE_FAST_TIMEOUT_SECONDS: "220"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run fast WebUI proof
+        run: bash scripts/smoke/fast-webui-proof.sh
+
+      - name: Upload fast proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-webui-proof
+          path: forge-proof/fast-webui-proof/
