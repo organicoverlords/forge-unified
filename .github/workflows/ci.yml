@@ -99,8 +99,10 @@ jobs:
           python3 -m py_compile scripts/smoke/check-opencode-workflow-evidence.py
           python3 -m py_compile scripts/smoke/check-formatter-parity.py
           python3 -m py_compile scripts/smoke/check-formatter-activation-evidence.py
+          python3 -m py_compile scripts/smoke/check-formatter-config-activation-gap.py
           python3 scripts/smoke/check-formatter-parity.py
           python3 scripts/smoke/check-formatter-activation-evidence.py
+          python3 scripts/smoke/check-formatter-config-activation-gap.py
           if [ -f scripts/smoke/check-live-webui-proof-manifest.py ]; then
             python3 -m py_compile scripts/smoke/check-live-webui-proof-manifest.py
           fi
