@@ -18,6 +18,7 @@ SPEC_MARKER="APP_MULTI_STEP_SPEC"
 REPORT_MARKER="APP_MULTI_STEP_REPORT"
 VALIDATION_CMD='grep -R APP_MULTI_STEP_ docs/generated/proof/app-multistep-*.md'
 mkdir -p "$OUT_DIR"
+rm -f "$SPEC" "$REPORT"
 
 SERVER_LOG="$OUT_DIR/server.log"
 STEP_LOG="$OUT_DIR/steps.log"
@@ -94,7 +95,7 @@ step "create multistep build conversation"
 curl -fsS --connect-timeout 2 --max-time 20 \
   -X POST "$BASE/api/conversations" \
   -H 'content-type: application/json' \
-  --data-binary '{"title":"multistep app build with Forge WebUI"}' > "$CREATED_JSON"
+  --data-binary '{"title":"real multistep app build with Forge WebUI"}' > "$CREATED_JSON"
 CONV_ID="$(json_id "$CREATED_JSON")"
 test -n "$CONV_ID"
 
@@ -108,12 +109,20 @@ You must use exactly this tool sequence before the final answer:
 3. shell_command
 
 Required tool calls:
-1. Use file_write to create $SPEC. Include this exact marker on its own line: $SPEC_MARKER. Also include a one-line acceptance rule saying the report must reference this spec file path.
-2. Use file_write to create $REPORT. Include this exact marker on its own line: $REPORT_MARKER. The report must reference $SPEC by path.
+1. Use file_write to create $SPEC with exactly this content:
+# App Multistep Spec
+$SPEC_MARKER
+Acceptance: $REPORT must reference $SPEC.
+
+2. Use file_write to create $REPORT with exactly this content:
+# App Multistep Report
+$REPORT_MARKER
+Spec reference: $SPEC
+
 3. Use shell_command to run exactly: $VALIDATION_CMD
 4. Only after the shell_command result, final answer with files modified, tests run, unresolved risks, and confidence.
 
-Do not inspect the repo. Do not do broad analysis. Do not create other files. Do not stop after the two file writes.
+Do not inspect the repo. Do not do broad analysis. Do not create other files. Do not write PLACEHOLDER anywhere. Do not stop after the two file writes.
 PROMPT
 jq -Rs '{message: ., max_rounds: 8}' "$PROMPT_FILE" > "$REQUEST_JSON"
 
@@ -163,6 +172,10 @@ spec_exists = spec_path.is_file()
 report_exists = report_path.is_file()
 spec_text = spec_path.read_text(encoding="utf-8", errors="replace") if spec_exists else ""
 report_text = report_path.read_text(encoding="utf-8", errors="replace") if report_exists else ""
+
+def has_exact_line(body, line):
+    return line in [part.strip() for part in body.splitlines()]
+
 checks = []
 def check(name, passed, evidence=None):
     item = {"name": name, "passed": bool(passed)}
@@ -173,12 +186,14 @@ check("stream_exit_zero", rc == 0, rc)
 check("provider_is_nvidia_nim", provider == "nvidia_nim" or '"provider":"nvidia_nim"' in text, provider)
 check("model_recorded", bool(model) or '"model":"' in text, model)
 check("run_finished", "event: run-finish" in text)
+check("required_sequence_repair_recorded", "forge_required_tool_sequence_repairs" in all_text)
 check("two_file_write_steps_seen", all(p in all_text for p in [str(spec_path), str(report_path)]) and all_text.count("file_write") >= 2, all_text.count("file_write"))
 check("shell_validation_seen", "shell_command" in all_text and validation_cmd in all_text)
 check("spec_file_exists", spec_exists, str(spec_path))
 check("report_file_exists", report_exists, str(report_path))
-check("spec_marker_present", spec_marker in spec_text)
-check("report_marker_present", report_marker in report_text)
+check("spec_marker_exact_line", has_exact_line(spec_text, spec_marker))
+check("report_marker_exact_line", has_exact_line(report_text, report_marker))
+check("no_placeholder_content", "PLACEHOLDER" not in spec_text and "PLACEHOLDER" not in report_text)
 check("report_references_spec", str(spec_path) in report_text)
 check("final_answer_shape", all(tok in all_text.lower() for tok in ["files", "tests", "risks", "confidence"]))
 check("browser_success", proof.get("success") is True)
