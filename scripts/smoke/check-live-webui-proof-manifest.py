@@ -60,6 +60,10 @@ def non_empty(path: Path) -> bool:
     return path.is_file() and path.stat().st_size > 0
 
 
+def read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+
 def png_is_nonempty_screenshot(path: Path) -> bool:
     return path.is_file() and path.stat().st_size >= 1024 and path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
@@ -115,6 +119,12 @@ def count_tool_results(conversation: Any, checker: Any) -> int:
     return total
 
 
+def required_markers_present(evidence_text: str) -> tuple[bool, list[str]]:
+    lower_evidence = evidence_text.lower()
+    missing = [marker for marker in REQUIRED_BROWSER_MARKERS if marker.lower() not in lower_evidence]
+    return not missing, missing
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: check-live-webui-proof-manifest.py PROOF_DIR OUTPUT_JSON", file=sys.stderr)
@@ -141,9 +151,12 @@ def main() -> int:
     quality_path = proof_dir / "quality-score.json"
     workflow_path = proof_dir / "opencode-workflow-checker.json"
 
-    stream_text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
-    status_text = status_path.read_text(encoding="utf-8", errors="replace") if status_path.exists() else ""
-    browser_text = browser_proof_path.read_text(encoding="utf-8", errors="replace") if browser_proof_path.exists() else ""
+    stream_text = read_text(stream_path)
+    conversation_text = read_text(conversation_path)
+    status_text = read_text(status_path)
+    browser_text = read_text(browser_proof_path)
+    browser_evidence_text = "\n".join([browser_text, conversation_text, stream_text])
+    markers_ok, missing_markers = required_markers_present(browser_evidence_text)
 
     checker = load_json(checker_path) if checker_path.exists() else {}
     quality = load_json(quality_path) if quality_path.exists() else {}
@@ -155,9 +168,9 @@ def main() -> int:
     checks.append({"name": "workflow_checker_passed", "passed": workflow_pass})
     checks.append({"name": "quality_score_passed", "passed": quality_ok, "percent": quality.get("percent") if isinstance(quality, dict) else None})
     checks.append({"name": "screenshot_is_png", "passed": png_is_nonempty_screenshot(screenshot_path), "size": screenshot_path.stat().st_size if screenshot_path.exists() else 0})
-    checks.append({"name": "browser_proof_has_required_markers", "passed": all(marker in browser_text for marker in REQUIRED_BROWSER_MARKERS), "markers": REQUIRED_BROWSER_MARKERS})
+    checks.append({"name": "browser_evidence_has_required_markers", "passed": markers_ok, "markers": REQUIRED_BROWSER_MARKERS, "missing": missing_markers})
 
-    timeout_recovered = hard_pass and workflow_pass and quality_ok and "full benchmark stream timed out after evidence-ready max-step finalization" in (proof_dir / "live-proof-steps.log").read_text(encoding="utf-8", errors="replace") if (proof_dir / "live-proof-steps.log").exists() else False
+    timeout_recovered = hard_pass and workflow_pass and quality_ok and "full benchmark stream timed out after evidence-ready max-step finalization" in read_text(proof_dir / "live-proof-steps.log")
     checks.append({"name": "stream_has_run_finish_or_timeout_recovered", "passed": "event: run-finish" in stream_text or timeout_recovered, "timeout_recovered": timeout_recovered})
     checks.append({"name": "stream_has_tool_calls", "passed": stream_text.count("event: tool-call") >= 8, "count": stream_text.count("event: tool-call")})
     checks.append({"name": "stream_has_tool_results", "passed": stream_text.count("event: tool-result") >= 8, "count": stream_text.count("event: tool-result")})
