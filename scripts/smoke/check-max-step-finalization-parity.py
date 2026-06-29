@@ -44,7 +44,7 @@ def main() -> int:
         "Only successful tool results in the digest are counted" in source
         or "Only successful tool results listed in the evidence digest are counted" in source,
     )
-    require("fallback report includes rollback strategy", "Rollback strategy" in source)
+    require("fallback report includes rollback strategy", "rollback strategy" in lower)
     require("fallback report includes unresolved risks", "unresolved risks" in source)
     require("benchmark evidence-ready finalization exists", "benchmark_evidence_ready" in source and "forge_evidence_ready_finalized" in source)
 
