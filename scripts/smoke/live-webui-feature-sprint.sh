@@ -258,8 +258,6 @@ write_status() {
   printf 'tool_conversation=%s\n' "$TOOL_CONV_ID" >> "$out"
   printf 'benchmark_conversation=%s\n' "$BENCH_CONV_ID" >> "$out"
   printf 'model=%s\n' "$MODEL_ID" >> "$out"
-  printf 'benchmark_max_rounds=%s\n' "$BENCH_MAX_ROUNDS" >> "$out"
-  printf 'benchmark_timeout_seconds=%s\n' "$BENCH_TIMEOUT_SECONDS" >> "$out"
   printf 'benchmark_screenshot=%s\n' "$PROOF_DIR/full-benchmark-webui.png" >> "$out"
   printf 'event_rail=%s\n' "$PROOF_DIR/event-rail.png" >> "$out"
   printf 'tool_catalog=%s\n' "$TOOL_CATALOG_JSON" >> "$out"
@@ -293,7 +291,7 @@ PY
 }
 
 capture_full_benchmark_proof() {
-  timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" tool
+  timeout 120s bash scripts/smoke/capture-browser-proof.sh "$BASE" "$BENCH_CONV_ID" "$MODEL_ID" "$PROOF_DIR" benchmark "&proof=final"
   for marker in "Full six-phase agentic benchmark prompt" "Phase 1" "Phase 2" "apply_patch" ".agent_test/repo_summary.md" ".agent_test/action_plan.json"; do
     need_marker "$PROOF_DIR/browser-proof.json" "$marker"
   done
