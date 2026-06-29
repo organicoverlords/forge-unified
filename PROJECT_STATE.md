@@ -5,28 +5,36 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest selected head before this slice: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`
+- Latest selected head before this slice: `5831bb38ed3fe3db4007aa87fa801dda2112bf3f`
 - Latest accepted same-head proof baseline before this slice: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`.
-- Same-head workflow state before this slice: CI `28396533513` success; Build Proof `28396533470` success; Live WebUI Feature Sprint `28396533488` success; Live WebUI artifact `7962177971`.
-- Latest source-backed slice: OpenCode search/glob human-output proof trail retained in `scripts/smoke/check-opencode-search-glob-contract.py` and `docs/generated/proof/opencode-search-glob-human-output-proof-trail-20260629T1947Z.md`.
-- Latest proof doc: `docs/generated/proof/opencode-search-glob-human-output-proof-trail-20260629T1947Z.md`.
+- Same-head accepted baseline: CI `28396533513` success; Build Proof `28396533470` success; Live WebUI Feature Sprint `28396533488` success; Live WebUI artifact `7962177971`.
+- Latest UX/proof slice: readable WebUI proof cards and final proof summary in `crates/webui/src/chat_ui.rs`, gated by `scripts/smoke/capture-browser-proof.sh`.
+- Latest proof doc: `docs/generated/proof/readable-webui-proof-cards-20260629T1955Z.md`.
 - Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that exact head.
+
+## User rejection that drove this slice
+
+- Previous tool cards exposed raw tool names as primary UI and were unintuitive.
+- The full benchmark final screenshot mostly showed the benchmark prompt, not proof or the final answer.
+- Process screenshots looked messy and too diagnostic-heavy for normal review.
 
 ## Latest workflow state inspected
 
-- Head: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`.
+- Accepted baseline head: `10a0f1d67c99bae0242faf4cff210fe61f5c62c0`.
 - PR #3: open, non-draft, mergeable in PR metadata.
 - CI `28396533513`: success.
 - Build Proof `28396533470`: success.
 - Live WebUI Feature Sprint `28396533488`: success.
 - Live WebUI proof artifact: `live-webui-feature-sprint-proof`, artifact ID `7962177971`, digest `sha256:3075ddbafc7baed84ac93480c19b5dac730657210375745e4d3529febea46e14`.
-- Downloaded proof confirms provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, quality score `95.24`, 36 tool-call events, 30 tool-result events, full benchmark checker passed, workflow checker passed, manifest passed, natural feature-build proof passed, and browser screenshots present.
+- Downloaded proof confirmed provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, quality score `95.24`, 36 tool-call events, 30 tool-result events, full benchmark checker passed, workflow checker passed, manifest passed, natural feature-build proof passed, and browser screenshots present.
 
 ## Latest implementation changes
 
-- `scripts/smoke/check-opencode-search-glob-contract.py` now requires the search/glob proof trail to retain OpenCode source anchors plus human-readable output, bounded output, path resolution, result count metadata, and `No files found` behavior.
-- `docs/generated/proof/opencode-search-glob-human-output-proof-trail-20260629T1947Z.md` records the exact upstream OpenCode source paths and the current implementation boundary.
-- This is a source-backed proof-retention gate, not a complete runtime parity claim. The next Actions run must prove the new head.
+- `crates/webui/src/chat_ui.rs` now maps raw tool names to human labels such as `Read file`, `Write file`, `Edit file`, `Run command`, `Run tools in parallel`, and `Delegate subtask`.
+- Tool cards now show a clear status badge, concise result, file chips, and collapsed technical details instead of leading with raw JSON/tool names.
+- `proof=final` now renders a top `Run proof summary` panel with provider, model, tool count, actions used, files touched/inspected, and the final answer.
+- `scripts/smoke/capture-browser-proof.sh` now gates readable proof markers: `Run proof summary`, `Final answer`, `actions used`, `proof-digest-visible`, and `human-tool-label`.
+- This is a UI/proof-presentation repair, not a claim that model/tool execution semantics changed.
 
 ## Search/glob contract evidence retained for CI
 
@@ -59,3 +67,4 @@ Updated: 2026-06-29
 - File-change and event receipts are visible in chat.
 - Normal file tools emit file/watch/LSP receipts, formatter metadata, BOM metadata, completed ToolPart attachments, schema-compatible part base fields, ToolPart-like result state envelopes, and normalized tool attachment metadata.
 - The Live WebUI Feature Sprint workflow also requires a dedicated natural feature-build prompt artifact under `natural-feature-work/`.
+- Final proof screenshots must show a readable proof digest and final answer, not only the original benchmark prompt.
