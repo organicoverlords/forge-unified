@@ -51,6 +51,11 @@ PHASE4_BROWSER_EDIT_MARKERS = [
     "Wrote file",
 ]
 
+NEGATIVE_COMMAND_CONTEXT = re.compile(
+    r"\b(no|not|unless|without|do not|never|unproven|not claimed|is claimed unless|unless listed)\b",
+    re.I,
+)
+
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -168,26 +173,38 @@ def partial(scores: list[dict[str, Any]], name: str, points: int, earned: int, e
 
 def normalize_command_claim(claim: str) -> str:
     value = re.sub(r"\s+", " ", claim.strip()).lower()
-    value = re.sub(r"\s*\(exit:\s*0\)\s*$", "", value)
+    value = re.sub(r"\s*\(exit:?\s*0\)\s*$", "", value)
     value = re.sub(r"^(?:validation of|validated|passed|ran|run)\s+", "", value)
     value = re.sub(r"^bash -n validation of\s+", "bash -n ", value)
     value = re.sub(r"^bash -n\s+(.+?)\s+passed$", r"bash -n \1", value)
-    return value.strip()
+    value = re.sub(r"\s*;\s*echo\s+['\"]?exit:\$\?['\"]?.*$", "", value)
+    return value.strip(" .,;:`")
 
 
 def command_claims(final: str) -> list[str]:
     claims: list[str] = []
-    for match in re.finditer(r"(?:cargo\s+(?:test|check|build|clippy|fmt)|bash\s+-n\s+[^\n`.;]+)", final, re.I):
-        start = match.start()
-        context = final[max(0, start - 80) : start].lower()
-        if re.search(r"\b(no|not|unless|without|do not|never)\b", context):
-            continue
-        claims.append(match.group(0).strip())
+    seen: set[str] = set()
+    patterns = [
+        r"cargo\s+(?:test|check|build|clippy|fmt)(?:\s+[-\w./=:+]+)*",
+        r"bash\s+-n\s+(?:scripts/[-\w./]+|[-\w./]+\.sh)(?:\s+2>&1)?",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, final, re.I):
+            start = match.start()
+            context = final[max(0, start - 120) : min(len(final), match.end() + 80)]
+            if NEGATIVE_COMMAND_CONTEXT.search(context):
+                continue
+            claim = normalize_command_claim(match.group(0))
+            if claim and claim not in seen:
+                seen.add(claim)
+                claims.append(match.group(0).strip())
     return claims
 
 
 def command_is_proven(claim: str, results: list[dict[str, Any]]) -> bool:
     normalized_claim = normalize_command_claim(claim)
+    if not normalized_claim:
+        return True
     for result in results:
         if result.get("success") is not True:
             continue
