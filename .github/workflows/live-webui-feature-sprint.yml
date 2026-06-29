@@ -56,6 +56,8 @@ jobs:
           jq -e '.passed == true and .percent >= 85' "$quality_score" >/dev/null
           python3 scripts/smoke/check-live-webui-proof-manifest.py "$proof_dir" "$proof_manifest"
           jq -e '.passed == true' "$proof_manifest" >/dev/null
+          python3 scripts/smoke/summarize-live-webui-proof.py "$proof_dir"
+          jq -e '.passed == true' "$proof_dir/live-webui-turn-summary.json" >/dev/null
 
       - name: Upload feature sprint proof
         if: always()
