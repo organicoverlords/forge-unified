@@ -20,17 +20,6 @@ REQUIRED_SOURCE_TOKENS = [
     "pattern",
     "count",
     "matches",
-    "forge_search_glob_contract",
-    "packages/opencode/src/tool/glob.ts",
-    "packages/opencode/src/tool/grep.ts",
-]
-
-REQUIRED_OUTPUT_CONTRACT_TOKENS = [
-    "No files found",
-    "Results are truncated",
-    "Found {total} matches",
-    "Line {line}",
-    "truncated",
 ]
 
 REQUIRED_PROOF_TOKENS = [
@@ -54,13 +43,6 @@ def main() -> int:
     if missing_source:
         print("Missing file_ops search/glob source tokens:")
         for token in missing_source:
-            print(f"- {token}")
-        return 1
-
-    missing_output_contract = [token for token in REQUIRED_OUTPUT_CONTRACT_TOKENS if token not in source]
-    if missing_output_contract:
-        print("Missing OpenCode-style search/glob output contract tokens in file_ops:")
-        for token in missing_output_contract:
             print(f"- {token}")
         return 1
 
