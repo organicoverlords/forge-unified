@@ -39,7 +39,11 @@ def main() -> int:
     require("final prompt requires Technical report", "technical report" in lower)
     require("final prompt requires confidence labels", all(label in source for label in ("VERIFIED", "LIKELY", "UNKNOWN")))
     require("fallback final report exists", "fn fallback_final_report" in source)
-    require("fallback report is conservative", "Only successful tool results in the digest are counted" in source)
+    require(
+        "fallback report is conservative",
+        "Only successful tool results in the digest are counted" in source
+        or "Only successful tool results listed in the evidence digest are counted" in source,
+    )
     require("fallback report includes rollback strategy", "Rollback strategy" in source)
     require("fallback report includes unresolved risks", "unresolved risks" in source)
     require("benchmark evidence-ready finalization exists", "benchmark_evidence_ready" in source and "forge_evidence_ready_finalized" in source)
