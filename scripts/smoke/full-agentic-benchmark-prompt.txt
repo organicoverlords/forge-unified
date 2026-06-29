@@ -30,9 +30,9 @@ Use real tools only. Do not print tool JSON in prose. Tool failures must be repa
    - `.agent_test/repo_summary.md`
 7. Delete only `.agent_test/investigation.md` with `file_delete`.
 8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
-9. Phase 4 is mandatory and comes before any final answer. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result.
+9. Phase 4 is mandatory and must be the very next tool operation after that `.agent_test` verification. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result. A final answer before this dedicated Phase 4 edit tool result is a failed run.
 10. Validate and inspect state with exactly this `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
-11. Only after the Phase 4 edit tool and validation shell result exist, write the final answer. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message.
+11. Only after the Phase 4 edit tool and validation shell result exist, write the final answer. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from your tool evidence that you have a successful dedicated file-editing tool result outside `.agent_test`; if not, continue with the Phase 4 edit instead of answering.
 
 # Phase 1 — Environment + repo inspection
 
@@ -56,7 +56,7 @@ Read all three files back with actual file_read tool calls before deleting anyth
 
 # Phase 4 — Judgment test
 
-Before the tiny edit, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`.
+Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with `bash -n scripts/smoke/live-webui-feature-sprint.sh` and inspect `git status`/`git diff`. Do not send the Founder report or Technical report until the successful Phase 4 file-editing tool result exists.
 
 # Phase 5 — Writing quality
 
