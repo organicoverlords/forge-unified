@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FILE_OPS = ROOT / "crates" / "engine" / "src" / "tool" / "file_ops.rs"
 STATE = ROOT / "PROJECT_STATE.md"
+PROOF_DIR = ROOT / "docs" / "generated" / "proof"
 
 REQUIRED_FILE_OPS_SNIPPETS = [
     "packages/opencode/src/format/index.ts",
@@ -25,7 +26,7 @@ REQUIRED_FILE_OPS_SNIPPETS = [
     "forge_file_tool_contract",
 ]
 
-REQUIRED_STATE_SNIPPETS = [
+REQUIRED_EVIDENCE_SNIPPETS = [
     "configuration/dependency-aware formatter activation",
     "formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation",
     "built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement",
@@ -40,18 +41,26 @@ UPSTREAM_ACTIVATION_SNIPPETS = [
 ]
 
 
+def proof_text() -> str:
+    parts = [STATE.read_text(encoding="utf-8")]
+    if PROOF_DIR.exists():
+        for path in sorted(PROOF_DIR.glob("*.md")):
+            parts.append(path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def main() -> int:
     file_ops = FILE_OPS.read_text(encoding="utf-8")
-    state = STATE.read_text(encoding="utf-8")
+    evidence = proof_text()
     errors: list[str] = []
 
     for snippet in REQUIRED_FILE_OPS_SNIPPETS:
         if snippet not in file_ops:
             errors.append(f"file_ops missing formatter proof snippet: {snippet}")
 
-    for snippet in REQUIRED_STATE_SNIPPETS:
-        if snippet not in state:
-            errors.append(f"PROJECT_STATE missing formatter activation evidence: {snippet}")
+    for snippet in REQUIRED_EVIDENCE_SNIPPETS:
+        if snippet not in evidence:
+            errors.append(f"formatter proof trail missing activation evidence: {snippet}")
 
     # These exact strings are upstream source semantics that must remain in the
     # proof checker so reviewers can see which OpenCode activation paths were
@@ -72,7 +81,8 @@ def main() -> int:
 
     print(
         "formatter activation evidence check passed: OpenCode formatter activation "
-        "source anchors remain recorded while Forge runtime metadata stays Forge-owned."
+        "source anchors remain recorded in state/proof docs while Forge runtime "
+        "metadata stays Forge-owned."
     )
     return 0
 
