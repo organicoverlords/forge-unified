@@ -5,19 +5,19 @@ Updated: 2026-06-29
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest accepted same-head proof before this formatter-parity-gate slice: `567f42ac4cbfa99705ddeea81276990a6ca79ff5`
-- Accepted same-head workflows for that baseline: CI `28351599331`, Build Proof `28351599361`, Live WebUI Feature Sprint `28351599332`.
-- Accepted Live WebUI artifact for that baseline: `7944041593`, `live-webui-feature-sprint-proof`, digest `sha256:3f2adbc9bb2d08a6af83825af4b3a73d670238b725727999a4cfd33348759ce3`.
-- Accepted Build Proof artifact for that baseline: `7943661980`, `build-proof`, digest `sha256:a794a45fc73556c0da69f178aa94d7db19f4887ae9f670474a06643a05f3b200`.
-- Latest source-backed slice: CI-enforced formatter parity gate for the OpenCode-backed Forge formatter catalog.
-- Latest proof doc: `docs/generated/proof/formatter-parity-ci-gate-20260629T0646Z.md`.
-- Do not claim the formatter-parity-gate head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
+- Latest accepted same-head proof before this formatter-activation-evidence slice: `5e528fe4aa147b565327a7dc3c6ee4ba930a05c9`
+- Accepted same-head workflows for that baseline: CI `28354019180`, Build Proof `28354019177`, Live WebUI Feature Sprint `28354019207`.
+- Accepted Live WebUI artifact for that baseline: `7944644902`, `live-webui-feature-sprint-proof`, digest `sha256:2f650d46532b91bba6c0f348e62c145ee2d70a86e6f622e97605f1a7c05a6110`.
+- Accepted Build Proof artifact for that baseline: `7944553884`, `build-proof`, digest `sha256:6d080b888bcfb4a5c1c0161ebc1efed60fdeee9f15797cd9666c1459fa35204f`.
+- Latest source-backed slice: CI-enforced formatter activation evidence gate for the OpenCode-backed Forge formatter catalog proof trail.
+- Latest proof doc: `docs/generated/proof/formatter-activation-evidence-ci-gate-20260629T0750Z.md`.
+- Do not claim the formatter-activation-evidence head is same-head proven until CI / Build Proof / Live WebUI Feature Sprint complete on that newer commit.
 
 ## Accepted live full benchmark proof
 
-Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `567f42ac4cbfa99705ddeea81276990a6ca79ff5`.
+Forge has accepted real browser proof for the full six-phase agentic benchmark prompt through the WebUI on `5e528fe4aa147b565327a7dc3c6ee4ba930a05c9`.
 
-Proof requirements satisfied by artifact `7944041593`:
+Proof requirements satisfied by artifact `7944644902`:
 
 - The full benchmark prompt is sent through `/api/conversations/:id/chat/stream` and the WebUI proof helper.
 - The proof rejects local/scripted paths: no `provider: local`, no truthy `local_shortcut`, no `benchmark-phase`.
@@ -65,6 +65,7 @@ Proof requirements satisfied by artifact `7944041593`:
 - File write/edit formatting now uses a source-backed formatter catalog with OpenCode-derived formatter families while keeping formatter absence/failure contained in tool metadata and resynchronizing UTF-8 BOM after formatter mutation.
 - Formatter coverage now includes the remaining upstream OpenCode formatter families: Elixir/Phoenix template files via `mix`, experimental JS/TS via `oxfmt`, R via `air`, PHP via `pint`, Haskell via `ormolu`, Clojure/EDN via `cljfmt`, and D via `dfmt`.
 - `scripts/smoke/check-formatter-parity.py` now enforces the OpenCode-backed formatter catalog/contract in CI so formatter families, representative extensions, source anchors, containment statuses, and Forge-owned runtime metadata cannot silently regress.
+- `scripts/smoke/check-formatter-activation-evidence.py` now enforces that formatter activation source anchors stay recorded in the proof trail while Forge runtime formatter metadata remains Forge-owned.
 
 ## OpenCode source anchors retained in developer docs only
 
