@@ -70,37 +70,40 @@ impl ToolExecutor {
         let existing_bom = has_utf8_bom(&bytes);
         let content = String::from_utf8(bytes).with_context(|| format!("File is not valid UTF-8: {}", full_path.display()))?;
         let replace_all = args.replace_all.unwrap_or(false);
-        let new_content = if replace_all { content.replace(&args.old_string, &args.new_string) } else { content.replacen(&args.old_string, &args.new_string, 1) };
-        if new_content == content {
+        let Some(edit) = replace_file_edit_content(&content, &args.old_string, &args.new_string, replace_all) else {
             let mut metadata = stale_file_edit_metadata(&args.path, &args.old_string, &content);
             metadata.insert("replace_all".to_string(), serde_json::json!(replace_all));
             return Ok(ToolResult {
                 id: request.id,
                 kind: ToolKind::FileEdit,
                 success: false,
-                output: "file_edit failed: old_string was not found in the current file. Treat this as stale edit evidence: read the current file, then retry with the current exact text or use apply_patch with current context.".to_string(),
+                output: "file_edit failed: old_string was not found in the current file after exact and OpenCode-backed fuzzy replacement strategies. Treat this as stale edit evidence: read the current file, then retry with the current exact text or use apply_patch with current context.".to_string(),
                 error: Some("stale_exact_replacement_old_string_not_found".to_string()),
                 duration_ms: 0,
                 metadata,
             });
-        }
+        };
+        let new_content = edit.content;
         let keep_bom = existing_bom || new_content.starts_with(UTF8_BOM);
         let write_content = join_bom(&new_content, keep_bom);
         fs::write(&full_path, write_content.as_bytes()).await?;
         let formatter_status = format_file_like_forge(&full_path, keep_bom).await;
         let final_bytes = fs::read(&full_path).await.unwrap_or_else(|_| write_content.as_bytes().to_vec());
         let final_text = String::from_utf8_lossy(&final_bytes).to_string();
-        let files = vec![file_change_record(&args.path, "update", line_count(&final_text), line_count(&args.old_string), keep_bom)];
+        let files = vec![file_change_record(&args.path, "update", line_count(&final_text), line_count(&edit.matched), keep_bom)];
         let mut metadata = file_event_metadata(files);
         metadata.insert("path".to_string(), serde_json::json!(args.path));
         metadata.insert("replacements".to_string(), serde_json::json!(if replace_all { "all" } else { "first" }));
+        metadata.insert("edit_match_strategy".to_string(), serde_json::json!(edit.strategy));
+        metadata.insert("edit_matched_old_string_preview".to_string(), serde_json::json!(preview_text(&edit.matched, 240)));
+        metadata.insert("forge_edit_replacer_contract".to_string(), forge_edit_replacer_contract());
         metadata.insert("bom".to_string(), serde_json::json!(keep_bom));
         metadata.insert("bom_preserved".to_string(), serde_json::json!(existing_bom && keep_bom));
         metadata.insert("bom_strategy".to_string(), serde_json::json!("writeTextPreservingBom: preserve existing/input UTF-8 BOM and emit at most one BOM"));
         metadata.insert("formatter_status".to_string(), formatter_status);
         metadata.insert("forge_formatter_contract".to_string(), forge_formatter_contract());
         metadata.insert("forge_file_tool_contract".to_string(), forge_file_tool_contract());
-        Ok(ToolResult { id: request.id, kind: ToolKind::FileEdit, success: true, output: format!("Edited {}", metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file")), error: None, duration_ms: 0, metadata })
+        Ok(ToolResult { id: request.id, kind: ToolKind::FileEdit, success: true, output: format!("Edited {} via {}", metadata.get("path").and_then(serde_json::Value::as_str).unwrap_or("file"), edit.strategy), error: None, duration_ms: 0, metadata })
     }
 
     pub async fn execute_file_delete(&self, request: ToolRequest) -> Result<ToolResult> {
@@ -182,6 +185,108 @@ impl ToolExecutor {
     }
 }
 
+struct EditReplacement { content: String, matched: String, strategy: &'static str }
+
+fn replace_file_edit_content(content: &str, old_string: &str, new_string: &str, replace_all: bool) -> Option<EditReplacement> {
+    if old_string.is_empty() || old_string == new_string { return None; }
+    let exact = if replace_all { content.replace(old_string, new_string) } else { content.replacen(old_string, new_string, 1) };
+    if exact != content {
+        return Some(EditReplacement { content: exact, matched: old_string.to_string(), strategy: "simple_exact" });
+    }
+    let candidates = [
+        ("line_trimmed", line_trimmed_candidate(content, old_string)),
+        ("whitespace_normalized", whitespace_normalized_candidate(content, old_string)),
+        ("indentation_flexible", indentation_flexible_candidate(content, old_string)),
+        ("trimmed_boundary", trimmed_boundary_candidate(content, old_string)),
+    ];
+    for (strategy, candidate) in candidates {
+        if let Some(matched) = candidate {
+            if let Some(next) = replace_unique_candidate(content, &matched, new_string, replace_all) {
+                return Some(EditReplacement { content: next, matched, strategy });
+            }
+        }
+    }
+    None
+}
+
+fn replace_unique_candidate(content: &str, matched: &str, new_string: &str, replace_all: bool) -> Option<String> {
+    if matched.is_empty() { return None; }
+    let first = content.find(matched)?;
+    if replace_all { return Some(content.replace(matched, new_string)); }
+    if content[first + matched.len()..].contains(matched) { return None; }
+    Some(format!("{}{}{}", &content[..first], new_string, &content[first + matched.len()..]))
+}
+
+fn line_trimmed_candidate(content: &str, old_string: &str) -> Option<String> {
+    let content_lines: Vec<&str> = content.split('\n').collect();
+    let mut old_lines: Vec<&str> = old_string.split('\n').collect();
+    if old_lines.last() == Some(&"") { old_lines.pop(); }
+    if old_lines.is_empty() || old_lines.len() > content_lines.len() { return None; }
+    let mut matches = Vec::new();
+    for start in 0..=content_lines.len() - old_lines.len() {
+        if old_lines.iter().enumerate().all(|(offset, old)| content_lines[start + offset].trim() == old.trim()) {
+            matches.push(content_lines[start..start + old_lines.len()].join("\n"));
+        }
+    }
+    if matches.len() == 1 { matches.pop() } else { None }
+}
+
+fn whitespace_normalized_candidate(content: &str, old_string: &str) -> Option<String> {
+    let target = normalize_whitespace(old_string);
+    if target.is_empty() { return None; }
+    let lines: Vec<&str> = content.split('\n').collect();
+    let old_line_count = old_string.split('\n').count();
+    let mut matches = Vec::new();
+    for line in &lines {
+        if normalize_whitespace(line) == target { matches.push((*line).to_string()); }
+    }
+    if old_line_count > 1 && old_line_count <= lines.len() {
+        for start in 0..=lines.len() - old_line_count {
+            let block = lines[start..start + old_line_count].join("\n");
+            if normalize_whitespace(&block) == target { matches.push(block); }
+        }
+    }
+    matches.sort();
+    matches.dedup();
+    if matches.len() == 1 { matches.pop() } else { None }
+}
+
+fn indentation_flexible_candidate(content: &str, old_string: &str) -> Option<String> {
+    let old_lines: Vec<&str> = old_string.split('\n').collect();
+    if old_lines.len() <= 1 { return None; }
+    let content_lines: Vec<&str> = content.split('\n').collect();
+    if old_lines.len() > content_lines.len() { return None; }
+    let target = remove_min_indent(old_string);
+    let mut matches = Vec::new();
+    for start in 0..=content_lines.len() - old_lines.len() {
+        let block = content_lines[start..start + old_lines.len()].join("\n");
+        if remove_min_indent(&block) == target { matches.push(block); }
+    }
+    if matches.len() == 1 { matches.pop() } else { None }
+}
+
+fn trimmed_boundary_candidate(content: &str, old_string: &str) -> Option<String> {
+    let trimmed = old_string.trim();
+    if trimmed.is_empty() || trimmed == old_string { return None; }
+    if content.matches(trimmed).count() == 1 { return Some(trimmed.to_string()); }
+    let lines: Vec<&str> = content.split('\n').collect();
+    let old_line_count = old_string.split('\n').count();
+    if old_line_count > lines.len() { return None; }
+    let mut matches = Vec::new();
+    for start in 0..=lines.len() - old_line_count {
+        let block = lines[start..start + old_line_count].join("\n");
+        if block.trim() == trimmed { matches.push(block); }
+    }
+    if matches.len() == 1 { matches.pop() } else { None }
+}
+
+fn normalize_whitespace(value: &str) -> String { value.split_whitespace().collect::<Vec<_>>().join(" ") }
+
+fn remove_min_indent(value: &str) -> String {
+    let min_indent = value.lines().filter(|line| !line.trim().is_empty()).map(|line| line.chars().take_while(|ch| ch.is_whitespace()).count()).min().unwrap_or(0);
+    value.lines().map(|line| if line.trim().is_empty() { "".to_string() } else { line.chars().skip(min_indent).collect::<String>() }).collect::<Vec<_>>().join("\n")
+}
+
 fn workspace_path(path: Option<String>) -> String {
     let raw = path.unwrap_or_else(|| ".".to_string());
     let trimmed = raw.trim();
@@ -205,9 +310,10 @@ fn stale_file_edit_metadata(path: &str, old_string: &str, current_content: &str)
         ("old_string_lines".to_string(), serde_json::json!(line_count(old_string))),
         ("old_string_preview".to_string(), serde_json::json!(preview_text(old_string, 240))),
         ("current_file_preview".to_string(), serde_json::json!(preview_text(current_content, 360))),
-        ("recovery_hint".to_string(), serde_json::json!("The old_string did not match the current file. Read the current file and retry with the current exact text, or use apply_patch with current context.")),
+        ("recovery_hint".to_string(), serde_json::json!("The old_string did not match the current file after exact and fuzzy strategies. Read the current file and retry with current exact text, or use apply_patch with current context.")),
         ("recommended_next_tools".to_string(), serde_json::json!(["file_read", "file_edit", "apply_patch"])),
-        ("forge_tool_failure_lifecycle".to_string(), serde_json::json!("failed file_edit is returned as first-class error state with original input, explicit error, current-file preview, and recovery guidance")),
+        ("forge_edit_replacer_contract".to_string(), forge_edit_replacer_contract()),
+        ("forge_tool_failure_lifecycle".to_string(), serde_json::json!("failed file_edit is returned as first-class error state with original input, explicit error, current-file preview, fuzzy-replacer contract, and recovery guidance")),
     ])
 }
 
@@ -340,5 +446,6 @@ fn normalize_bom_bytes(bytes: &[u8], desired_bom: bool) -> Vec<u8> { let mut bod
 fn has_utf8_bom(content: &[u8]) -> bool { content.starts_with(UTF8_BOM_BYTES) }
 fn split_bom(text: &str) -> (bool, String) { let stripped = text.trim_start_matches(UTF8_BOM); (stripped.len() != text.len(), stripped.to_string()) }
 fn join_bom(text: &str, bom: bool) -> String { let (_, stripped) = split_bom(text); if bom { format!("{UTF8_BOM}{stripped}") } else { stripped } }
+fn forge_edit_replacer_contract() -> serde_json::Value { serde_json::json!({"source_backing": ["packages/opencode/src/tool/edit.ts"], "behaviors": ["attempt exact replacement first", "fall back to line-trimmed matching", "fall back to whitespace-normalized matching", "fall back to indentation-flexible matching", "fall back to trimmed-boundary matching", "require a unique fuzzy match unless replace_all is explicitly requested", "keep stale-edit failures as first-class tool error states with recovery metadata"]}) }
 fn forge_formatter_contract() -> serde_json::Value { serde_json::json!({"source_backing": ["packages/opencode/src/format/index.ts", "packages/opencode/src/format/formatter.ts"], "behaviors": ["match formatter commands by extension using a catalog", "probe matching formatter commands and safely disable unavailable commands", "run write/edit formatting after mutation when a formatter is available", "contain formatter spawn/status failures in metadata instead of failing the file tool", "resynchronize desired UTF-8 BOM after formatter mutation", "cover upstream formatter families for Rust, Go, Elixir, JS/TS/web/data/doc, Python, C/C++, shell, Terraform, Zig, Dart, Kotlin, Ruby, OCaml, LaTeX, Gleam, Nix, R, PHP, Haskell, Clojure, and D"]}) }
-fn forge_file_tool_contract() -> serde_json::Value { serde_json::json!({"behaviors": ["emit file edit events after write/edit/delete", "emit watcher-style update records", "touch LSP documents", "collect contained diagnostic report envelopes", "preserve an existing/input UTF-8 BOM and emit at most one BOM", "run formatting after write/edit and resynchronize BOM"]}) }
+fn forge_file_tool_contract() -> serde_json::Value { serde_json::json!({"behaviors": ["emit file edit events after write/edit/delete", "emit watcher-style update records", "touch LSP documents", "collect contained diagnostic report envelopes", "preserve an existing/input UTF-8 BOM and emit at most one BOM", "run formatting after write/edit and resynchronize BOM", "use OpenCode-backed fuzzy file edit replacement before returning stale-edit recovery"]}) }
