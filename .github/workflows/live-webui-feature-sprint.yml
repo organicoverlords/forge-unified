@@ -28,6 +28,16 @@ jobs:
       - name: Run live WebUI feature sprint
         run: bash scripts/smoke/live-webui-feature-sprint.sh
 
+      - name: Run natural feature-build prompt through WebUI
+        env:
+          FORGE_NATURAL_OUT: forge-proof/live-webui-feature-sprint/natural-feature-work
+          FORGE_NATURAL_MAX_ROUNDS: "10"
+          FORGE_NATURAL_TIMEOUT_SECONDS: "420"
+        run: |
+          set -euo pipefail
+          bash scripts/smoke/natural-feature-work.sh
+          jq -e '.passed == true' forge-proof/live-webui-feature-sprint/natural-feature-work/summary.json >/dev/null
+
       - name: Check full benchmark evidence and quality score
         if: always()
         run: |
@@ -39,6 +49,8 @@ jobs:
           workflow_checker="$proof_dir/opencode-workflow-checker.json"
           quality_score="$proof_dir/quality-score.json"
           proof_manifest="$proof_dir/live-webui-proof-manifest.json"
+          natural_summary="$proof_dir/natural-feature-work/summary.json"
+          natural_screenshot="$proof_dir/natural-feature-work/webui.png"
           if [ ! -s "$conversation" ] || [ ! -s "$stream" ]; then
             mkdir -p "$proof_dir"
             printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$checker"
@@ -54,6 +66,12 @@ jobs:
           jq -e '.passed == true' "$workflow_checker" >/dev/null
           python3 scripts/smoke/score-live-benchmark-quality.py "$proof_dir" "$quality_score"
           jq -e '.passed == true and .percent >= 85' "$quality_score" >/dev/null
+          if [ ! -s "$natural_summary" ]; then
+            echo "::error::missing natural feature-build summary artifact"
+            exit 1
+          fi
+          jq -e '.passed == true' "$natural_summary" >/dev/null
+          test -s "$natural_screenshot"
           python3 scripts/smoke/check-live-webui-proof-manifest.py "$proof_dir" "$proof_manifest"
           jq -e '.passed == true' "$proof_manifest" >/dev/null
           python3 scripts/smoke/summarize-live-webui-proof.py "$proof_dir"
