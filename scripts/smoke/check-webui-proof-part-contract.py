@@ -13,10 +13,10 @@ structure, not Forge runtime branding:
 This guard is intentionally source-backed and UI-facing: final browser proof
 must render stable, readable session turns, assistant parts, typed tool cards,
 provider/model route proof, copy/retry affordances, file receipts, turn receipt
-summaries, timeline actions, flattened public tool input, diagnostics, count
-summaries, tool lifecycle state/timing, and collapsed technical details instead
-of relying on raw JSON or raw tool identifiers as the primary user-visible
-evidence.
+summaries, timeline actions, flattened public tool input, previews,
+diagnostics, count summaries, tool lifecycle state/timing, and collapsed
+technical details instead of relying on raw JSON or raw tool identifiers as the
+primary user-visible evidence.
 """
 
 from __future__ import annotations
@@ -95,6 +95,12 @@ REQUIRED_UI_TOKENS = [
     "tool-output-duration-visible",
     "copy tool link",
     "copy status",
+    "tool-preview-visible",
+    "tool-preview-toggle",
+    "tool-preview-copy",
+    "tool-preview-pane",
+    "show preview",
+    "copy preview",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -141,6 +147,9 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "tool state timeline",
     "copy tool anchor",
     "duration footer",
+    "preview pane",
+    "preview toggle",
+    "copy preview",
 ]
 
 
@@ -246,6 +255,19 @@ def main() -> int:
             "copy input",
             "No public input fields recorded.",
             "if(/^opencode/i.test(key))continue",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_have_preview_pane_and_copy_controls",
+        "passed": all(token in ui for token in [
+            "function previewFrom(kind,state,result,args)",
+            "tool-preview-pane",
+            "tool-preview-visible",
+            "tool-preview-toggle",
+            "tool-preview-copy",
+            "show preview",
+            "copy preview",
+            "No preview recorded.",
         ]),
     })
     checks.append({
