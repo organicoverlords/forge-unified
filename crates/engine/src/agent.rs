@@ -18,7 +18,7 @@ const OPENCODE_COMPACTION_RUNTIME_SOURCE: &str = "packages/core/src/session/comp
 const OPENCODE_COMPACTION_SCHEMA_SOURCE: &str = "packages/schema/src/session-event.ts";
 const OPENCODE_COMPACTION_STARTED: &str = "session.next.compaction.started";
 const OPENCODE_COMPACTION_ENDED: &str = "session.next.compaction.ended";
-const SESSION_CONTROL_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
+const SESSION_CONTROL_BEHAVIOR: &str = "session-turn-action";
 
 pub struct Agent {
     orchestrator: Arc<Orchestrator>,
@@ -108,7 +108,7 @@ impl Agent {
     pub async fn retry_source(&self, id: &ConversationId) -> Result<Value> {
         let conv = self.conversations.read().await.get(id).cloned().ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
         let prompt = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::User)).map(|m| m.content.clone()).ok_or_else(|| anyhow::anyhow!("No user prompt found to retry"))?;
-        Ok(serde_json::json!({"retry_source": true, "conversation_id": id.0.to_string(), "message": prompt, "source": SESSION_CONTROL_SOURCE}))
+        Ok(serde_json::json!({"retry_source": true, "conversation_id": id.0.to_string(), "message": prompt, "receipt": session_control_value("retry_source", id, serde_json::json!({"message_found": true}))}))
     }
 
     pub async fn fork_conversation(&self, id: &ConversationId, title: Option<String>) -> Result<ConversationId> {
@@ -140,7 +140,7 @@ impl Agent {
             payload
         };
         self.save_snapshot(id).await?;
-        Ok(serde_json::json!({"reverted": true, "conversation_id": id.0.to_string(), "receipt": receipt, "source": SESSION_CONTROL_SOURCE}))
+        Ok(serde_json::json!({"reverted": true, "conversation_id": id.0.to_string(), "receipt": session_control_value("revert_last_turn", id, receipt)}))
     }
 
     pub async fn compact_with_part(&self, id: &ConversationId, keep_last: usize, auto: bool, overflow: bool) -> Result<Value> {
@@ -202,13 +202,17 @@ impl Agent {
     }
 }
 
+fn session_control_value(action: &str, id: &ConversationId, payload: Value) -> Value {
+    serde_json::json!({"type": "forge.session_control", "action": action, "conversation_id": id.0.to_string(), "status": "completed", "backend_backed": true, "behavior": SESSION_CONTROL_BEHAVIOR, "payload": payload, "created_at": chrono::Utc::now().to_rfc3339()})
+}
+
 fn session_control_receipt(action: &str, payload: Value) -> Message {
     Message {
         role: MessageRole::System,
         content: format!("Session control `{action}` recorded."),
         tool_calls: None,
         tool_results: None,
-        metadata: HashMap::from([("session_control".to_string(), serde_json::json!({"action": action, "backend_backed": true, "source": SESSION_CONTROL_SOURCE, "payload": payload}))]),
+        metadata: HashMap::from([("session_control".to_string(), serde_json::json!({"action": action, "backend_backed": true, "behavior": SESSION_CONTROL_BEHAVIOR, "payload": payload}))]),
     }
 }
 
