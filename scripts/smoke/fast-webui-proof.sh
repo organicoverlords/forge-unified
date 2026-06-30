@@ -92,7 +92,12 @@ for marker in \
   "session-turn-diffs-group" \
   "copy-retry-actions" \
   "collapsible-tool-card" \
-  "deferred-technical-content"; do
+  "deferred-technical-content" \
+  "timeline-file-diff-groups" \
+  "timeline-action-groups" \
+  "turn-receipt-toolbar" \
+  "file-diff-summary-visible" \
+  "stable-session-receipts"; do
   grep -Fq "$marker" "$INDEX_HTML" || fail_with_tail 2 "missing UI marker $marker" "$INDEX_HTML"
 done
 if grep -Fq "OpenCode-style" "$INDEX_HTML"; then
@@ -165,6 +170,8 @@ check("readable_proof_ui", all(m in proof_text for m in ["Run proof summary", "F
 check("central_session_turn_ui", all(m in proof_text for m in ["Session timeline", "Turn 1:", "copy final answer", "copy turn", "retry"]))
 check("session_part_hooks_visible", all(m in proof_text for m in ["session-turn-central", "assistant-parts", "message-part", "copy-retry-actions"]))
 check("tool_card_hooks_visible", all(m in proof_text for m in ["collapsible-tool-card", "deferred-technical-content", "provider-model-visible"]))
+check("turn_receipt_grouping_visible", all(m in proof_text for m in ["Receipts grouped by turn", "file receipts", "tool cards", "copy receipts", "stable-session-receipts"]))
+check("timeline_actions_visible", all(m in proof_text for m in ["copy timeline", "retry latest prompt", "copy latest files", "timeline-action-groups"]))
 check("tool_catalog_static_ui_seen", all(m in proof_text for m in ["Available actions", "Run tools in parallel", "Apply patch"]))
 check("no_opencode_style_branding", "OpenCode-style" not in proof_text)
 check("raw_json_not_primary_result", "{&quot;" not in proof_text)
