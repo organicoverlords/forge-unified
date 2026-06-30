@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Deterministic gate for WebUI conversation controls."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+FILES = {
+    "agent": ROOT / "crates/engine/src/agent.rs",
+    "routes": ROOT / "crates/webui/src/conversation_controls.rs",
+    "lib": ROOT / "crates/webui/src/lib.rs",
+    "ui": ROOT / "crates/webui/src/chat_ui_session_controls.html",
+    "bundle": ROOT / "crates/webui/src/chat_ui.rs",
+    "state": ROOT / "PROJECT_STATE.md",
+}
+
+REQUIRED = {
+    "agent": ["pub async fn retry_source", "pub async fn fork_conversation", "pub async fn revert_last_turn", "session_control_receipt", "SESSION_CONTROL_SOURCE"],
+    "routes": ["pub async fn checkpoint", "pub async fn fork", "pub async fn revert_last_turn", "pub async fn retry_source", "backend_backed"],
+    "lib": ["pub mod conversation_controls;", "/api/conversations/:id/checkpoint", "/api/conversations/:id/fork", "/api/conversations/:id/revert-last-turn", "/api/conversations/:id/retry-source"],
+    "ui": ["backend-session-controls", "backend-checkpoint-action", "backend-fork-action", "backend-revert-action", "backend-retry-source-action", "/checkpoint", "/fork", "/revert-last-turn", "/retry-source"],
+    "bundle": ["include_str!(\"chat_ui_session_controls.html\")"],
+    "state": ["backend-backed session controls", "checkpoint, fork, revert latest turn, and retry source", "crates/webui/src/conversation_controls.rs", "crates/webui/src/chat_ui_session_controls.html"],
+}
+
+
+def main() -> int:
+    checks = []
+    for name, path in FILES.items():
+        text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+        for token in REQUIRED[name]:
+            checks.append({"name": f"{name}:{token}", "passed": token in text})
+    failed = [check for check in checks if not check["passed"]]
+    report = {"passed": not failed, "checks": checks, "failed_checks": failed}
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if not failed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
