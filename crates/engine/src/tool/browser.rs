@@ -379,8 +379,8 @@ fn find_chrome() -> Option<String> {
         ]
     } else if cfg!(target_os = "macos") {
         vec![
-            "/Applications/Google Chrome.app/Contents/MOS/Google Chrome".replace("Contents/MOS", "Contents/MacOS").as_str(),
-            "/Applications/Chromium.app/Contents/MOS/Chromium".replace("Contents/MOS", "Contents/MacOS").as_str(),
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
         ]
     } else {
         vec![]
