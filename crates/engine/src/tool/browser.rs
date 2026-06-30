@@ -2,7 +2,9 @@ use crate::tool::ToolExecutor;
 use crate::types::{ToolRequest, ToolResult, ToolKind, BrowserProofResult, BrowserProofRequest, VisionReviewResult, VisionReviewRequest};
 use anyhow::Result;
 use std::collections::HashMap;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 const BROWSER_PROOF_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
 const CHROME_PROOF_FLAGS: &[&str] = &[
@@ -36,16 +38,21 @@ impl ToolExecutor {
         std::fs::create_dir_all(&out_dir)?;
 
         let screenshot_path = out_dir.join("screenshot.png");
-
-        let screenshot_output = chrome_command(&chrome)
+        let mut screenshot_cmd = chrome_command(&chrome);
+        screenshot_cmd
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
-            .arg("--virtual-time-budget=20000")
-            .arg(&args.url)
-            .output();
+            .arg("--virtual-time-budget=9000")
+            .arg(&args.url);
+        let screenshot_output = run_command_with_timeout(screenshot_cmd, Duration::from_secs(25));
 
         match screenshot_output {
-            Ok(output) if output.status.success() => {
+            Ok((true, output)) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let _ = std::fs::remove_dir_all(&out_dir);
+                Ok(browser_failure_result(request.id, "Chrome screenshot command timed out", stderr))
+            }
+            Ok((false, output)) if output.status.success() => {
                 let bytes = std::fs::read(&screenshot_path).unwrap_or_default();
                 if bytes.len() < 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -87,10 +94,11 @@ impl ToolExecutor {
                         ("height".to_string(), serde_json::json!(height)),
                         ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
                         ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
+                        ("chrome_timeout_seconds".to_string(), serde_json::json!(25)),
                     ]),
                 })
             }
-            Ok(output) => {
+            Ok((false, output)) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                 let _ = std::fs::remove_dir_all(&out_dir);
                 Ok(browser_failure_result(request.id, "Chrome screenshot command failed", stderr))
@@ -129,6 +137,22 @@ fn chrome_command(chrome: &str) -> Command {
         command.arg(flag);
     }
     command
+}
+
+fn run_command_with_timeout(mut command: Command, timeout: Duration) -> std::io::Result<(bool, Output)> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let started = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output().map(|output| (false, output));
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            return child.wait_with_output().map(|output| (true, output));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: String) -> ToolResult {
@@ -240,14 +264,14 @@ fn base64_encode(bytes: &[u8]) -> String {
 }
 
 fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
-    let dom_output = chrome_command(chrome)
+    let mut dom_cmd = chrome_command(chrome);
+    dom_cmd
         .arg("--dump-dom")
-        .arg("--virtual-time-budget=15000")
-        .arg(url)
-        .output();
+        .arg("--virtual-time-budget=4000")
+        .arg(url);
 
-    match dom_output {
-        Ok(dom) if dom.status.success() => {
+    match run_command_with_timeout(dom_cmd, Duration::from_secs(10)) {
+        Ok((false, dom)) if dom.status.success() => {
             let raw = String::from_utf8_lossy(&dom.stdout).to_string();
             let title = extract_title_from_dom(&raw);
             (Some(raw), title)
