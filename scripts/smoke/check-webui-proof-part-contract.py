@@ -10,9 +10,9 @@ structure, not Forge runtime branding:
 
 This guard is intentionally source-backed and UI-facing: final browser proof
 must render stable, readable session turns, assistant parts, tool cards,
-provider/model route proof, copy/retry affordances, file receipts, and collapsed
-technical details instead of relying on raw JSON or raw tool identifiers as the
-primary user-visible evidence.
+provider/model route proof, copy/retry affordances, file receipts, turn receipt
+summaries, timeline actions, and collapsed technical details instead of relying
+on raw JSON or raw tool identifiers as the primary user-visible evidence.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from pathlib import Path
 CHAT_UI_PATHS = [
     Path("crates/webui/src/chat_ui.rs"),
     Path("crates/webui/src/chat_ui.html"),
+    Path("crates/webui/src/chat_ui_enhancements.html"),
 ]
 PROJECT_STATE = Path("PROJECT_STATE.md")
 PROOF_DOC_DIR = Path("docs/generated/proof")
@@ -55,6 +56,14 @@ REQUIRED_UI_TOKENS = [
     "todo-status-summary",
     "todo-counts",
     "Plan updated",
+    "timeline-file-diff-groups",
+    "timeline-action-groups",
+    "turn-receipt-toolbar",
+    "file-diff-summary-visible",
+    "stable-session-receipts",
+    "Receipts grouped by turn",
+    "copy timeline",
+    "copy receipts",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -85,6 +94,10 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "copy/retry",
     "changed files",
     "collapsed technical details",
+    "turn receipt grouping",
+    "stable session receipts",
+    "timeline action groups",
+    "file diff summary",
 ]
 
 
@@ -119,7 +132,11 @@ def main() -> int:
 
     checks.append({
         "name": "ui_bundle_is_reviewable_html_not_giant_rust_string",
-        "passed": "include_str!(\"chat_ui.html\")" in ui and "<body data-proof=" in ui,
+        "passed": all(token in ui for token in [
+            "include_str!(\"chat_ui.html\")",
+            "include_str!(\"chat_ui_enhancements.html\")",
+            "<body data-proof=",
+        ]),
     })
     checks.append({
         "name": "final_proof_has_digest_before_session_turns",
@@ -136,6 +153,27 @@ def main() -> int:
     checks.append({
         "name": "central_session_turn_has_actions_and_file_receipts",
         "passed": all(token in ui for token in ["function turn(t,i,active)", "copy turn", "retry", "Changed files / file receipts"]),
+    })
+    checks.append({
+        "name": "turn_receipt_enhancer_groups_files_tools_and_statuses",
+        "passed": all(token in ui for token in [
+            "function enhanceTurn(turn)",
+            "Receipts grouped by turn",
+            "file receipts",
+            "tool cards",
+            "status chips",
+            "copy receipts",
+            "copy files",
+        ]),
+    })
+    checks.append({
+        "name": "session_timeline_has_real_copy_retry_actions",
+        "passed": all(token in ui for token in [
+            "copy timeline",
+            "retry latest prompt",
+            "copy latest files",
+            "Stable session receipts",
+        ]),
     })
 
     failed = [check for check in checks if not check["passed"]]
