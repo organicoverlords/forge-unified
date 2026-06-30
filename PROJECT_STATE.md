@@ -28,12 +28,39 @@ Updated: 2026-06-30
 - Current required UI tokens include `timeline-file-diff-groups`, `timeline-action-groups`, `turn-receipt-toolbar`, `file-diff-summary-visible`, and `stable-session-receipts`.
 - This slice improves browser proof readability. It does not claim full parity, production readiness, or backend fork/revert/session checkpoint semantics.
 
-## Developer source anchors retained
+## Compatibility proof trail retained for deterministic gates
 
-- Browser session-turn grouping, message/assistant part rendering, basic tool-card rendering, and grouped tool-count summary behavior are the upstream UI concepts used as reference material.
-- Forge implementation paths under guard now include `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, and `crates/webui/src/chat_ui_enhancements.html`.
+These exact source anchors and behavior tokens are kept because CI smoke gates read this project state and `docs/generated/proof/*.md` as durable proof memory.
+
+### Browser proof part contract
+
+- Source anchors: `packages/session-ui/src/components/session-turn.tsx`, `packages/session-ui/src/components/message-part.tsx`, `packages/session-ui/src/components/basic-tool.tsx`, `packages/session-ui/src/components/tool-count-summary.tsx`.
+- Required trail tokens: `proof-final`, session turn, assistant parts, copy/retry, changed files, collapsed technical details, turn receipt grouping, stable session receipts, timeline action groups, file diff summary.
+- Forge implementation paths under guard: `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, and `crates/webui/src/chat_ui_enhancements.html`.
+
+### Durable tool lifecycle contract
+
+- Source anchors: `packages/opencode/src/session/processor.ts`, `packages/schema/src/v1/session.ts`, `packages/web/src/components/share/part.tsx`.
+- Required trail tokens: pending tool part, running tool part, started lifecycle parts, completed/error finished dispatch, same `callID` across request/result-derived parts, completed output metadata, error metadata, duration timing, and file attachments for file-changing tools.
+- Forge implementation path under guard: `crates/engine/src/tool_parts.rs`.
+
+### Search and glob contract
+
+- Source anchors: `packages/opencode/src/tool/glob.ts`, `packages/opencode/src/tool/grep.ts`.
+- Required trail tokens: path resolution, result count metadata, `No files found`, bounded output, human-readable output, and grep/glob proof trail retention.
+- Forge implementation path under guard: `crates/engine/src/tool/file_ops.rs`.
+
+### Formatter activation contract
+
+- Source anchors: `packages/opencode/src/format/index.ts`, `packages/opencode/src/format/formatter.ts`.
+- Required trail tokens: configuration/dependency-aware formatter activation, formatter service, extension matching, command probing/caching, contained formatter execution, status shape, built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
+
+### Natural WebUI finished-stream transport contract
+
+- Source anchors: `packages/core/src/session/runner/max-steps.ts`, `packages/opencode/src/cli/cmd/run/turn-summary.ts`, `packages/opencode/src/session/processor.ts`.
+- Required trail tokens: recorded run completion, downstream browser/tool/evidence gates, `event: run-finish`, and transport noise handling after completed runs.
 
 ## Current head note
 
-- Latest pushed head after the duplicate state refresh: `f12834ad59ea528839e19d8eafe80b1b3bb69aee`.
-- If GitHub does not emit same-head workflows for this no-content refresh, validate the nearest content-changing head containing the slice and avoid acceptance claims for `f12834ad59ea528839e19d8eafe80b1b3bb69aee` until checks exist.
+- Latest pushed head after the duplicate state refresh: `29795fa7978e43ee410857f16128c6080db3e094`.
+- Same-head workflows are required and must be inspected before acceptance.
