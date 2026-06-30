@@ -5,36 +5,31 @@ Updated: 2026-06-30
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Latest selected head before this slice: `9a8f0157e75f2017200764abbcf10ac4ba4d1bf9`
-- Latest same-head proof before this slice: CI `28409705430` success; Build Proof `28409705389` success; App Build Proof `28409705448` success; App Multistep Build Proof `28409705418` success; Fast WebUI Proof `28409705413` success; Live WebUI Feature Sprint `28409705410` failed only in the natural feature-build proof transport gate after full benchmark proof passed.
-- Latest proof slice: natural WebUI finished-stream transport acceptance in `scripts/smoke/natural-feature-work.sh`.
-- Latest proof doc: `docs/generated/proof/natural-webui-finished-stream-transport-20260630T0000Z.md`.
-- Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Fast WebUI Proof / Live WebUI Feature Sprint complete on that exact head.
+- Current selected head before this docs update: `8abb0846467c7b3f98f129425c243d68645970a4`
+- Latest same-head proof before this UI slice: CI `28410453891` success; Build Proof `28410453898` success; App Build Proof `28410453928` success; App Multistep Build Proof `28410453910` success; Fast WebUI Proof `28410453941` success; Live WebUI Feature Sprint `28410453924` success on head `1651dce2b6873c934c682b494ad7cdded044bb58`.
+- Latest implementation slice: central browser session-turn rendering in `crates/webui/src/chat_ui.html`, loaded by `crates/webui/src/chat_ui.rs`, plus stricter Fast WebUI proof gates for session-turn UI.
+- Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Fast WebUI Proof / Live WebUI Feature Sprint complete on that exact head and browser artifacts are inspected.
 
 ## Selection basis
 
 - Source of truth branch: `mvp/nim-freellmapi-router-20260626`.
 - PR #3: open, non-draft, mergeable in PR metadata.
-- Current selected head before this slice: `9a8f0157e75f2017200764abbcf10ac4ba4d1bf9`.
 - No newer open PR superseded PR #3.
 
-## Latest workflow state inspected
+## Latest workflow state inspected before this slice
 
-- CI `28409705430`: success.
-- Build Proof `28409705389`: success.
-- App Build Proof `28409705448`: success.
-- App Multistep Build Proof `28409705418`: success.
-- Fast WebUI Proof `28409705413`: success.
-- Live WebUI Feature Sprint `28409705410`: failure in job `84179868033`.
-- Live WebUI failure details: full benchmark proof passed with provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, 24 tool-call events, and 24 tool-result events; natural feature-build proof had provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, 17 tool-call events, 17 tool-result events, browser proof success, screenshot success, and failed only `stream_exit_code_zero` because curl returned `28` after receiving stream data.
+- Head `1651dce2b6873c934c682b494ad7cdded044bb58` had same-head green: CI, Build Proof, App Build Proof, App Multistep Build Proof, Fast WebUI Proof, and Live WebUI Feature Sprint.
+- Live WebUI Feature Sprint proof on `1651dce2b6873c934c682b494ad7cdded044bb58` used provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, and produced browser screenshots/artifacts for full benchmark and natural feature work.
+- Current head after the central session-turn UI slice must be validated separately.
 
 ## Latest implementation changes
 
-- `scripts/smoke/natural-feature-work.sh` now records `stream_exit_code` and `stream_transport_ok`.
-- The natural WebUI proof now accepts stream exit code `0`, or curl timeout codes `28` / `124` only when the SSE stream includes `event: run-finish`.
-- Provider/model, tool-call/tool-result, edit marker, browser proof, screenshot, validation command, no-shortcut, and final-answer gates remain required.
-- Removed the post-check hard fail that rejected a passed proof purely because curl timed out after completion.
-- This is a source-backed proof harness parity slice, not a claim that complete OpenCode parity is done.
+- `crates/webui/src/chat_ui.rs` now loads the browser UI from `include_str!("chat_ui.html")`, keeping the UI reviewable instead of hiding it inside a giant Rust raw string.
+- `crates/webui/src/chat_ui.html` now renders central session turns: user prompt, assistant parts, live tool parts, completed tool cards, copy/retry actions, thinking/working state, changed files / file receipts, and a persistent right-side Session timeline.
+- Tool cards keep human labels and status badges visible while collapsed technical details remain outside the final proof view.
+- `scripts/smoke/fast-webui-proof.sh` now gates the browser proof on the central session-turn UI, copy/retry actions, collapsible tool cards, deferred technical content hooks, and absence of visible `OpenCode-style` branding.
+- `scripts/smoke/check-webui-proof-part-contract.py` now validates both `crates/webui/src/chat_ui.rs` and `crates/webui/src/chat_ui.html`, so the deterministic CI harness follows the current UI source of truth.
+- This is a source-backed browser WebUI parity slice, not a claim that complete OpenCode parity is done.
 
 ## User rejection that drove the WebUI proof work
 
@@ -57,10 +52,11 @@ Updated: 2026-06-30
 
 ## WebUI proof part contract evidence retained for CI
 
-- OpenCode source backing: `anomalyco/opencode:packages/web/src/components/share/part.tsx` and `anomalyco/opencode:packages/web/src/components/share/part.module.css`.
-- Forge source path under guard: `crates/webui/src/chat_ui.rs`.
-- Required behavior tokens: `proof-final`, `proof-digest-visible`, `final-answer-visible`, `provider-model-visible`, `human-tool-label`, `opencode-tool-result-card`, `opencode-live-toolpart`, `todo-status-summary`, `todo-counts`, human label rendering, and collapsed technical details outside final proof mode.
-- Todo status proof trail: OpenCode `TodoWriteTool` sorts and renders `pending`, `in_progress`, and `completed` todos; Forge WebUI now summarizes matching status counts for `todo_write` tool results.
+- OpenCode source backing: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, `anomalyco/opencode:packages/session-ui/src/components/message-part.tsx`, `anomalyco/opencode:packages/session-ui/src/components/basic-tool.tsx`, and `anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx`.
+- Forge source paths under guard: `crates/webui/src/chat_ui.rs` and `crates/webui/src/chat_ui.html`.
+- Required behavior tokens: `proof-final`, `proof-digest-visible`, `final-answer-visible`, `provider-model-visible`, `human-tool-label`, `session-turn-central`, `assistant-parts`, `message-part`, `opencode-tool-result-card`, `opencode-live-toolpart`, `collapsible-tool-card`, `deferred-technical-content`, `copy-retry-actions`, `session-turn-diffs-group`, `todo-status-summary`, and `todo-counts`.
+- Session turn proof trail: central session turn rendering groups each user prompt with assistant parts, readable tool cards, copy/retry actions, thinking state, changed files / file receipts, and collapsed technical details.
+- Todo status proof trail: Forge WebUI summarizes matching status counts for `todo_write` tool results instead of exposing raw JSON as the primary result.
 
 ## Natural WebUI finished-stream transport evidence retained for CI/proof
 
@@ -70,8 +66,10 @@ Updated: 2026-06-30
 
 ## OpenCode source anchors retained in developer docs only
 
-- `anomalyco/opencode:packages/web/src/components/share/part.tsx` — user-facing componentized tool rendering for completed tool parts, including `TodoWriteTool` status handling.
-- `anomalyco/opencode:packages/web/src/components/share/part.module.css` — shared visual treatment for parts/tool UI, including `[data-component="todos"]` and `[data-status="..."]` styling.
+- `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx` — browser SessionTurn grouping, assistant parts, active/pending status, thinking state, SessionRetry, and changed files diff group.
+- `anomalyco/opencode:packages/session-ui/src/components/message-part.tsx` — browser MessagePart and AssistantParts rendering, copy action, part mapping, and tool/file/reasoning/text part handling.
+- `anomalyco/opencode:packages/session-ui/src/components/basic-tool.tsx` — BasicTool trigger/status behavior, collapsible details, deferred heavy content, and pending/running handling.
+- `anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx` — animated/count summary treatment for grouped tool activity.
 - `anomalyco/opencode:packages/core/src/session/runner/max-steps.ts` — max-step no-tools finalization, text-only summary, remaining work list, next-step recommendations, and evidence-bound command claims.
 - `anomalyco/opencode:packages/opencode/src/tool/edit.ts` — conservative file edit replacement behavior.
 - `anomalyco/opencode:packages/opencode/src/session/processor.ts` — tool lifecycle, provider-executed state, same-call ToolPart update semantics, complete/fail tool-call handling, and tool-result output.
