@@ -5,10 +5,11 @@ Updated: 2026-06-30
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Previous selected head `99d28c7d5496508c35354680d53e773054be03b6` had CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof green.
-- Inspected Live WebUI Feature Sprint artifact `7990943905` from run `28468483083` for the prior same-head browser proof baseline.
-- Latest implementation/proof slice: browser proof capture hardening after `c09eae1503046bc2e3afbe2fbf69d30a53adcb06` failed Fast/App/Live browser screenshot capture with empty `browser-proof.json` artifacts while the NIM model/tool loops otherwise completed.
-- New proof doc: `docs/generated/proof/browser-proof-chrome-capture-hardening-20260630T2010Z.md`.
+- Previous selected head `2045bb9c42fa31e1eba1c2fc0e11216d0f70fb3d` had CI and Build Proof green but Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof failed in browser proof capture / downstream missing full-benchmark artifacts.
+- Inspected failed Live WebUI Feature Sprint run `28473962831`, job `84393631052`; artifact `7992869759` was uploaded but the browser proof step exited before full benchmark artifacts could be validated.
+- Inspected failed Fast WebUI Proof run `28473962844`, job `84393670263`; it reached NIM/WebUI streaming and failed exactly at `capture readable browser proof` after the 16s capture path.
+- Latest implementation/proof slice: browser proof rendered-wait budget, extending Chrome screenshot timeout from the 10s/16s path to a 30s Chrome budget and 45s process budget with metadata, plus DOM capture budget constants.
+- New proof doc: `docs/generated/proof/browser-proof-render-wait-budget-20260630T2047Z.md`.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
@@ -16,6 +17,8 @@ Updated: 2026-06-30
 - Hardened `crates/engine/src/tool/browser.rs` with runner-stable Chrome flags: `--no-sandbox`, `--disable-dev-shm-usage`, `--disable-background-networking`, `--disable-extensions`, `--disable-sync`, `--hide-scrollbars`, `--mute-audio`, and `--run-all-compositor-stages-before-draw`.
 - Added PNG readability validation so a successful Chrome process must also produce a non-empty PNG screenshot.
 - Added diagnosable browser proof failure output so screenshot failures return structured `BrowserProofResult { success: false, error, console_logs }` metadata instead of blank artifacts.
+- Extended browser screenshot wait to match slower hosted-runner rendering: `SCREENSHOT_CHROME_TIMEOUT_MS=30000`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS=15000`, and `SCREENSHOT_BROWSER_TIMEOUT_SECONDS=45`.
+- Added DOM capture budget constants: `DOM_CHROME_TIMEOUT_MS=12000`, `DOM_VIRTUAL_TIME_BUDGET_MS=5000`, and `DOM_BROWSER_TIMEOUT_SECONDS=18`.
 - Kept backend-backed session operations in `crates/engine/src/agent.rs`: `retry_source`, `fork_conversation`, `revert_last_turn`, and `session_control_receipt`.
 - Kept backend route handlers in `crates/webui/src/conversation_controls.rs` so checkpoint, fork, revert latest turn, and retry source all return structured receipt payloads.
 - Kept browser control bundle `crates/webui/src/chat_ui_session_controls.html` with visible receipt strip, `copy session receipt`, `copy all events`, `copy latest error`, `forge:session-control` events, event ledger, event rows, `data-session-control-event`, event copy, disclosure, count summary, status filters, diff summary, duration summary, overflow toggle, hidden older receipt row, session-control ledger export, and session-control error card.
@@ -26,7 +29,7 @@ Updated: 2026-06-30
 - Same-head workflow proof is mandatory before acceptance.
 - Browser artifacts must show provider/model route, session turn grouping, readable tool cards, final answer/proof summary, and no visible unwanted source-reference branding.
 - Current required UI tokens include `backend-session-controls`, `backend-checkpoint-action`, `backend-fork-action`, `backend-revert-action`, `backend-retry-source-action`, `backend-session-control-status`, `backend-session-control-receipt`, `copy-session-control-receipt`, `session-control-ledger-export`, `copy-session-control-ledger`, `session-control-error-card`, `backend-session-control-error-card`, `copy-session-control-error`, `latest-session-control-error`, `copy latest error`, `session-control-event-ledger`, `backend-session-control-ledger`, `backend-session-control-event-row`, `copy-session-control-event`, `data-session-control-event`, `session-control-event-disclosure`, `backend-session-control-event-detail`, `show-session-control-event`, `aria-expanded`, `aria-controls`, `session-control-count-summary`, `backend-session-control-summary`, `backend-session-control-count`, `session-control-filter`, `session-control-filter-all`, `session-control-filter-ok`, `session-control-filter-error`, `aria-pressed`, `session-control-diff-summary`, `backend-session-control-diff-summary`, `backend-session-control-diff-chip`, `session-control-diff-before`, `session-control-diff-after`, `session-control-diff-removed`, `session-control-duration-summary`, `backend-session-control-duration-summary`, `backend-session-control-duration-chip`, `session-control-duration-ms`, `session-control-started-at`, `session-control-completed-at`, `session-control-ledger-overflow`, `backend-session-control-overflow-toggle`, `session-control-show-all`, `session-control-show-less`, `session-control-visible-count`, `session-control-hidden-overflow-row`, and `forge-local-control-receipt`.
-- This slice fixes the browser-proof screenshot capture failure path. It does not claim full parity, production readiness, or same-head acceptance until workflows finish.
+- This slice fixes the browser-proof screenshot capture timeout path. It does not claim full parity, production readiness, or same-head acceptance until workflows finish.
 
 ## Compatibility proof trail retained for deterministic gates
 
@@ -50,6 +53,6 @@ Updated: 2026-06-30
 
 ### Browser proof capture contract
 
-- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards.
-- Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, and non-empty screenshot artifacts.
+- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards. This slice specifically follows the upstream delayed-rendering pattern around `requestAnimationFrame` and `shown` state before proof capture.
+- Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, non-empty screenshot artifacts, `SCREENSHOT_CHROME_TIMEOUT_MS`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS`, `DOM_CHROME_TIMEOUT_MS`, and `DOM_BROWSER_TIMEOUT_SECONDS`.
 - Forge implementation paths under guard: `crates/engine/src/tool/browser.rs`, `scripts/smoke/fast-webui-proof.sh`, `scripts/smoke/app-build-one-file.sh`, and `scripts/smoke/live-webui-feature-sprint.sh`.
