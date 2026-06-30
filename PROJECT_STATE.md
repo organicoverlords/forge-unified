@@ -5,24 +5,27 @@ Updated: 2026-06-30
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current selected baseline before this slice: `208f24329f361e87d82842129ed83b469df36ca5`
-- Latest same-head green proof before this slice: all required workflows passed on `208f24329f361e87d82842129ed83b469df36ca5`.
-- Latest implementation/proof slice: typed WebUI tool-card renderer in `crates/webui/src/chat_ui_enhancements.html`, with deterministic WebUI proof gate updates in `scripts/smoke/check-webui-proof-part-contract.py`.
+- Current selected baseline before this slice: `1a351d9914935395d212fc2ff6be42c28b223222`
+- Latest same-head green proof before this slice: all required workflows passed on `1a351d9914935395d212fc2ff6be42c28b223222`.
+- Latest implementation/proof slice: WebUI typed tool cards now expose flattened public tool input fields, result counts, diagnostics, and `copy input` controls in `crates/webui/src/chat_ui_enhancements.html`, with deterministic WebUI proof gate updates in `scripts/smoke/check-webui-proof-part-contract.py`.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
-- Added browser-side typed tool-card summaries to `crates/webui/src/chat_ui_enhancements.html`.
-- Added visible action, target, and result affordances for common coding-agent tools.
-- Added UI proof markers: `typed-tool-renderer`, `tool-target-visible`, `tool-result-toggle`, and `tool-duration-visible`.
-- Updated `scripts/smoke/check-webui-proof-part-contract.py` to require the new typed tool-card renderer markers and exact source anchors.
-- Added proof doc `docs/generated/proof/webui-typed-tool-card-renderer-20260630T0152Z.md`.
+- Added browser-side flattened tool input summaries to `crates/webui/src/chat_ui_enhancements.html` using `tool-args-grid`.
+- Added visible result/match count summaries using `tool-result-count`.
+- Added visible diagnostics extraction using `tool-diagnostic-list`.
+- Added `copy input` beside existing `show result` and `copy result` controls.
+- Added browser-visible proof markers: `tool-args-visible`, `tool-diagnostics-visible`, and `tool-count-summary-visible`.
+- Added runtime scrubber that removes or replaces `opencode_*` and `anomalyco/opencode:*` source-reference strings from browser-visible tool summaries.
+- Updated `scripts/smoke/check-webui-proof-part-contract.py` to require the new input/diagnostic/count proof markers and exact source anchors.
+- Added proof doc `docs/generated/proof/webui-tool-input-diagnostics-card-20260630T0255Z.md`.
 
 ## Proof requirements retained
 
 - Same-head workflow proof is mandatory before acceptance.
 - Browser artifacts must show provider/model route, session turn grouping, readable tool cards, final answer/proof summary, and no visible unwanted source-reference branding.
-- Current required UI tokens include `timeline-file-diff-groups`, `timeline-action-groups`, `turn-receipt-toolbar`, `file-diff-summary-visible`, `stable-session-receipts`, `typed-tool-renderer`, `tool-target-visible`, and `tool-result-toggle`.
+- Current required UI tokens include `timeline-file-diff-groups`, `timeline-action-groups`, `turn-receipt-toolbar`, `file-diff-summary-visible`, `stable-session-receipts`, `typed-tool-renderer`, `tool-target-visible`, `tool-result-toggle`, `tool-args-visible`, `tool-diagnostics-visible`, and `tool-count-summary-visible`.
 - This slice improves browser proof readability. It does not claim full parity, production readiness, or backend fork/revert/session checkpoint semantics.
 
 ## Compatibility proof trail retained for deterministic gates
@@ -32,7 +35,7 @@ These exact source anchors and behavior tokens are kept because CI smoke gates r
 ### Browser proof part contract
 
 - Source anchors: `packages/session-ui/src/components/session-turn.tsx`, `packages/session-ui/src/components/message-part.tsx`, `packages/session-ui/src/components/basic-tool.tsx`, `packages/session-ui/src/components/tool-count-summary.tsx`, `packages/web/src/components/share/part.tsx`, `packages/web/src/components/share/part.module.css`.
-- Required trail tokens: `proof-final`, session turn, assistant parts, copy/retry, changed files, collapsed technical details, turn receipt grouping, stable session receipts, timeline action groups, file diff summary, typed tool cards, tool targets, result toggles.
+- Required trail tokens: `proof-final`, session turn, assistant parts, copy/retry, changed files, collapsed technical details, turn receipt grouping, stable session receipts, timeline action groups, file diff summary, typed tool cards, tool targets, result toggles, flattened tool input, diagnostics, count summary.
 - Forge implementation paths under guard: `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, and `crates/webui/src/chat_ui_enhancements.html`.
 
 ### Durable tool lifecycle contract
@@ -59,5 +62,5 @@ These exact source anchors and behavior tokens are kept because CI smoke gates r
 
 ## Current head note
 
-- Latest pushed head after the typed tool-card renderer slice: pending same-head workflow completion after the newest commits.
+- Latest pushed head after the WebUI tool input diagnostics card slice: pending same-head workflow completion after the newest commits.
 - Same-head workflows are required and must be inspected before acceptance.
