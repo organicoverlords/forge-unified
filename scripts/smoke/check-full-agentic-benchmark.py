@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Validate the full six-phase WebUI benchmark from recorded artifacts.
 
-This checker deliberately trusts tool-result evidence over final prose. It fails when
-an answer claims completion but the conversation JSON/SSE stream do not prove the
-required operations.
+The checker trusts tool-result/SSE evidence over final prose. It only requires
+matching cargo evidence when the final answer makes a non-negated success claim
+for that exact cargo command.
 """
-
 from __future__ import annotations
 
 import json
@@ -51,15 +50,6 @@ def parse_sse(path: Path) -> list[dict[str, Any]]:
     return events
 
 
-def all_tool_results(conv: dict[str, Any]) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    for msg in conv.get("messages", []):
-        for result in msg.get("tool_results") or []:
-            results.append(result)
-            results.extend(expand_batch_results(result))
-    return results
-
-
 def expand_batch_results(result: dict[str, Any]) -> list[dict[str, Any]]:
     if result.get("kind") != "BatchParallel":
         return []
@@ -80,6 +70,15 @@ def expand_batch_results(result: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def all_tool_results(conv: dict[str, Any]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for msg in conv.get("messages", []):
+        for result in msg.get("tool_results") or []:
+            results.append(result)
+            results.extend(expand_batch_results(result))
+    return results
+
+
 def final_assistant_text(conv: dict[str, Any]) -> str:
     for msg in reversed(conv.get("messages", [])):
         if msg.get("role") == "Assistant":
@@ -88,13 +87,11 @@ def final_assistant_text(conv: dict[str, Any]) -> str:
 
 
 def result_path(result: dict[str, Any]) -> str:
-    meta = result.get("metadata") or {}
-    return str(meta.get("path") or "")
+    return str((result.get("metadata") or {}).get("path") or "")
 
 
 def result_command(result: dict[str, Any]) -> str:
-    meta = result.get("metadata") or {}
-    return str(meta.get("command") or "")
+    return str((result.get("metadata") or {}).get("command") or "")
 
 
 def result_output(result: dict[str, Any]) -> str:
@@ -162,8 +159,15 @@ def has_provider_local_event(events: list[dict[str, Any]]) -> bool:
     return False
 
 
+def prose_for_claim_detection(line: str) -> str:
+    """Normalize Markdown/code punctuation before claim/negation matching."""
+    text = re.sub(r"[`*_]", "", line.lower())
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
 def non_negated_claim_line(line: str) -> bool:
-    lower = line.lower()
+    lower = prose_for_claim_detection(line)
     negations = [
         "not run",
         "not executed",
@@ -172,8 +176,13 @@ def non_negated_claim_line(line: str) -> bool:
         "no cargo build",
         "no cargo check",
         "no cargo test",
+        "cargo test was not",
+        "cargo check was not",
+        "cargo build was not",
         "not required",
         "unknown whether",
+        "next logical step",
+        "would be to run",
     ]
     return not any(negation in lower for negation in negations)
 
@@ -183,34 +192,17 @@ def success_claim(line: str) -> bool:
 
 
 def claims_cargo_tests_success(final: str) -> bool:
-    """Detect only explicit cargo-test success claims.
-
-    The final benchmark answer must contain a generic `tests run` summary label.
-    That label is not itself a cargo-test claim, even when it says the required
-    `bash -n` validation command succeeded. OpenCode-style proof is exact-command
-    based: only explicit `cargo test` or `all tests pass` prose requires cargo-test
-    tool evidence.
-    """
-
-    if re.search(r"\ball\s+(cargo\s+)?tests\s+pass(?:ed|es)?\b", final, re.I):
-        return True
     for line in final.splitlines():
         if not non_negated_claim_line(line):
             continue
+        if re.search(r"\ball\s+(cargo\s+)?tests\s+pass(?:ed|es)?\b", line, re.I):
+            return True
         if re.search(r"\bcargo\s+test\b", line, re.I) and success_claim(line):
             return True
     return False
 
 
 def claims_build_check_success(final: str) -> bool:
-    """Detect only exact cargo build/check success claims.
-
-    Phrases such as `build config`, `build proof`, `compilation not run`, or a
-    generic `validation passed` line are not proof claims for cargo build/check.
-    Matching stays aligned with ToolPart semantics: only explicit cargo command
-    success prose demands matching ShellCommand tool evidence.
-    """
-
     for line in final.splitlines():
         if not non_negated_claim_line(line):
             continue
@@ -227,7 +219,6 @@ def main() -> int:
     conversation_path = Path(sys.argv[1])
     stream_path = Path(sys.argv[2])
     output_path = Path(sys.argv[3])
-
     conv = load_json(conversation_path)
     events = parse_sse(stream_path)
     results = all_tool_results(conv)
@@ -237,7 +228,6 @@ def main() -> int:
     last_run = run_finish[-1] if run_finish else {}
 
     checks: list[dict[str, Any]] = []
-
     add(checks, "provider_is_real_nvidia_nim", conv.get("provider") == "nvidia_nim", {"provider": conv.get("provider"), "model": conv.get("model")})
     add(checks, "model_is_recorded", isinstance(conv.get("model"), str) and len(conv.get("model")) > 0, conv.get("model"))
     add(checks, "no_local_or_scripted_shortcut", not has_provider_local_event(events) and not has_actual_event(events, "benchmark-phase") and not re.search(r'"local_shortcut"\s*:\s*true', stream_text), None)
@@ -264,7 +254,7 @@ def main() -> int:
     deletes = [r for r in results if r.get("kind") == "FileDelete" and r.get("success") is True]
     deleted_paths = [result_path(r) for r in deletes]
     add(checks, "phase3_deleted_only_investigation_md", deleted_paths == [f"{AGENT_TEST}/investigation.md"], deleted_paths)
-    verify_after_delete = any(r.get("success") is True and ((r.get("kind") in {"FileList", "ShellCommand"}) and f"{AGENT_TEST}/repo_summary.md" in result_output(r) and f"{AGENT_TEST}/action_plan.json" in result_output(r) and f"{AGENT_TEST}/investigation.md" not in result_output(r)) for r in results)
+    verify_after_delete = any(r.get("success") is True and r.get("kind") in {"FileList", "ShellCommand"} and f"{AGENT_TEST}/repo_summary.md" in result_output(r) and f"{AGENT_TEST}/action_plan.json" in result_output(r) and f"{AGENT_TEST}/investigation.md" not in result_output(r) for r in results)
     add(checks, "phase3_verified_remaining_files_after_delete", verify_after_delete, None)
 
     real_edits = [r for r in results if r.get("success") is True and r.get("kind") in {"FileEdit", "FileWrite", "ApplyPatch"} and not result_path(r).startswith(f"{AGENT_TEST}/")]
@@ -302,11 +292,8 @@ def main() -> int:
         "failed_checks": failed,
     }
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if failed:
-        print(json.dumps(report, indent=2, sort_keys=True))
-        return 1
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
+    return 0 if not failed else 1
 
 
 if __name__ == "__main__":
