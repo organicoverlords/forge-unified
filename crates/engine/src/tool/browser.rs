@@ -8,6 +8,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const BROWSER_PROOF_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
+const SCREENSHOT_BROWSER_TIMEOUT_SECONDS: u64 = 45;
+const SCREENSHOT_CHROME_TIMEOUT_MS: u64 = 30000;
+const SCREENSHOT_VIRTUAL_TIME_BUDGET_MS: u64 = 15000;
+const DOM_BROWSER_TIMEOUT_SECONDS: u64 = 18;
+const DOM_CHROME_TIMEOUT_MS: u64 = 12000;
+const DOM_VIRTUAL_TIME_BUDGET_MS: u64 = 5000;
 const CHROME_PROOF_FLAGS: &[&str] = &[
     "--headless=chrome",
     "--disable-gpu",
@@ -51,10 +57,13 @@ impl ToolExecutor {
             .arg(format!("--user-data-dir={}", profile_dir.display()))
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
-            .arg("--timeout=10000")
-            .arg("--virtual-time-budget=5000")
+            .arg(format!("--timeout={}", SCREENSHOT_CHROME_TIMEOUT_MS))
+            .arg(format!("--virtual-time-budget={}", SCREENSHOT_VIRTUAL_TIME_BUDGET_MS))
             .arg(&args.url);
-        let screenshot_output = run_command_with_timeout(screenshot_cmd, Duration::from_secs(16));
+        let screenshot_output = run_command_with_timeout(
+            screenshot_cmd,
+            Duration::from_secs(SCREENSHOT_BROWSER_TIMEOUT_SECONDS),
+        );
 
         match screenshot_output {
             Ok((true, output)) => {
@@ -69,7 +78,10 @@ impl ToolExecutor {
                         bytes,
                         None,
                         String::new(),
-                        vec!["Chrome timed out after writing a readable PNG screenshot; Forge stopped the process and kept the proof artifact.".to_string()],
+                        vec![format!(
+                            "Chrome exceeded Forge's {}s browser-proof budget after writing a readable PNG screenshot; Forge stopped the process and kept the proof artifact.",
+                            SCREENSHOT_BROWSER_TIMEOUT_SECONDS,
+                        )],
                     );
                 }
                 let _ = std::fs::remove_dir_all(&out_dir);
@@ -203,7 +215,9 @@ fn browser_success_result(
             ("height".to_string(), serde_json::json!(height)),
             ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
             ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
-            ("chrome_timeout_seconds".to_string(), serde_json::json!(16)),
+            ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
+            ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
+            ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
         ]),
     })
 }
@@ -230,6 +244,9 @@ fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: S
             ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
             ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
             ("diagnosable_browser_failure".to_string(), serde_json::json!(true)),
+            ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
+            ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
+            ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
         ]),
     }
 }
@@ -323,11 +340,11 @@ fn capture_dom_and_title(chrome: &str, url: &str, out_dir: &Path) -> (Option<Str
     dom_cmd
         .arg(format!("--user-data-dir={}", dom_profile.display()))
         .arg("--dump-dom")
-        .arg("--timeout=6000")
-        .arg("--virtual-time-budget=2500")
+        .arg(format!("--timeout={}", DOM_CHROME_TIMEOUT_MS))
+        .arg(format!("--virtual-time-budget={}", DOM_VIRTUAL_TIME_BUDGET_MS))
         .arg(url);
 
-    match run_command_with_timeout(dom_cmd, Duration::from_secs(8)) {
+    match run_command_with_timeout(dom_cmd, Duration::from_secs(DOM_BROWSER_TIMEOUT_SECONDS)) {
         Ok((false, dom)) if dom.status.success() => {
             let raw = String::from_utf8_lossy(&dom.stdout).to_string();
             let title = extract_title_from_dom(&raw);
@@ -362,8 +379,8 @@ fn find_chrome() -> Option<String> {
         ]
     } else if cfg!(target_os = "macos") {
         vec![
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Google Chrome.app/Contents/MOS/Google Chrome".replace("Contents/MOS", "Contents/MacOS").as_str(),
+            "/Applications/Chromium.app/Contents/MOS/Chromium".replace("Contents/MOS", "Contents/MacOS").as_str(),
         ]
     } else {
         vec![]
