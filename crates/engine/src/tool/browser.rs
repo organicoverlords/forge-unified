@@ -26,7 +26,7 @@ const CHROME_PROOF_FLAGS: &[&str] = &[
     "--disable-extensions",
     "--disable-sync",
     "--disable-default-apps",
-    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints",
+    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging",
     "--hide-scrollbars",
     "--mute-audio",
     "--no-first-run",
@@ -154,7 +154,13 @@ impl ToolExecutor {
 }
 
 fn chrome_command(chrome: &str) -> Command {
-    let mut command = Command::new(chrome);
+    let mut command = if command_exists("dbus-run-session") {
+        let mut wrapped = Command::new("dbus-run-session");
+        wrapped.arg("--").arg(chrome);
+        wrapped
+    } else {
+        Command::new(chrome)
+    };
     command.env_remove("DBUS_SESSION_BUS_ADDRESS");
     command.env_remove("DBUS_SYSTEM_BUS_ADDRESS");
     command.env("NO_AT_BRIDGE", "1");
@@ -162,6 +168,10 @@ fn chrome_command(chrome: &str) -> Command {
         command.arg(flag);
     }
     command
+}
+
+fn command_exists(name: &str) -> bool {
+    Command::new("which").arg(name).output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 fn run_command_with_timeout(mut command: Command, timeout: Duration) -> std::io::Result<(bool, Output)> {
@@ -218,6 +228,7 @@ fn browser_success_result(
             ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
             ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
             ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
+            ("chrome_dbus_wrapped".to_string(), serde_json::json!(command_exists("dbus-run-session"))),
         ]),
     })
 }
@@ -247,6 +258,7 @@ fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: S
             ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
             ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
             ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
+            ("chrome_dbus_wrapped".to_string(), serde_json::json!(command_exists("dbus-run-session"))),
         ]),
     }
 }
