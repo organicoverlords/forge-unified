@@ -16,12 +16,18 @@ FILES = {
 }
 
 REQUIRED = {
-    "agent": ["pub async fn retry_source", "pub async fn fork_conversation", "pub async fn revert_last_turn", "session_control_receipt", "SESSION_CONTROL_SOURCE"],
-    "routes": ["pub async fn checkpoint", "pub async fn fork", "pub async fn revert_last_turn", "pub async fn retry_source", "backend_backed"],
+    "agent": ["pub async fn retry_source", "pub async fn fork_conversation", "pub async fn revert_last_turn", "session_control_receipt", "SESSION_CONTROL_BEHAVIOR", "forge.session_control"],
+    "routes": ["pub async fn checkpoint", "pub async fn fork", "pub async fn revert_last_turn", "pub async fn retry_source", "backend_backed", "control_receipt", "forge.session_control"],
     "lib": ["pub mod conversation_controls;", "/api/conversations/:id/checkpoint", "/api/conversations/:id/fork", "/api/conversations/:id/revert-last-turn", "/api/conversations/:id/retry-source"],
-    "ui": ["backend-session-controls", "backend-checkpoint-action", "backend-fork-action", "backend-revert-action", "backend-retry-source-action", "/checkpoint", "/fork", "/revert-last-turn", "/retry-source"],
+    "ui": ["backend-session-controls", "backend-checkpoint-action", "backend-fork-action", "backend-revert-action", "backend-retry-source-action", "/checkpoint", "/fork", "/revert-last-turn", "/retry-source", "backend-session-control-receipt", "copy-session-control-receipt", "forge:session-control", "session-control-event-ledger"],
     "bundle": ["include_str!(\"chat_ui_session_controls.html\")"],
-    "state": ["backend-backed session controls", "checkpoint, fork, revert latest turn, and retry source", "crates/webui/src/conversation_controls.rs", "crates/webui/src/chat_ui_session_controls.html"],
+    "state": ["backend-backed session controls", "checkpoint, fork, revert latest turn, and retry source", "Forge-local session control receipts", "crates/webui/src/conversation_controls.rs", "crates/webui/src/chat_ui_session_controls.html"],
+}
+
+FORBIDDEN_RUNTIME_SOURCE_PATHS = {
+    "agent": ["SESSION_CONTROL_SOURCE", "packages/session-ui/src/components/session-turn.tsx"],
+    "routes": ["packages/session-ui/src/components/session-turn.tsx"],
+    "ui": ["packages/session-ui/src/components/session-turn.tsx", "opencode_source", "opencode_runtime_source"],
 }
 
 
@@ -31,6 +37,8 @@ def main() -> int:
         text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
         for token in REQUIRED[name]:
             checks.append({"name": f"{name}:{token}", "passed": token in text})
+        for token in FORBIDDEN_RUNTIME_SOURCE_PATHS.get(name, []):
+            checks.append({"name": f"{name}:no-runtime-source:{token}", "passed": token not in text})
     failed = [check for check in checks if not check["passed"]]
     report = {"passed": not failed, "checks": checks, "failed_checks": failed}
     print(json.dumps(report, indent=2, sort_keys=True))
