@@ -5,16 +5,20 @@ Updated: 2026-07-01
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Previous selected head `3cb90110bb42529d6386b6bf9834b48f342df660` had CI `28478458714` and Build Proof `28478458730` green, while Fast WebUI Proof `28478458720`, Live WebUI Feature Sprint `28478458740`, App Build Proof `28478458707`, and App Multistep Build Proof `28478458706` failed.
-- Inspected failed Fast WebUI Proof run `28478458720`, job `84408901801`; it reached NIM/WebUI streaming, then failed at `capture readable browser proof` with `curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received`. Artifact `7994661225` was uploaded.
-- Latest implementation/proof slice: fast browser proof screenshot-only budget, keeping the Fast WebUI workflow focused on a readable screenshot artifact after NIM streaming while avoiding the extra DOM Chrome pass inside the same bounded proof request.
-- New proof doc: `docs/generated/proof/fast-browser-proof-screenshot-only-budget-20260701T0147Z.md`.
+- Selected live head before this slice: `51be0610923761f6f14e372f057246e1e456361d`.
+- PR state verified live: open, non-draft, mergeable.
+- Same-head workflow state for `51be0610923761f6f14e372f057246e1e456361d`: CI `28483064782` passed; Build Proof `28483064781` passed; Fast WebUI Proof `28483064812`, Live WebUI Feature Sprint `28483064793`, App Build Proof `28483064783`, and App Multistep Build Proof `28483064777` failed.
+- Inspected failed Fast WebUI Proof run `28483064812`, job `84423541492`; it reached NIM/WebUI streaming, then failed at `capture readable browser proof`. The capture step ran from `23:43:31` to `23:45:06`, matching the old 60s screenshot plus 35s DOM Chrome budget. Artifact `7996408354` was uploaded.
+- Latest implementation/proof slice: browser proof direct Chrome no-DBus default. `scripts/smoke/capture-browser-proof.sh` now avoids `dbus-run-session` unless `FORGE_CHROME_USE_DBUS=1`, uses a sanitized Chrome environment, records diagnosable browser metadata, and prints the browser log tail when primary proof capture fails.
+- New proof doc: `docs/generated/proof/browser-proof-no-dbus-default-20260701T0246Z.md`.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
-- Updated `scripts/smoke/fast-webui-proof.sh` so the fast proof `POST /api/browser-proof` uses `capture_dom:false` and a 90s caller budget for the screenshot capture path.
+- Updated `scripts/smoke/capture-browser-proof.sh` so direct proof Chrome capture no longer defaults to `dbus-run-session`, because same-head logs showed the capture path consuming the full 95s screenshot+DOM budget after NIM/WebUI streaming.
+- Added `FORGE_CHROME_USE_DBUS=1` opt-in for local DBus wrapping diagnosis, `FORGE_CHROME_HEADLESS` override for `--headless=...`, explicit DBus/AT-SPI environment cleanup, `XDG_RUNTIME_DIR` fallback, `--disable-ipc-flooding-protection`, and capture diagnostics in `browser-chrome.log`.
 - Kept screenshot acceptance strict: browser proof success, non-empty screenshot base64, PNG decode to `webui.png`, provider/model route evidence, final answer/session UI markers, tool-card markers, and unwanted source-reference branding guard.
+- Kept fast screenshot-only caller budget in `scripts/smoke/fast-webui-proof.sh`: `capture_dom:false` and a 90s caller budget for the screenshot capture path.
 - Kept browser proof timeout repair in `crates/engine/src/tool/browser.rs`: `SCREENSHOT_CHROME_TIMEOUT_MS=30000`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS=15000`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS=45`, `DOM_CHROME_TIMEOUT_MS=12000`, `DOM_VIRTUAL_TIME_BUDGET_MS=5000`, and `DOM_BROWSER_TIMEOUT_SECONDS=18`.
 - Kept stable session-control receipt identity in `crates/webui/src/conversation_controls.rs`: `receipt_id`, monotonic `sequence`, and `source: forge.webui.session_controls` metadata.
 - Kept backend-backed session operations in `crates/engine/src/agent.rs`: `retry_source`, `fork_conversation`, `revert_last_turn`, and `session_control_receipt`.
@@ -50,6 +54,6 @@ Updated: 2026-07-01
 
 ### Browser proof capture contract
 
-- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards. This slice specifically follows the upstream delayed-rendering pattern around `requestAnimationFrame` and `shown` state before proof capture, while keeping Fast proof bounded to the screenshot artifact instead of requiring a second DOM Chrome pass in the same request.
-- Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, non-empty screenshot artifacts, `SCREENSHOT_CHROME_TIMEOUT_MS`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS`, `DOM_CHROME_TIMEOUT_MS`, `DOM_BROWSER_TIMEOUT_SECONDS`, and `capture_dom:false` for `fast-webui-proof.sh`.
-- Forge implementation paths under guard: `crates/engine/src/tool/browser.rs`, `scripts/smoke/fast-webui-proof.sh`, `scripts/smoke/app-build-one-file.sh`, and `scripts/smoke/live-webui-feature-sprint.sh`.
+- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards. This slice specifically follows the upstream delayed-rendering pattern around `requestAnimationFrame` and `shown` state before proof capture, while keeping Fast proof bounded to a real screenshot artifact and avoiding the DBus wrapper hang seen in GitHub-hosted runner logs.
+- Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, non-empty screenshot artifacts, `SCREENSHOT_CHROME_TIMEOUT_MS`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS`, `DOM_CHROME_TIMEOUT_MS`, `DOM_BROWSER_TIMEOUT_SECONDS`, `capture_dom:false` for `fast-webui-proof.sh`, `FORGE_CHROME_USE_DBUS`, `FORGE_CHROME_HEADLESS`, `chrome_dbus_default_disabled`, and `browser-chrome.log` diagnostics.
+- Forge implementation paths under guard: `crates/engine/src/tool/browser.rs`, `scripts/smoke/capture-browser-proof.sh`, `scripts/smoke/fast-webui-proof.sh`, `scripts/smoke/app-build-one-file.sh`, and `scripts/smoke/live-webui-feature-sprint.sh`.
