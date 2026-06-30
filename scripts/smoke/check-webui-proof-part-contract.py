@@ -7,9 +7,11 @@ structure, not Forge runtime branding:
 - anomalyco/opencode:packages/session-ui/src/components/message-part.tsx
 - anomalyco/opencode:packages/session-ui/src/components/basic-tool.tsx
 - anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx
+- anomalyco/opencode:packages/web/src/components/share/part.tsx
+- anomalyco/opencode:packages/web/src/components/share/part.module.css
 
 This guard is intentionally source-backed and UI-facing: final browser proof
-must render stable, readable session turns, assistant parts, tool cards,
+must render stable, readable session turns, assistant parts, typed tool cards,
 provider/model route proof, copy/retry affordances, file receipts, turn receipt
 summaries, timeline actions, and collapsed technical details instead of relying
 on raw JSON or raw tool identifiers as the primary user-visible evidence.
@@ -32,6 +34,8 @@ OPENCODE_SOURCES = [
     "packages/session-ui/src/components/message-part.tsx",
     "packages/session-ui/src/components/basic-tool.tsx",
     "packages/session-ui/src/components/tool-count-summary.tsx",
+    "packages/web/src/components/share/part.tsx",
+    "packages/web/src/components/share/part.module.css",
 ]
 
 REQUIRED_UI_TOKENS = [
@@ -64,6 +68,19 @@ REQUIRED_UI_TOKENS = [
     "Receipts grouped by turn",
     "copy timeline",
     "copy receipts",
+    "typed-tool-renderer",
+    "tool-target-visible",
+    "tool-result-toggle",
+    "tool-duration-visible",
+    "typed-tool-summary",
+    "show result",
+    "copy result",
+    "Read preview",
+    "Write target",
+    "Diff target",
+    "Command output",
+    "Matched paths",
+    "Matched lines",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -88,6 +105,8 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "packages/session-ui/src/components/message-part.tsx",
     "packages/session-ui/src/components/basic-tool.tsx",
     "packages/session-ui/src/components/tool-count-summary.tsx",
+    "packages/web/src/components/share/part.tsx",
+    "packages/web/src/components/share/part.module.css",
     "proof-final",
     "session turn",
     "assistant parts",
@@ -98,6 +117,9 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "stable session receipts",
     "timeline action groups",
     "file diff summary",
+    "typed tool cards",
+    "tool targets",
+    "result toggles",
 ]
 
 
@@ -173,6 +195,20 @@ def main() -> int:
             "retry latest prompt",
             "copy latest files",
             "Stable session receipts",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_show_action_target_output_and_copy_toggle",
+        "passed": all(token in ui for token in [
+            "function enhanceTool(tool)",
+            "typed-tool-renderer",
+            "tool-target-visible",
+            "show result",
+            "copy result",
+            "Read preview",
+            "Write target",
+            "Diff target",
+            "Command output",
         ]),
     })
 
