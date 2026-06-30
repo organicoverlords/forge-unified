@@ -82,9 +82,22 @@ done
 
 step "check static UI markers"
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/" -o "$INDEX_HTML"
-for marker in "Forge Unified" "provider-model-visible" "human-tool-label" "proof-digest-visible"; do
+for marker in \
+  "Forge Unified" \
+  "provider-model-visible" \
+  "human-tool-label" \
+  "proof-digest-visible" \
+  "Session timeline" \
+  "session-turn-central" \
+  "session-turn-diffs-group" \
+  "copy-retry-actions" \
+  "collapsible-tool-card" \
+  "deferred-technical-content"; do
   grep -Fq "$marker" "$INDEX_HTML" || fail_with_tail 2 "missing UI marker $marker" "$INDEX_HTML"
 done
+if grep -Fq "OpenCode-style" "$INDEX_HTML"; then
+  fail_with_tail 2 "visible OpenCode-style branding leaked into Forge UI" "$INDEX_HTML"
+fi
 
 step "check provider tool catalog"
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/tools" -o "$CATALOG_JSON"
@@ -149,7 +162,11 @@ check("run_finished", "event: run-finish" in text)
 check("fast_marker_seen", "LIVE_FAST_WEBUI_PROOF" in text or "LIVE_FAST_WEBUI_PROOF" in json.dumps(conversation))
 check("browser_success", proof_data.get("success") is True)
 check("readable_proof_ui", all(m in proof_text for m in ["Run proof summary", "Final answer", "human-tool-label"]))
+check("central_session_turn_ui", all(m in proof_text for m in ["Session timeline", "Turn 1:", "copy final answer", "copy turn", "retry"]))
+check("session_part_hooks_visible", all(m in proof_text for m in ["session-turn-central", "assistant-parts", "message-part", "copy-retry-actions"]))
+check("tool_card_hooks_visible", all(m in proof_text for m in ["collapsible-tool-card", "deferred-technical-content", "provider-model-visible"]))
 check("tool_catalog_static_ui_seen", all(m in proof_text for m in ["Available actions", "Run tools in parallel", "Apply patch"]))
+check("no_opencode_style_branding", "OpenCode-style" not in proof_text)
 check("raw_json_not_primary_result", "{&quot;" not in proof_text)
 check("screenshot_png", shot.is_file() and shot.stat().st_size > 1024 and shot.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot.stat().st_size if shot.exists() else 0)
 failed = [c for c in checks if not c["passed"]]
