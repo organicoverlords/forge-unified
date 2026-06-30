@@ -14,8 +14,9 @@ This guard is intentionally source-backed and UI-facing: final browser proof
 must render stable, readable session turns, assistant parts, typed tool cards,
 provider/model route proof, copy/retry affordances, file receipts, turn receipt
 summaries, timeline actions, flattened public tool input, diagnostics, count
-summaries, and collapsed technical details instead of relying on raw JSON or raw
-tool identifiers as the primary user-visible evidence.
+summaries, tool lifecycle state/timing, and collapsed technical details instead
+of relying on raw JSON or raw tool identifiers as the primary user-visible
+evidence.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ CHAT_UI_PATHS = [
     Path("crates/webui/src/chat_ui.rs"),
     Path("crates/webui/src/chat_ui.html"),
     Path("crates/webui/src/chat_ui_enhancements.html"),
+    Path("crates/webui/src/chat_ui_tool_lifecycle.html"),
 ]
 PROJECT_STATE = Path("PROJECT_STATE.md")
 PROOF_DOC_DIR = Path("docs/generated/proof")
@@ -86,6 +88,13 @@ REQUIRED_UI_TOKENS = [
     "Command output",
     "Matched paths",
     "Matched lines",
+    "tool-lifecycle-strip",
+    "tool-state-timeline",
+    "tool-status-visible",
+    "copy-tool-anchor",
+    "tool-output-duration-visible",
+    "copy tool link",
+    "copy status",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -128,6 +137,10 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "flattened tool input",
     "diagnostics",
     "count summary",
+    "tool lifecycle strip",
+    "tool state timeline",
+    "copy tool anchor",
+    "duration footer",
 ]
 
 
@@ -165,6 +178,7 @@ def main() -> int:
         "passed": all(token in ui for token in [
             "include_str!(\"chat_ui.html\")",
             "include_str!(\"chat_ui_enhancements.html\")",
+            "include_str!(\"chat_ui_tool_lifecycle.html\")",
             "<body data-proof=",
         ]),
     })
@@ -232,6 +246,25 @@ def main() -> int:
             "copy input",
             "No public input fields recorded.",
             "if(/^opencode/i.test(key))continue",
+        ]),
+    })
+    checks.append({
+        "name": "tool_lifecycle_overlay_shows_state_timing_and_copyable_anchor",
+        "passed": all(token in ui for token in [
+            "function statusFrom(tool,state)",
+            "function durationFrom(state)",
+            "function targetFrom(tool,state)",
+            "tool-lifecycle-strip",
+            "tool-state-timeline",
+            "tool-status-visible",
+            "copy-tool-anchor",
+            "tool-output-duration-visible",
+            "copy tool link",
+            "copy status",
+            "pending",
+            "running",
+            "completed",
+            "error",
         ]),
     })
 
