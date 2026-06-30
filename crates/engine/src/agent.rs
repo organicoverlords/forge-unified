@@ -9,6 +9,7 @@ use crate::types::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -17,6 +18,7 @@ const OPENCODE_COMPACTION_RUNTIME_SOURCE: &str = "packages/core/src/session/comp
 const OPENCODE_COMPACTION_SCHEMA_SOURCE: &str = "packages/schema/src/session-event.ts";
 const OPENCODE_COMPACTION_STARTED: &str = "session.next.compaction.started";
 const OPENCODE_COMPACTION_ENDED: &str = "session.next.compaction.ended";
+const SESSION_CONTROL_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
 
 pub struct Agent {
     orchestrator: Arc<Orchestrator>,
@@ -103,37 +105,60 @@ impl Agent {
         Ok(label)
     }
 
+    pub async fn retry_source(&self, id: &ConversationId) -> Result<Value> {
+        let conv = self.conversations.read().await.get(id).cloned().ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
+        let prompt = conv.messages.iter().rev().find(|m| matches!(&m.role, MessageRole::User)).map(|m| m.content.clone()).ok_or_else(|| anyhow::anyhow!("No user prompt found to retry"))?;
+        Ok(serde_json::json!({"retry_source": true, "conversation_id": id.0.to_string(), "message": prompt, "source": SESSION_CONTROL_SOURCE}))
+    }
+
+    pub async fn fork_conversation(&self, id: &ConversationId, title: Option<String>) -> Result<ConversationId> {
+        let source = { self.conversations.read().await.get(id).cloned().ok_or_else(|| anyhow::anyhow!("Conversation not found"))? };
+        let new_id = ConversationId(Uuid::new_v4());
+        let now = chrono::Utc::now();
+        let mut fork = source.clone();
+        fork.id = new_id.clone();
+        fork.title = title.unwrap_or_else(|| format!("{} fork", source.title));
+        fork.created_at = now;
+        fork.updated_at = now;
+        fork.messages.push(session_control_receipt("fork", serde_json::json!({"from": id.0.to_string(), "to": new_id.0.to_string()})));
+        self.conversations.write().await.insert(new_id.clone(), fork);
+        self.save_snapshot(&new_id).await?;
+        Ok(new_id)
+    }
+
+    pub async fn revert_last_turn(&self, id: &ConversationId) -> Result<Value> {
+        let receipt = {
+            let mut manager = self.conversations.write().await;
+            let conv = manager.get_mut(id).ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
+            let before = conv.messages.len();
+            let keep = conv.messages.iter().rposition(|m| matches!(&m.role, MessageRole::User)).ok_or_else(|| anyhow::anyhow!("No user turn found to revert"))?;
+            let removed = before.saturating_sub(keep);
+            conv.messages.truncate(keep);
+            let payload = serde_json::json!({"before": before, "after": conv.messages.len() + 1, "removed_messages": removed, "kept_messages": keep});
+            conv.messages.push(session_control_receipt("revert_last_turn", payload.clone()));
+            conv.updated_at = chrono::Utc::now();
+            payload
+        };
+        self.save_snapshot(id).await?;
+        Ok(serde_json::json!({"reverted": true, "conversation_id": id.0.to_string(), "receipt": receipt, "source": SESSION_CONTROL_SOURCE}))
+    }
+
     pub async fn compact_with_part(&self, id: &ConversationId, keep_last: usize, auto: bool, overflow: bool) -> Result<Value> {
         let started = self.orchestrator.publish_change_event(OPENCODE_COMPACTION_STARTED, "opencode.session.compaction", serde_json::json!({
-            "sessionID": id.0.to_string(),
-            "conversation_id": id.0.to_string(),
-            "messageID": format!("compaction-{}", id.0),
-            "reason": if auto { "auto" } else { "manual" },
-            "keep_last": keep_last,
-            "auto": auto,
-            "overflow": overflow,
-            "durable": true,
-            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE,
-            "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
+            "sessionID": id.0.to_string(), "conversation_id": id.0.to_string(), "messageID": format!("compaction-{}", id.0),
+            "reason": if auto { "auto" } else { "manual" }, "keep_last": keep_last, "auto": auto, "overflow": overflow, "durable": true,
+            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE, "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
             "copied_behavior": "publish SessionEvent.Compaction.Started before summarizing old context"
         }));
         let mut result = self.conversations.write().await.add_compaction_part(id, keep_last, auto, overflow).ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
         self.save_snapshot(id).await?;
         let finished = self.orchestrator.publish_change_event(OPENCODE_COMPACTION_ENDED, "opencode.session.compaction", serde_json::json!({
-            "sessionID": id.0.to_string(),
-            "conversation_id": id.0.to_string(),
-            "messageID": format!("compaction-{}", id.0),
-            "reason": if auto { "auto" } else { "manual" },
-            "text": result.get("summary").cloned().unwrap_or(Value::String(String::new())),
-            "recent": result.get("recent").cloned().unwrap_or(Value::String(String::new())),
-            "compacted": result.get("compacted").and_then(Value::as_bool).unwrap_or(false),
-            "before": result.get("before").and_then(Value::as_u64),
-            "after": result.get("after").and_then(Value::as_u64),
-            "tail_start_id": result.get("tail_start_id").cloned().unwrap_or(Value::Null),
-            "started_seq": started.seq,
-            "durable": true,
-            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE,
-            "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
+            "sessionID": id.0.to_string(), "conversation_id": id.0.to_string(), "messageID": format!("compaction-{}", id.0),
+            "reason": if auto { "auto" } else { "manual" }, "text": result.get("summary").cloned().unwrap_or(Value::String(String::new())),
+            "recent": result.get("recent").cloned().unwrap_or(Value::String(String::new())), "compacted": result.get("compacted").and_then(Value::as_bool).unwrap_or(false),
+            "before": result.get("before").and_then(Value::as_u64), "after": result.get("after").and_then(Value::as_u64),
+            "tail_start_id": result.get("tail_start_id").cloned().unwrap_or(Value::Null), "started_seq": started.seq, "durable": true,
+            "opencode_source": OPENCODE_COMPACTION_SCHEMA_SOURCE, "opencode_runtime_source": OPENCODE_COMPACTION_RUNTIME_SOURCE,
             "copied_behavior": "publish SessionEvent.Compaction.Ended with summary text and recent tail after compaction"
         }));
         if let Some(object) = result.as_object_mut() {
@@ -174,6 +199,16 @@ impl Agent {
         let result = self.orchestrator.execute_tool(req).await?;
         if !result.success { anyhow::bail!("Graph build failed: {}", result.error.unwrap_or_default()); }
         serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse graph result: {}", e))
+    }
+}
+
+fn session_control_receipt(action: &str, payload: Value) -> Message {
+    Message {
+        role: MessageRole::System,
+        content: format!("Session control `{action}` recorded."),
+        tool_calls: None,
+        tool_results: None,
+        metadata: HashMap::from([("session_control".to_string(), serde_json::json!({"action": action, "backend_backed": true, "source": SESSION_CONTROL_SOURCE, "payload": payload}))]),
     }
 }
 
