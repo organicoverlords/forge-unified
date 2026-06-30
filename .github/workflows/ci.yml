@@ -106,6 +106,7 @@ jobs:
           python3 -m py_compile scripts/smoke/check-opencode-search-glob-contract.py
           python3 -m py_compile scripts/smoke/check-webui-proof-part-contract.py
           python3 -m py_compile scripts/smoke/check-opencode-tool-lifecycle-contract.py
+          python3 -m py_compile scripts/smoke/check-session-controls-contract.py
           python3 -m py_compile scripts/smoke/summarize-live-webui-proof.py
           python3 scripts/smoke/check-formatter-parity.py
           python3 scripts/smoke/check-formatter-activation-evidence.py
@@ -116,6 +117,7 @@ jobs:
           python3 scripts/smoke/check-opencode-search-glob-contract.py
           python3 scripts/smoke/check-webui-proof-part-contract.py
           python3 scripts/smoke/check-opencode-tool-lifecycle-contract.py
+          python3 scripts/smoke/check-session-controls-contract.py
           if [ -f scripts/smoke/check-live-webui-proof-manifest.py ]; then
             python3 -m py_compile scripts/smoke/check-live-webui-proof-manifest.py
           fi
