@@ -4,6 +4,20 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::process::Command;
 
+const BROWSER_PROOF_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
+const CHROME_PROOF_FLAGS: &[&str] = &[
+    "--headless=new",
+    "--disable-gpu",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-background-networking",
+    "--disable-extensions",
+    "--disable-sync",
+    "--hide-scrollbars",
+    "--mute-audio",
+    "--run-all-compositor-stages-before-draw",
+];
+
 impl ToolExecutor {
     pub async fn execute_browser_proof(&self, request: ToolRequest) -> Result<ToolResult> {
         let args: BrowserProofRequest = serde_json::from_value(request.args.clone())
@@ -23,18 +37,25 @@ impl ToolExecutor {
 
         let screenshot_path = out_dir.join("screenshot.png");
 
-        let screenshot_output = Command::new(&chrome)
-            .arg("--headless=new")
-            .arg("--disable-gpu")
+        let screenshot_output = chrome_command(&chrome)
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
-            .arg("--virtual-time-budget=15000")
+            .arg("--virtual-time-budget=20000")
             .arg(&args.url)
             .output();
 
         match screenshot_output {
             Ok(output) if output.status.success() => {
                 let bytes = std::fs::read(&screenshot_path).unwrap_or_default();
+                if bytes.len() < 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return Ok(browser_failure_result(
+                        request.id,
+                        "Chrome finished but did not write a readable PNG screenshot",
+                        stderr,
+                    ));
+                }
                 let b64 = base64_encode(&bytes);
 
                 let (dom_snapshot, page_title) = if capture_dom {
@@ -64,33 +85,19 @@ impl ToolExecutor {
                         ("url".to_string(), serde_json::json!(args.url)),
                         ("width".to_string(), serde_json::json!(width)),
                         ("height".to_string(), serde_json::json!(height)),
+                        ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
+                        ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
                     ]),
                 })
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Chrome error: {}", stderr)),
-                    duration_ms: 0,
-                    metadata: HashMap::new(),
-                })
+                Ok(browser_failure_result(request.id, "Chrome screenshot command failed", stderr))
             }
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Failed to launch Chrome: {}", e)),
-                    duration_ms: 0,
-                    metadata: HashMap::new(),
-                })
+                Ok(browser_failure_result(request.id, "Failed to launch Chrome", e.to_string()))
             }
         }
     }
@@ -113,6 +120,40 @@ impl ToolExecutor {
                 ("model".to_string(), serde_json::json!(result.model.0)),
             ]),
         })
+    }
+}
+
+fn chrome_command(chrome: &str) -> Command {
+    let mut command = Command::new(chrome);
+    for flag in CHROME_PROOF_FLAGS {
+        command.arg(flag);
+    }
+    command
+}
+
+fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: String) -> ToolResult {
+    let error = format!("{}: {}", message, detail);
+    let output = serde_json::to_string(&BrowserProofResult {
+        screenshot_base64: String::new(),
+        console_logs: vec![error.clone()],
+        dom_snapshot: None,
+        url: String::new(),
+        page_title: String::new(),
+        success: false,
+        error: Some(error.clone()),
+    }).unwrap_or_else(|_| String::new());
+    ToolResult {
+        id,
+        kind: ToolKind::BrowserProof,
+        success: false,
+        output,
+        error: Some(error),
+        duration_ms: 0,
+        metadata: HashMap::from([
+            ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
+            ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
+            ("diagnosable_browser_failure".to_string(), serde_json::json!(true)),
+        ]),
     }
 }
 
@@ -199,11 +240,9 @@ fn base64_encode(bytes: &[u8]) -> String {
 }
 
 fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
-    let dom_output = Command::new(chrome)
-        .arg("--headless=new")
-        .arg("--disable-gpu")
+    let dom_output = chrome_command(chrome)
         .arg("--dump-dom")
-        .arg("--virtual-time-budget=10000")
+        .arg("--virtual-time-budget=15000")
         .arg(url)
         .output();
 
