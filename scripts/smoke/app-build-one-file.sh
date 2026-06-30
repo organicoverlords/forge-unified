@@ -115,13 +115,7 @@ set -e
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON" || true
 
 step "capture browser proof"
-curl -fsS --connect-timeout 2 --max-time 60 \
-  -X POST "$BASE/api/browser-proof" \
-  -H 'content-type: application/json' \
-  --data-binary "$(jq -n --arg url "$BASE/?conversation=$CONV_ID&proof=final" '{url:$url,width:1440,height:1000,capture_dom:true}')" > "$BROWSER_JSON" || true
-if jq -e '.success == true and (.screenshot_base64 | length > 1000)' "$BROWSER_JSON" >/dev/null 2>&1; then
-  jq -r '.screenshot_base64' "$BROWSER_JSON" | base64 -d > "$SCREENSHOT" || true
-fi
+bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "" "$OUT_DIR" "fast" "&proof=final"
 
 python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$TARGET" "$MARKER" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
 import json, sys
