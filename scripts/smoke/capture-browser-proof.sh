@@ -19,12 +19,20 @@ find_chrome() {
   return 1
 }
 
+chrome_prefix() {
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 dbus-run-session -- '
+  else
+    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 '
+  fi
+}
+
 write_browser_json() {
-  local url="$1" dom_file="$2" png_file="$3" json_file="$4" log_file="$5" success="$6"
-  python3 - "$url" "$dom_file" "$png_file" "$json_file" "$log_file" "$success" <<'PY'
+  local url="$1" dom_file="$2" png_file="$3" json_file="$4" log_file="$5" success="$6" wrapped="$7"
+  python3 - "$url" "$dom_file" "$png_file" "$json_file" "$log_file" "$success" "$wrapped" <<'PY'
 import base64, json, sys
 from pathlib import Path
-url, dom_path, png_path, json_path, log_path, success = sys.argv[1:]
+url, dom_path, png_path, json_path, log_path, success, wrapped = sys.argv[1:]
 dom = Path(dom_path).read_text(encoding='utf-8', errors='replace') if Path(dom_path).exists() else ''
 log = Path(log_path).read_text(encoding='utf-8', errors='replace') if Path(log_path).exists() else ''
 png = Path(png_path)
@@ -38,7 +46,7 @@ out = {
     'screenshot_base64': shot,
     'console_logs': ['direct smoke harness Chrome capture', log[-4000:]],
     'error': None if valid else 'direct Chrome capture did not produce a readable PNG',
-    'metadata': {'capture': 'direct_chrome_smoke_harness', 'endpoint_bypassed': True},
+    'metadata': {'capture': 'direct_chrome_smoke_harness', 'endpoint_bypassed': True, 'chrome_dbus_wrapped': wrapped == 'true'},
 }
 Path(json_path).write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 PY
@@ -48,13 +56,17 @@ capture_direct() {
   local url="$1" json_file="$2" png_file="$3" label="$4"
   local dom_file="$PROOF_DIR/${label}-dom.html"
   local log_file="$PROOF_DIR/${label}-chrome.log"
+  local dom_log_file="$PROOF_DIR/${label}-dom-chrome.log"
   local profile_dir="$PROOF_DIR/${label}-chrome-profile"
-  mkdir -p "$profile_dir"
+  local dom_profile_dir="$PROOF_DIR/${label}-dom-chrome-profile"
+  mkdir -p "$profile_dir" "$dom_profile_dir"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome
-  chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false; return 1; }
+  local chrome wrapped prefix
+  chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false; return 1; }
+  if command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
+  prefix="$(chrome_prefix)"
   set +e
-  timeout 60s "$chrome" \
+  timeout 60s bash -c "$prefix \"$chrome\" \
     --headless=chrome \
     --disable-gpu \
     --no-sandbox \
@@ -71,19 +83,44 @@ capture_direct() {
     --mute-audio \
     --no-first-run \
     --run-all-compositor-stages-before-draw \
-    --user-data-dir="$profile_dir" \
-    --screenshot="$png_file" \
+    --user-data-dir=\"$profile_dir\" \
+    --screenshot=\"$png_file\" \
     --window-size=1440,1000 \
     --timeout=30000 \
     --virtual-time-budget=8000 \
-    "$url" > "$log_file" 2>&1
+    \"$url\"" > "$log_file" 2>&1
   local rc=$?
+  timeout 35s bash -c "$prefix \"$chrome\" \
+    --headless=chrome \
+    --disable-gpu \
+    --no-sandbox \
+    --disable-setuid-sandbox \
+    --disable-dev-shm-usage \
+    --disable-background-networking \
+    --disable-component-update \
+    --disable-domain-reliability \
+    --disable-extensions \
+    --disable-sync \
+    --disable-default-apps \
+    --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
+    --hide-scrollbars \
+    --mute-audio \
+    --no-first-run \
+    --run-all-compositor-stages-before-draw \
+    --user-data-dir=\"$dom_profile_dir\" \
+    --dump-dom \
+    --timeout=16000 \
+    --virtual-time-budget=8000 \
+    \"$url\"" > "$dom_file.tmp" 2> "$dom_log_file"
+  local dom_rc=$?
   set -e
+  if [ "$dom_rc" -eq 0 ] && [ -s "$dom_file.tmp" ]; then mv "$dom_file.tmp" "$dom_file"; else rm -f "$dom_file.tmp"; fi
+  cat "$dom_log_file" >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
-    write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false
+    write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false "$wrapped"
     return 1
   fi
-  write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" true
+  write_browser_json "$url" "$dom_file" "$png_file" "$json_file" true "$wrapped"
 }
 
 capture_direct "$BASE/?conversation=$CONV_ID$QUERY_SUFFIX" "$BROWSER_JSON" "$WEBUI_PNG" browser
