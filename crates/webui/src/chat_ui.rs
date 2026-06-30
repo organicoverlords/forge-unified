@@ -9,4 +9,5 @@
 pub const CHAT_HTML: &str = concat!(
     include_str!("chat_ui.html"),
     include_str!("chat_ui_enhancements.html"),
+    include_str!("chat_ui_tool_lifecycle.html"),
 );
