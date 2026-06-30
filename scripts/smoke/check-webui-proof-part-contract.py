@@ -13,8 +13,9 @@ structure, not Forge runtime branding:
 This guard is intentionally source-backed and UI-facing: final browser proof
 must render stable, readable session turns, assistant parts, typed tool cards,
 provider/model route proof, copy/retry affordances, file receipts, turn receipt
-summaries, timeline actions, and collapsed technical details instead of relying
-on raw JSON or raw tool identifiers as the primary user-visible evidence.
+summaries, timeline actions, flattened public tool input, diagnostics, count
+summaries, and collapsed technical details instead of relying on raw JSON or raw
+tool identifiers as the primary user-visible evidence.
 """
 
 from __future__ import annotations
@@ -72,9 +73,13 @@ REQUIRED_UI_TOKENS = [
     "tool-target-visible",
     "tool-result-toggle",
     "tool-duration-visible",
+    "tool-args-visible",
+    "tool-diagnostics-visible",
+    "tool-count-summary-visible",
     "typed-tool-summary",
     "show result",
     "copy result",
+    "copy input",
     "Read preview",
     "Write target",
     "Diff target",
@@ -120,6 +125,9 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "typed tool cards",
     "tool targets",
     "result toggles",
+    "flattened tool input",
+    "diagnostics",
+    "count summary",
 ]
 
 
@@ -209,6 +217,21 @@ def main() -> int:
             "Write target",
             "Diff target",
             "Command output",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_flatten_input_diagnostics_counts_and_scrub_source_refs",
+        "passed": all(token in ui for token in [
+            "function flattenArgs(obj,prefix='')",
+            "function diagnosticsFrom(meta)",
+            "function toolCount(result,meta)",
+            "function scrubValue(value)",
+            "tool-args-grid",
+            "tool-diagnostic-list",
+            "tool-result-count",
+            "copy input",
+            "No public input fields recorded.",
+            "if(/^opencode/i.test(key))continue",
         ]),
     })
 
