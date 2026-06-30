@@ -4,7 +4,7 @@ Complete all six phases before reporting. This is a live NVIDIA NIM/WebUI proof 
 
 Hard rule: after the batch_parallel call and one task call below, do not inspect any more source files for Phase 2. Go directly to Phase 3 file operations. Do not read these timeout-prone implementation files during this benchmark: `crates/engine/src/orchestrator.rs`, `crates/webui/src/agent_benchmark.rs`, `crates/engine/src/tool/file_ops.rs`, or `scripts/smoke/live-webui-feature-sprint.sh`. Validate the script only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
 
-OpenCode max-step reference behavior: after the evidence-completing validation shell result exists, tools are disabled. Any additional tool call after that validation result is a failure. Respond with text only, summarizing work done, remaining tasks, and next recommendations. Source backing: `packages/core/src/session/runner/max-steps.ts`.
+OpenCode max-step reference behavior applies only after the final Phase 4 validation shell result from step 10 exists. The earlier Phase 2 `bash -n` result inside `batch_parallel` is inspection evidence, not the final stop point. After the step 10 validation result exists, tools are disabled: any additional tool call after that validation result is a failure. Respond with text only, summarizing work done, remaining tasks, and next recommendations. Source backing: `packages/core/src/session/runner/max-steps.ts`.
 
 Use real tools only. Do not print tool JSON in prose. Tool failures must be repaired with the correct file/shell/repo tool; do not switch models because a repo tool fails.
 
