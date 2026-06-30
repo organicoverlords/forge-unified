@@ -18,7 +18,6 @@ const CHROME_PROOF_FLAGS: &[&str] = &[
     "--disable-extensions",
     "--disable-sync",
     "--disable-default-apps",
-    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider",
     "--hide-scrollbars",
     "--mute-audio",
     "--no-first-run",
@@ -40,11 +39,13 @@ impl ToolExecutor {
 
         let ts = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let out_dir = std::env::temp_dir().join(format!("forge-browser-{}", ts));
-        std::fs::create_dir_all(&out_dir)?;
+        let profile_dir = out_dir.join("profile");
+        std::fs::create_dir_all(&profile_dir)?;
 
         let screenshot_path = out_dir.join("screenshot.png");
         let mut screenshot_cmd = chrome_command(&chrome);
         screenshot_cmd
+            .arg(format!("--user-data-dir={}", profile_dir.display()))
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
             .arg("--timeout=10000")
@@ -65,7 +66,7 @@ impl ToolExecutor {
                         bytes,
                         None,
                         String::new(),
-                        vec!["Chrome timed out after writing a readable PNG screenshot; Forge killed the process and kept the proof artifact.".to_string()],
+                        vec!["Chrome timed out after writing a readable PNG screenshot; Forge stopped the process and kept the proof artifact.".to_string()],
                     );
                 }
                 let _ = std::fs::remove_dir_all(&out_dir);
@@ -83,7 +84,7 @@ impl ToolExecutor {
                 };
 
                 let (dom_snapshot, page_title) = if capture_dom {
-                    capture_dom_and_title(&chrome, &args.url)
+                    capture_dom_and_title(&chrome, &args.url, &out_dir)
                 } else {
                     (None, String::new())
                 };
@@ -139,6 +140,8 @@ impl ToolExecutor {
 
 fn chrome_command(chrome: &str) -> Command {
     let mut command = Command::new(chrome);
+    command.env_remove("DBUS_SESSION_BUS_ADDRESS");
+    command.env("NO_AT_BRIDGE", "1");
     for flag in CHROME_PROOF_FLAGS {
         command.arg(flag);
     }
@@ -309,9 +312,12 @@ fn base64_encode(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
+fn capture_dom_and_title(chrome: &str, url: &str, out_dir: &Path) -> (Option<String>, String) {
+    let dom_profile = out_dir.join("dom-profile");
+    let _ = std::fs::create_dir_all(&dom_profile);
     let mut dom_cmd = chrome_command(chrome);
     dom_cmd
+        .arg(format!("--user-data-dir={}", dom_profile.display()))
         .arg("--dump-dom")
         .arg("--timeout=6000")
         .arg("--virtual-time-budget=2500")
