@@ -2,6 +2,7 @@
 
 pub mod change_events;
 pub mod chat_ui;
+pub mod conversation_controls;
 pub mod events;
 pub mod events_live;
 pub mod routes;
@@ -35,6 +36,10 @@ pub async fn serve(state: AppState, addr: SocketAddr) -> anyhow::Result<()> {
         .route("/api/conversations/:id/pause", post(routes::pause))
         .route("/api/conversations/:id/resume", post(routes::resume))
         .route("/api/conversations/:id/snapshot", post(routes::save_snapshot))
+        .route("/api/conversations/:id/checkpoint", post(conversation_controls::checkpoint))
+        .route("/api/conversations/:id/fork", post(conversation_controls::fork))
+        .route("/api/conversations/:id/revert-last-turn", post(conversation_controls::revert_last_turn))
+        .route("/api/conversations/:id/retry-source", post(conversation_controls::retry_source))
         .route("/api/conversations/:id/compact", post(routes::compact_conversation))
         .route("/api/conversations/:id/approvals/:approval_id/approve", post(routes::approve_edit))
         .route("/api/browser-proof", post(routes::browser_proof))
