@@ -5,32 +5,31 @@ Updated: 2026-07-01
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Selected live head before this slice: `51be0610923761f6f14e372f057246e1e456361d`.
+- Selected live head before this slice: `3f4c83415ee8d5bbd28e02dcfab3a33fadf20439`.
 - PR state verified live: open, non-draft, mergeable.
-- Same-head workflow state for `51be0610923761f6f14e372f057246e1e456361d`: CI `28483064782` passed; Build Proof `28483064781` passed; Fast WebUI Proof `28483064812`, Live WebUI Feature Sprint `28483064793`, App Build Proof `28483064783`, and App Multistep Build Proof `28483064777` failed.
-- Inspected failed Fast WebUI Proof run `28483064812`, job `84423541492`; it reached NIM/WebUI streaming, then failed at `capture readable browser proof`. The capture step ran from `23:43:31` to `23:45:06`, matching the old 60s screenshot plus 35s DOM Chrome budget. Artifact `7996408354` was uploaded.
-- Latest implementation/proof slice: browser proof direct Chrome no-DBus default. `scripts/smoke/capture-browser-proof.sh` now avoids `dbus-run-session` unless `FORGE_CHROME_USE_DBUS=1`, uses a sanitized Chrome environment, records diagnosable browser metadata, and prints the browser log tail when primary proof capture fails.
-- New proof doc: `docs/generated/proof/browser-proof-no-dbus-default-20260701T0246Z.md`.
+- Same-head workflow state before this product slice: previous proof-focused head had not achieved same-head acceptance; repeated failures were concentrated in browser proof capture rather than basic build/CI.
+- Latest implementation slice: real WebUI human action summaries. Added `crates/webui/src/chat_ui_action_summaries.html` and wired it into `crates/webui/src/chat_ui.rs` so every visible tool card gets a user-facing action summary with action, target, outcome, next step, and copy controls.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
-- Updated `scripts/smoke/capture-browser-proof.sh` so direct proof Chrome capture no longer defaults to `dbus-run-session`, because same-head logs showed the capture path consuming the full 95s screenshot+DOM budget after NIM/WebUI streaming.
-- Added `FORGE_CHROME_USE_DBUS=1` opt-in for local DBus wrapping diagnosis, `FORGE_CHROME_HEADLESS` override for `--headless=...`, explicit DBus/AT-SPI environment cleanup, `XDG_RUNTIME_DIR` fallback, `--disable-ipc-flooding-protection`, and capture diagnostics in `browser-chrome.log`.
-- Kept screenshot acceptance strict: browser proof success, non-empty screenshot base64, PNG decode to `webui.png`, provider/model route evidence, final answer/session UI markers, tool-card markers, and unwanted source-reference branding guard.
-- Kept fast screenshot-only caller budget in `scripts/smoke/fast-webui-proof.sh`: `capture_dom:false` and a 90s caller budget for the screenshot capture path.
-- Kept browser proof timeout repair in `crates/engine/src/tool/browser.rs`: `SCREENSHOT_CHROME_TIMEOUT_MS=30000`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS=15000`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS=45`, `DOM_CHROME_TIMEOUT_MS=12000`, `DOM_VIRTUAL_TIME_BUDGET_MS=5000`, and `DOM_BROWSER_TIMEOUT_SECONDS=18`.
-- Kept stable session-control receipt identity in `crates/webui/src/conversation_controls.rs`: `receipt_id`, monotonic `sequence`, and `source: forge.webui.session_controls` metadata.
-- Kept backend-backed session operations in `crates/engine/src/agent.rs`: `retry_source`, `fork_conversation`, `revert_last_turn`, and `session_control_receipt`.
-- Kept backend route handlers in `crates/webui/src/conversation_controls.rs` so checkpoint, fork, revert latest turn, and retry source all return structured receipt payloads.
-- Kept browser control bundle `crates/webui/src/chat_ui_session_controls.html` with visible receipt strip, `copy session receipt`, `copy all events`, `copy latest error`, `forge:session-control` events, event ledger, event rows, `data-session-control-event`, event copy, disclosure, count summary, status filters, diff summary, duration summary, overflow toggle, hidden older receipt row, session-control ledger export, and session-control error card.
+- Added `crates/webui/src/chat_ui_action_summaries.html` as a browser-only product enhancement loaded by the real bundled chat UI, not by a test harness.
+- Each `.tool` card now receives a visible `human-action-summary` section with:
+  - human action label, for example inspected repo, wrote file, edited file, ran command, updated plan, or delegated subtask;
+  - action target extracted from file pills, command/pattern/path input, metadata, typed-tool target, or visible subtitle;
+  - explicit outcome state: completed, needs attention, running, or pending;
+  - next-step guidance such as review diff, check command output, continue plan item, or read subtask result;
+  - copy controls for the action summary and result.
+- Added proof/DOM hooks for the real UI surface: `human-action-summary`, `action-outcome-visible`, `action-target-visible`, `action-next-step-visible`, `readable-tool-summary`, `tool-name-not-primary`, and `tool-json-collapsed`.
+- Wired the new product enhancement into `crates/webui/src/chat_ui.rs` with `include_str!("chat_ui_action_summaries.html")` between the typed-tool renderer and lifecycle/session controls.
+- This directly addresses the UX problem where tool cards were too tool-name/JSON oriented and did not clearly tell a non-coder what Forge did, what it touched, whether it succeeded, and what to inspect next.
 
 ## Proof requirements retained
 
 - Same-head workflow proof is mandatory before acceptance.
 - Browser artifacts must show provider/model route, session turn grouping, readable tool cards, final answer/proof summary, and no visible unwanted source-reference branding.
 - Current required UI/backend tokens include `backend-session-controls`, `backend-checkpoint-action`, `backend-fork-action`, `backend-revert-action`, `backend-retry-source-action`, `backend-session-control-status`, `backend-session-control-receipt`, `copy-session-control-receipt`, `session-control-ledger-export`, `copy-session-control-ledger`, `session-control-error-card`, `backend-session-control-error-card`, `copy-session-control-error`, `latest-session-control-error`, `copy latest error`, `session-control-event-ledger`, `backend-session-control-ledger`, `backend-session-control-event-row`, `copy-session-control-event`, `data-session-control-event`, `session-control-event-disclosure`, `backend-session-control-event-detail`, `show-session-control-event`, `aria-expanded`, `aria-controls`, `session-control-count-summary`, `backend-session-control-summary`, `backend-session-control-count`, `session-control-filter`, `session-control-filter-all`, `session-control-filter-ok`, `session-control-filter-error`, `aria-pressed`, `session-control-diff-summary`, `backend-session-control-diff-summary`, `backend-session-control-diff-chip`, `session-control-diff-before`, `session-control-diff-after`, `session-control-diff-removed`, `session-control-duration-summary`, `backend-session-control-duration-summary`, `backend-session-control-duration-chip`, `session-control-duration-ms`, `session-control-started-at`, `session-control-completed-at`, `session-control-ledger-overflow`, `backend-session-control-overflow-toggle`, `session-control-show-all`, `session-control-show-less`, `session-control-visible-count`, `session-control-hidden-overflow-row`, `forge-local-control-receipt`, `stable session-control receipt identity`, `receipt_id`, `sequence`, and `forge.webui.session_controls`.
-- This slice improves proof-path reliability. It does not claim full parity, production readiness, or same-head acceptance until workflows finish and artifacts are inspected.
+- This slice improves the actual WebUI usability. It does not claim full parity, production readiness, or same-head acceptance until workflows finish and artifacts are inspected.
 
 ## Compatibility proof trail retained for deterministic gates
 
@@ -38,7 +37,7 @@ Updated: 2026-07-01
 
 - Source anchors: `packages/session-ui/src/components/session-turn.tsx`, `packages/session-ui/src/components/message-part.tsx`, `packages/session-ui/src/components/basic-tool.tsx`, `packages/session-ui/src/components/tool-count-summary.tsx`, `packages/web/src/components/share/part.tsx`, `packages/web/src/components/share/part.module.css`.
 - Required trail tokens: `proof-final`, session turn, assistant parts, copy/retry, changed files, collapsed technical details, turn receipt grouping, stable session receipts, timeline action groups, file diff summary, typed tool cards, tool targets, result toggles, flattened tool input, diagnostics, count summary, tool lifecycle strip, tool state timeline, copy tool anchor, duration footer, stable tool receipt ids, copy tool receipt, lifecycle event ledger, copy tool event, tool event JSON, input toggle, diagnostic copy, target copy, preview pane, preview toggle, copy preview, accessible disclosure state, `aria-expanded`, `aria-controls`, backend-backed session controls, checkpoint, fork, revert latest turn, retry source, Forge-local session control receipts, session control event ledger, copy session control event, session-control event disclosure, event detail disclosure, show event, session-control count summary, status filters, session-control diff summary, before/after/removed message chips, session-control duration summary, start/completion/duration chips, session-control ledger overflow, show older/show less overflow toggle, visible ledger count, hidden older receipt row, session-control ledger export, copy all events, session-control error card, latest session-control error, copy latest error, stable session-control receipt identity, receipt_id, sequence, and `data-session-control-event`.
-- Forge implementation paths under guard: `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, `crates/webui/src/chat_ui_enhancements.html`, `crates/webui/src/chat_ui_tool_lifecycle.html`, `crates/webui/src/chat_ui_session_controls.html`, and `crates/webui/src/conversation_controls.rs`.
+- Forge implementation paths under guard: `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, `crates/webui/src/chat_ui_enhancements.html`, `crates/webui/src/chat_ui_action_summaries.html`, `crates/webui/src/chat_ui_tool_lifecycle.html`, `crates/webui/src/chat_ui_session_controls.html`, and `crates/webui/src/conversation_controls.rs`.
 
 ### Durable ToolPart lifecycle contract
 
@@ -54,6 +53,6 @@ Updated: 2026-07-01
 
 ### Browser proof capture contract
 
-- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards. This slice specifically follows the upstream delayed-rendering pattern around `requestAnimationFrame` and `shown` state before proof capture, while keeping Fast proof bounded to a real screenshot artifact and avoiding the DBus wrapper hang seen in GitHub-hosted runner logs.
+- Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards.
 - Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, non-empty screenshot artifacts, `SCREENSHOT_CHROME_TIMEOUT_MS`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS`, `DOM_CHROME_TIMEOUT_MS`, `DOM_BROWSER_TIMEOUT_SECONDS`, `capture_dom:false` for `fast-webui-proof.sh`, `FORGE_CHROME_USE_DBUS`, `FORGE_CHROME_HEADLESS`, `chrome_dbus_default_disabled`, and `browser-chrome.log` diagnostics.
 - Forge implementation paths under guard: `crates/engine/src/tool/browser.rs`, `scripts/smoke/capture-browser-proof.sh`, `scripts/smoke/fast-webui-proof.sh`, `scripts/smoke/app-build-one-file.sh`, and `scripts/smoke/live-webui-feature-sprint.sh`.
