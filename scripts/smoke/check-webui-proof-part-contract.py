@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Validate WebUI proof-part rendering keeps OpenCode-style readable parts.
+"""Validate Forge's browser WebUI proof-part rendering contract.
 
-OpenCode source anchors:
-- anomalyco/opencode:packages/web/src/components/share/part.tsx
-- anomalyco/opencode:packages/web/src/components/share/part.module.css
+OpenCode source anchors are developer-only references for behavior and
+structure, not Forge runtime branding:
+- anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx
+- anomalyco/opencode:packages/session-ui/src/components/message-part.tsx
+- anomalyco/opencode:packages/session-ui/src/components/basic-tool.tsx
+- anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx
 
-This guard is intentionally source-backed and UI-facing: final browser proof must
-render stable, readable part cards and route/metadata proof instead of relying on
-raw JSON or raw tool identifiers as the primary user-visible evidence. It also
-keeps todo/plan status summaries visible, mirroring OpenCode's dedicated
-TodoWriteTool status presentation.
+This guard is intentionally source-backed and UI-facing: final browser proof
+must render stable, readable session turns, assistant parts, tool cards,
+provider/model route proof, copy/retry affordances, file receipts, and collapsed
+technical details instead of relying on raw JSON or raw tool identifiers as the
+primary user-visible evidence.
 """
 
 from __future__ import annotations
@@ -17,12 +20,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-CHAT_UI = Path("crates/webui/src/chat_ui.rs")
+CHAT_UI_PATHS = [
+    Path("crates/webui/src/chat_ui.rs"),
+    Path("crates/webui/src/chat_ui.html"),
+]
 PROJECT_STATE = Path("PROJECT_STATE.md")
 PROOF_DOC_DIR = Path("docs/generated/proof")
 OPENCODE_SOURCES = [
-    "packages/web/src/components/share/part.tsx",
-    "packages/web/src/components/share/part.module.css",
+    "packages/session-ui/src/components/session-turn.tsx",
+    "packages/session-ui/src/components/message-part.tsx",
+    "packages/session-ui/src/components/basic-tool.tsx",
+    "packages/session-ui/src/components/tool-count-summary.tsx",
 ]
 
 REQUIRED_UI_TOKENS = [
@@ -30,15 +38,20 @@ REQUIRED_UI_TOKENS = [
     "final-answer-visible",
     "provider-model-visible",
     "human-tool-label",
+    "session-turn-central",
+    "session-turn-diffs-group",
+    "assistant-parts",
+    "message-part",
     "opencode-tool-result-card",
     "opencode-live-toolpart",
+    "collapsible-tool-card",
+    "deferred-technical-content",
+    "copy-retry-actions",
     "provider-executed action:",
     "technical details",
-    "if(proofFinal)return;",
-    "body.proof-final details{display:none}",
-    "function todoItems(obj)",
-    "function todoSummary(todos)",
-    "function addTodoStatus(el,p)",
+    "Session timeline",
+    "Thinking / working",
+    "Changed files / file receipts",
     "todo-status-summary",
     "todo-counts",
     "Plan updated",
@@ -58,20 +71,29 @@ REQUIRED_HUMAN_LABELS = [
 FORBIDDEN_PRIMARY_MARKERS = [
     "raw tool:",
     "Raw tool",
+    "OpenCode-style",
 ]
 
 REQUIRED_PROOF_TRAIL_TOKENS = [
-    "packages/web/src/components/share/part.tsx",
-    "packages/web/src/components/share/part.module.css",
+    "packages/session-ui/src/components/session-turn.tsx",
+    "packages/session-ui/src/components/message-part.tsx",
+    "packages/session-ui/src/components/basic-tool.tsx",
+    "packages/session-ui/src/components/tool-count-summary.tsx",
     "proof-final",
-    "human label",
-    "todo status",
-    "todowritetool",
+    "session turn",
+    "assistant parts",
+    "copy/retry",
+    "changed files",
+    "collapsed technical details",
 ]
 
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+
+def ui_text() -> str:
+    return "\n".join(read(path) for path in CHAT_UI_PATHS)
 
 
 def proof_trail_text() -> str:
@@ -82,7 +104,7 @@ def proof_trail_text() -> str:
 
 
 def main() -> int:
-    ui = read(CHAT_UI)
+    ui = ui_text()
     trail = proof_trail_text()
     checks: list[dict[str, object]] = []
 
@@ -96,23 +118,31 @@ def main() -> int:
         checks.append({"name": f"proof_trail:{token}", "passed": token.lower() in trail})
 
     checks.append({
-        "name": "details_are_collapsed_outside_final_proof_only",
-        "passed": "function addDetails(el,obj){if(proofFinal)return;" in ui and "body.proof-final details{display:none}" in ui,
+        "name": "ui_bundle_is_reviewable_html_not_giant_rust_string",
+        "passed": "include_str!(\"chat_ui.html\")" in ui and "<body data-proof=" in ui,
     })
     checks.append({
-        "name": "final_proof_has_digest_before_messages",
+        "name": "final_proof_has_digest_before_session_turns",
         "passed": "if(proofFinal)box.appendChild(proofDigest());" in ui,
     })
     checks.append({
+        "name": "technical_details_are_collapsed_and_hidden_from_final_proof",
+        "passed": "className='technical-details'" in ui and "body.proof-final .technical-details{display:none}" in ui,
+    })
+    checks.append({
         "name": "todo_write_gets_status_summary_not_generic_json",
-        "passed": "if(n==='todo_write')return `Plan updated" in ui and "if(n==='todo_write')addTodoStatus(d,p);" in ui,
+        "passed": "todo-status-summary" in ui and "if(n==='todo_write')return'Plan updated.'" in ui,
+    })
+    checks.append({
+        "name": "central_session_turn_has_actions_and_file_receipts",
+        "passed": all(token in ui for token in ["function turn(t,i,active)", "copy turn", "retry", "Changed files / file receipts"]),
     })
 
     failed = [check for check in checks if not check["passed"]]
     report = {
         "passed": not failed,
         "opencode_sources": OPENCODE_SOURCES,
-        "forge_paths": [str(CHAT_UI), str(PROJECT_STATE), "docs/generated/proof/*.md"],
+        "forge_paths": [str(path) for path in CHAT_UI_PATHS] + [str(PROJECT_STATE), "docs/generated/proof/*.md"],
         "checks": checks,
         "failed_checks": failed,
     }
