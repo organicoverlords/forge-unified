@@ -20,10 +20,14 @@ find_chrome() {
 }
 
 chrome_prefix() {
-  if command -v dbus-run-session >/dev/null 2>&1; then
-    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 dbus-run-session -- '
+  # GitHub-hosted runners have repeatedly hung for the full screenshot+DOM
+  # budget when Chromium is wrapped in dbus-run-session. Keep the capture
+  # path browser-real but default to a plain, sanitized environment; allow
+  # opt-in DBus wrapping only for local diagnosis.
+  if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then
+    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" dbus-run-session -- '
   else
-    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 '
+    printf 'env -u DBUS_SESSION_BUS_ADDRESS -u DBUS_SYSTEM_BUS_ADDRESS NO_AT_BRIDGE=1 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" '
   fi
 }
 
@@ -46,7 +50,13 @@ out = {
     'screenshot_base64': shot,
     'console_logs': ['direct smoke harness Chrome capture', log[-4000:]],
     'error': None if valid else 'direct Chrome capture did not produce a readable PNG',
-    'metadata': {'capture': 'direct_chrome_smoke_harness', 'endpoint_bypassed': True, 'chrome_dbus_wrapped': wrapped == 'true'},
+    'metadata': {
+        'capture': 'direct_chrome_smoke_harness',
+        'endpoint_bypassed': True,
+        'chrome_dbus_wrapped': wrapped == 'true',
+        'chrome_dbus_default_disabled': True,
+        'diagnosable_browser_failure': True,
+    },
 }
 Path(json_path).write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 PY
@@ -61,13 +71,14 @@ capture_direct() {
   local dom_profile_dir="$PROOF_DIR/${label}-dom-chrome-profile"
   mkdir -p "$profile_dir" "$dom_profile_dir"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome wrapped prefix
+  local chrome wrapped prefix headless_mode
   chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false; return 1; }
-  if command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
+  if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
   prefix="$(chrome_prefix)"
+  headless_mode="${FORGE_CHROME_HEADLESS:-new}"
   set +e
   timeout 60s bash -c "$prefix \"$chrome\" \
-    --headless=chrome \
+    --headless=$headless_mode \
     --disable-gpu \
     --no-sandbox \
     --disable-setuid-sandbox \
@@ -79,6 +90,7 @@ capture_direct() {
     --disable-sync \
     --disable-default-apps \
     --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
+    --disable-ipc-flooding-protection \
     --hide-scrollbars \
     --mute-audio \
     --no-first-run \
@@ -91,7 +103,7 @@ capture_direct() {
     \"$url\"" > "$log_file" 2>&1
   local rc=$?
   timeout 35s bash -c "$prefix \"$chrome\" \
-    --headless=chrome \
+    --headless=$headless_mode \
     --disable-gpu \
     --no-sandbox \
     --disable-setuid-sandbox \
@@ -103,6 +115,7 @@ capture_direct() {
     --disable-sync \
     --disable-default-apps \
     --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
+    --disable-ipc-flooding-protection \
     --hide-scrollbars \
     --mute-audio \
     --no-first-run \
@@ -116,6 +129,13 @@ capture_direct() {
   set -e
   if [ "$dom_rc" -eq 0 ] && [ -s "$dom_file.tmp" ]; then mv "$dom_file.tmp" "$dom_file"; else rm -f "$dom_file.tmp"; fi
   cat "$dom_log_file" >> "$log_file" 2>/dev/null || true
+  {
+    printf '\n--- forge browser proof diagnostics ---\n'
+    printf 'chrome=%s\n' "$chrome"
+    printf 'headless=%s\n' "$headless_mode"
+    printf 'dbus_wrapped=%s\n' "$wrapped"
+    printf 'screenshot_rc=%s dom_rc=%s png_bytes=%s\n' "$rc" "$dom_rc" "$(wc -c < "$png_file" 2>/dev/null || printf 0)"
+  } >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
     write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false "$wrapped"
     return 1
@@ -124,7 +144,10 @@ capture_direct() {
 }
 
 capture_direct "$BASE/?conversation=$CONV_ID$QUERY_SUFFIX" "$BROWSER_JSON" "$WEBUI_PNG" browser
-jq -e '.success == true' "$BROWSER_JSON" >/dev/null
+if ! jq -e '.success == true' "$BROWSER_JSON" >/dev/null; then
+  tail -n 80 "$PROOF_DIR/browser-chrome.log" >&2 2>/dev/null || true
+  exit 1
+fi
 test -s "$WEBUI_PNG"
 if [ "$MODE" = "model" ]; then
   for marker in "live-browser-model-proof" "provider-model-visible" "provider: nvidia_nim" "MODEL ROUTE" "LIVE_NIM_BROWSER_PROOF" "$MODEL_ID"; do grep -Fq "$marker" "$BROWSER_JSON"; done
