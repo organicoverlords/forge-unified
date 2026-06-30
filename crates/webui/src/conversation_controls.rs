@@ -4,6 +4,9 @@ use axum::{extract::{Path, State}, Json};
 use crate::state::AppState;
 use forge_engine::types::ConversationId;
 use serde::Deserialize;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static SESSION_CONTROL_RECEIPT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Deserialize)]
 pub struct ForkRequest { title: Option<String> }
@@ -54,13 +57,18 @@ fn parse_id(id: String) -> Result<ConversationId, axum::http::StatusCode> {
 }
 
 fn control_receipt(action: &str, id: &ConversationId, payload: serde_json::Value) -> serde_json::Value {
+    let sequence = SESSION_CONTROL_RECEIPT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let created_at = chrono::Utc::now().to_rfc3339();
     serde_json::json!({
         "type": "forge.session_control",
         "action": action,
         "conversation_id": id.0.to_string(),
         "status": "completed",
         "backend_backed": true,
-        "payload": payload,
-        "created_at": chrono::Utc::now().to_rfc3339()
+        "receipt_id": format!("session-control-{}-{}", id.0, sequence),
+        "sequence": sequence,
+        "source": "forge.webui.session_controls",
+        "created_at": created_at,
+        "payload": payload
     })
 }
