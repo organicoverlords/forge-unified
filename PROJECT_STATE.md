@@ -5,30 +5,27 @@ Updated: 2026-06-30
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Previous same-head green proof: all required workflows passed on `2bd70f8ac1cc3bb7fe9059fe78610768c7af3a16` except CI, where Smoke Test failed on deterministic stale tokens; Build Proof `28461375944`, Fast WebUI Proof `28461375943`, Live WebUI Feature Sprint `28461376016`, App Build Proof `28461375985`, and App Multistep Build Proof `28461375932` passed on that head.
-- Inspected CI failure on `2bd70f8ac1cc3bb7fe9059fe78610768c7af3a16`: CI `28461375967`, Smoke Test job `84349818167`, failed `ui:show older` and stale state phrase `checkpoint, fork, revert latest turn, and retry source` while the route/UI implementation checks passed.
-- Current selected baseline before this slice: `2bd70f8ac1cc3bb7fe9059fe78610768c7af3a16`, partially same-head proven with CI blocker inspected.
-- Latest implementation/proof slice: session-control hidden older receipt row for Forge-local backend session control receipts.
+- Previous selected head `545fec357de85718151c4b726a897092bfa5bcca` had CI, Build Proof, Fast WebUI Proof, App Build Proof, and App Multistep Build Proof green, but Live WebUI Feature Sprint `28464823475` failed.
+- Inspected failed Live artifact `7989433741`: the full benchmark run used provider `nvidia_nim` and model `deepseek-ai/deepseek-v4-flash`; the only failed checker item was `claimed_cargo_tests_are_tool_proven`.
+- Root cause: `scripts/smoke/check-full-agentic-benchmark.py` treated `UNKNOWN: Whether the full test suite passes — no cargo test was executed` as a cargo-test success claim when `cargo test` was Markdown-code-formatted.
+- Latest implementation/proof slice: cargo command claim detector now normalizes Markdown punctuation and applies negation filtering before cargo-test/cargo-build success claim checks.
+- New proof doc: `docs/generated/proof/full-benchmark-cargo-claim-negation-20260630T1815Z.md`.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
 - Kept backend-backed session operations in `crates/engine/src/agent.rs`: `retry_source`, `fork_conversation`, `revert_last_turn`, and `session_control_receipt`.
-- Updated backend route handlers in `crates/webui/src/conversation_controls.rs` so checkpoint, fork, revert-latest-turn, and retry-source all return structured receipt payloads.
-- Updated browser control bundle `crates/webui/src/chat_ui_session_controls.html` with a visible receipt strip, `copy session receipt`, bubbling `forge:session-control` events, a visible session control event ledger, per-event status rows, `data-session-control-event`, `copy session control event`, and a session-control event disclosure with `show event` / `hide event`, `aria-expanded`, `aria-controls`, and visible JSON detail.
-- Added a session-control count summary and status filters (`all`, `ok`, `error`) above the ledger so browser proof can show total/ok/error counts without opening raw JSON.
-- Added a session-control diff summary for revert receipts, rendered as before/after/removed message chips.
-- Added a session-control duration summary that records UI-side `started_at`, `completed_at`, and `duration_ms` in Forge-local `ui_timing` receipt metadata and renders start/completion/duration chips in the event ledger.
-- Added session-control ledger overflow handling: filtered ledgers show the newest four events by default, expose a visible `show older` / `show less` toggle when more rows exist, include a `showing visible/filtered` count, and render a hidden older receipt row so screenshots prove collapsed receipts exist before expansion.
-- Strengthened CI smoke gate `scripts/smoke/check-session-controls-contract.py` to require count/filter/diff/duration/overflow/hidden-row summary tokens and reject upstream source paths inside session-control runtime files.
-- Added proof doc `docs/generated/proof/session-control-hidden-overflow-row-20260630T1755Z.md`.
+- Kept backend route handlers in `crates/webui/src/conversation_controls.rs` so checkpoint, fork, revert-latest-turn, and retry-source all return structured receipt payloads.
+- Kept browser control bundle `crates/webui/src/chat_ui_session_controls.html` with visible receipt strip, `copy session receipt`, `forge:session-control` events, event ledger, event rows, `data-session-control-event`, event copy, disclosure, count summary, status filters, diff summary, duration summary, overflow toggle, and hidden older receipt row.
+- Updated `scripts/smoke/check-full-agentic-benchmark.py` so negated/future cargo command mentions do not require impossible tool evidence.
+- Verified the patched checker locally against the failed artifact before committing: the same `full-benchmark-conversation.json` and `full-benchmark-stream.sse` now pass with zero failed checks.
 
 ## Proof requirements retained
 
 - Same-head workflow proof is mandatory before acceptance.
 - Browser artifacts must show provider/model route, session turn grouping, readable tool cards, final answer/proof summary, and no visible unwanted source-reference branding.
 - Current required UI tokens include `backend-session-controls`, `backend-checkpoint-action`, `backend-fork-action`, `backend-revert-action`, `backend-retry-source-action`, `backend-session-control-status`, `backend-session-control-receipt`, `copy-session-control-receipt`, `session-control-event-ledger`, `backend-session-control-ledger`, `backend-session-control-event-row`, `copy-session-control-event`, `data-session-control-event`, `session-control-event-disclosure`, `backend-session-control-event-detail`, `show-session-control-event`, `aria-expanded`, `aria-controls`, `session-control-count-summary`, `backend-session-control-summary`, `backend-session-control-count`, `session-control-filter`, `session-control-filter-all`, `session-control-filter-ok`, `session-control-filter-error`, `aria-pressed`, `session-control-diff-summary`, `backend-session-control-diff-summary`, `backend-session-control-diff-chip`, `session-control-diff-before`, `session-control-diff-after`, `session-control-diff-removed`, `session-control-duration-summary`, `backend-session-control-duration-summary`, `backend-session-control-duration-chip`, `session-control-duration-ms`, `session-control-started-at`, `session-control-completed-at`, `session-control-ledger-overflow`, `backend-session-control-overflow-toggle`, `session-control-show-all`, `session-control-show-less`, `session-control-visible-count`, `session-control-hidden-overflow-row`, and `forge-local-control-receipt`.
-- This slice upgrades backend session controls with a visible/copyable Forge-local session-control event disclosure, count summary, filters, diff summary chips, duration summary chips, ledger overflow expansion, and hidden older receipt row. It does not claim full parity, production readiness, or same-head acceptance until workflows finish.
+- This slice fixes proof accuracy for cargo command claim validation. It does not claim full parity, production readiness, or same-head acceptance until workflows finish.
 
 ## Compatibility proof trail retained for deterministic gates
 
@@ -48,4 +45,4 @@ Updated: 2026-06-30
 
 - Source anchor: `packages/session-ui/src/components/tool-count-summary.tsx` for count summaries that hide zero-count items and expose active count state; `packages/web/src/components/share/part.tsx` for result/detail toggles with show/hide controls, `aria-expanded`, and `aria-controls`; `packages/session-ui/src/components/session-turn.tsx` for visible session actions, per-turn status, retry affordance, action history semantics, changed-file diff summaries, overflow `showAll` toggles for long changed-file lists, hidden overflow-more rows, and turn duration calculation.
 - Required behavior tokens: backend-backed session controls, checkpoint, fork, revert latest turn, retry source, Forge-local session control receipts, copy session receipt, session control event ledger, copy session control event, session-control event disclosure, visible event JSON detail, session-control count summary, status filters, session-control diff summary, before/after/removed message chips, session-control duration summary, start/completion/duration chips, session-control ledger overflow, show older/show less overflow toggle, visible ledger count, hidden older receipt row, `data-session-control-event`, and `forge:session-control` browser events.
-- Forge implementation paths under guard: `crates/engine/src/agent.rs`, `crates/webui/src/conversation_controls.rs`, `crates/webui/src/chat_ui_session_controls.html`, and `scripts/smoke/check-session-controls-contract.py`.
+- Forge implementation paths under guard: `crates/engine/src/agent.rs`, `crates/webui/src/conversation_controls.rs`, `crates/webui/src/chat_ui_session_controls.html`, `scripts/smoke/check-session-controls-contract.py`, and `scripts/smoke/check-full-agentic-benchmark.py`.
