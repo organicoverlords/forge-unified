@@ -183,8 +183,14 @@ impl Agent {
     pub async fn browser_proof(&self, url: &str, width: u32, height: u32, capture_dom: bool) -> Result<BrowserProofResult> {
         let req = ToolRequest { id: ToolCallId(uuid::Uuid::new_v4()), kind: ToolKind::BrowserProof, args: serde_json::json!({"url": url, "width": width, "height": height, "capture_dom": capture_dom}), parallel_group: None };
         let result = self.orchestrator.execute_tool(req).await?;
-        if !result.success { anyhow::bail!("Browser proof failed: {}", result.error.unwrap_or_default()); }
-        serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse browser proof result: {}", e))
+        if !result.output.trim().is_empty() {
+            return serde_json::from_str(&result.output).map_err(|e| anyhow::anyhow!("Failed to parse browser proof result: {}", e));
+        }
+        if !result.success {
+            let error = result.error.unwrap_or_else(|| "Browser proof failed without tool output".to_string());
+            return Ok(BrowserProofResult { screenshot_base64: String::new(), console_logs: vec![error.clone()], dom_snapshot: None, url: url.to_string(), page_title: String::new(), success: false, error: Some(error) });
+        }
+        anyhow::bail!("Browser proof succeeded without output")
     }
 
     pub async fn vision_review(&self, image_base64: &str, prompt: Option<&str>, provider_id: Option<ProviderId>, model_id: Option<ModelId>) -> Result<VisionReviewResult> {
