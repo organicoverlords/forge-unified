@@ -2,6 +2,7 @@ use crate::tool::ToolExecutor;
 use crate::types::{ToolRequest, ToolResult, ToolKind, BrowserProofResult, BrowserProofRequest, VisionReviewResult, VisionReviewRequest};
 use anyhow::Result;
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -11,12 +12,16 @@ const CHROME_PROOF_FLAGS: &[&str] = &[
     "--headless=new",
     "--disable-gpu",
     "--no-sandbox",
+    "--disable-setuid-sandbox",
     "--disable-dev-shm-usage",
     "--disable-background-networking",
     "--disable-extensions",
     "--disable-sync",
+    "--disable-default-apps",
+    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider",
     "--hide-scrollbars",
     "--mute-audio",
+    "--no-first-run",
     "--run-all-compositor-stages-before-draw",
 ];
 
@@ -42,19 +47,32 @@ impl ToolExecutor {
         screenshot_cmd
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
-            .arg("--virtual-time-budget=9000")
+            .arg("--timeout=10000")
+            .arg("--virtual-time-budget=5000")
             .arg(&args.url);
-        let screenshot_output = run_command_with_timeout(screenshot_cmd, Duration::from_secs(25));
+        let screenshot_output = run_command_with_timeout(screenshot_cmd, Duration::from_secs(16));
 
         match screenshot_output {
             Ok((true, output)) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if let Some(bytes) = readable_png(&screenshot_path) {
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return browser_success_result(
+                        request.id,
+                        args.url,
+                        width,
+                        height,
+                        bytes,
+                        None,
+                        String::new(),
+                        vec!["Chrome timed out after writing a readable PNG screenshot; Forge killed the process and kept the proof artifact.".to_string()],
+                    );
+                }
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(browser_failure_result(request.id, "Chrome screenshot command timed out", stderr))
+                Ok(browser_failure_result(request.id, "Chrome screenshot command timed out before writing a readable PNG", stderr))
             }
             Ok((false, output)) if output.status.success() => {
-                let bytes = std::fs::read(&screenshot_path).unwrap_or_default();
-                if bytes.len() < 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+                let Some(bytes) = readable_png(&screenshot_path) else {
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     let _ = std::fs::remove_dir_all(&out_dir);
                     return Ok(browser_failure_result(
@@ -62,8 +80,7 @@ impl ToolExecutor {
                         "Chrome finished but did not write a readable PNG screenshot",
                         stderr,
                     ));
-                }
-                let b64 = base64_encode(&bytes);
+                };
 
                 let (dom_snapshot, page_title) = if capture_dom {
                     capture_dom_and_title(&chrome, &args.url)
@@ -72,36 +89,25 @@ impl ToolExecutor {
                 };
 
                 let _ = std::fs::remove_dir_all(&out_dir);
-
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: true,
-                    output: serde_json::to_string(&BrowserProofResult {
-                        screenshot_base64: b64,
-                        console_logs: vec![],
-                        dom_snapshot,
-                        url: args.url.clone(),
-                        page_title,
-                        success: true,
-                        error: None,
-                    })?,
-                    error: None,
-                    duration_ms: 0,
-                    metadata: HashMap::from([
-                        ("url".to_string(), serde_json::json!(args.url)),
-                        ("width".to_string(), serde_json::json!(width)),
-                        ("height".to_string(), serde_json::json!(height)),
-                        ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
-                        ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
-                        ("chrome_timeout_seconds".to_string(), serde_json::json!(25)),
-                    ]),
-                })
+                browser_success_result(request.id, args.url, width, height, bytes, dom_snapshot, page_title, vec![])
             }
             Ok((false, output)) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if let Some(bytes) = readable_png(&screenshot_path) {
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return browser_success_result(
+                        request.id,
+                        args.url,
+                        width,
+                        height,
+                        bytes,
+                        None,
+                        String::new(),
+                        vec!["Chrome exited nonzero after writing a readable PNG screenshot; Forge kept the proof artifact.".to_string()],
+                    );
+                }
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(browser_failure_result(request.id, "Chrome screenshot command failed", stderr))
+                Ok(browser_failure_result(request.id, "Chrome screenshot command failed before writing a readable PNG", stderr))
             }
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&out_dir);
@@ -153,6 +159,46 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> std::io:
         }
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+fn readable_png(path: &Path) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() >= 1024 && bytes.starts_with(b"\x89PNG\r\n\x1a\n") { Some(bytes) } else { None }
+}
+
+fn browser_success_result(
+    id: crate::types::ToolCallId,
+    url: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+    dom_snapshot: Option<String>,
+    page_title: String,
+    console_logs: Vec<String>,
+) -> Result<ToolResult> {
+    Ok(ToolResult {
+        id,
+        kind: ToolKind::BrowserProof,
+        success: true,
+        output: serde_json::to_string(&BrowserProofResult {
+            screenshot_base64: base64_encode(&bytes),
+            console_logs,
+            dom_snapshot,
+            url,
+            page_title,
+            success: true,
+            error: None,
+        })?,
+        error: None,
+        duration_ms: 0,
+        metadata: HashMap::from([
+            ("width".to_string(), serde_json::json!(width)),
+            ("height".to_string(), serde_json::json!(height)),
+            ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
+            ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
+            ("chrome_timeout_seconds".to_string(), serde_json::json!(16)),
+        ]),
+    })
 }
 
 fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: String) -> ToolResult {
@@ -267,10 +313,11 @@ fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
     let mut dom_cmd = chrome_command(chrome);
     dom_cmd
         .arg("--dump-dom")
-        .arg("--virtual-time-budget=4000")
+        .arg("--timeout=6000")
+        .arg("--virtual-time-budget=2500")
         .arg(url);
 
-    match run_command_with_timeout(dom_cmd, Duration::from_secs(10)) {
+    match run_command_with_timeout(dom_cmd, Duration::from_secs(8)) {
         Ok((false, dom)) if dom.status.success() => {
             let raw = String::from_utf8_lossy(&dom.stdout).to_string();
             let title = extract_title_from_dom(&raw);
