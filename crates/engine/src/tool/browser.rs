@@ -9,15 +9,18 @@ use std::time::{Duration, Instant};
 
 const BROWSER_PROOF_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
 const CHROME_PROOF_FLAGS: &[&str] = &[
-    "--headless=new",
+    "--headless=chrome",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-setuid-sandbox",
     "--disable-dev-shm-usage",
     "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-domain-reliability",
     "--disable-extensions",
     "--disable-sync",
     "--disable-default-apps",
+    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints",
     "--hide-scrollbars",
     "--mute-audio",
     "--no-first-run",
@@ -141,6 +144,7 @@ impl ToolExecutor {
 fn chrome_command(chrome: &str) -> Command {
     let mut command = Command::new(chrome);
     command.env_remove("DBUS_SESSION_BUS_ADDRESS");
+    command.env_remove("DBUS_SYSTEM_BUS_ADDRESS");
     command.env("NO_AT_BRIDGE", "1");
     for flag in CHROME_PROOF_FLAGS {
         command.arg(flag);
