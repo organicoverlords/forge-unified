@@ -14,9 +14,9 @@ This guard is intentionally source-backed and UI-facing: final browser proof
 must render stable, readable session turns, assistant parts, typed tool cards,
 provider/model route proof, copy/retry affordances, file receipts, turn receipt
 summaries, timeline actions, flattened public tool input, previews,
-diagnostics, count summaries, tool lifecycle state/timing, and collapsed
-technical details instead of relying on raw JSON or raw tool identifiers as the
-primary user-visible evidence.
+diagnostics, count summaries, tool lifecycle state/timing, accessible disclosure
+state, and collapsed technical details instead of relying on raw JSON or raw
+tool identifiers as the primary user-visible evidence.
 """
 
 from __future__ import annotations
@@ -101,6 +101,11 @@ REQUIRED_UI_TOKENS = [
     "tool-preview-pane",
     "show preview",
     "copy preview",
+    "tool-toggle-aria-expanded",
+    "tool-toggle-state-visible",
+    "aria-expanded",
+    "aria-controls",
+    "data-state=open",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -150,6 +155,9 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "preview pane",
     "preview toggle",
     "copy preview",
+    "accessible disclosure state",
+    "aria-expanded",
+    "aria-controls",
 ]
 
 
@@ -268,6 +276,18 @@ def main() -> int:
             "show preview",
             "copy preview",
             "No preview recorded.",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_disclosures_are_accessible_and_stateful",
+        "passed": all(token in ui for token in [
+            "function disclosureButton(showLabel,hideLabel,pane,mode)",
+            "setAttribute('aria-controls'",
+            "setAttribute('aria-expanded'",
+            "tool-toggle-aria-expanded",
+            "tool-toggle-state-visible",
+            "dataset.state=open?'open':'closed'",
+            "data-state=open",
         ]),
     })
     checks.append({
