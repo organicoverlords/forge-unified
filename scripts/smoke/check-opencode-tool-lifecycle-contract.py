@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TOOL_PARTS = ROOT / "crates" / "engine" / "src" / "tool_parts.rs"
 PROJECT_STATE = ROOT / "PROJECT_STATE.md"
+PROOF_DIR = ROOT / "docs" / "generated" / "proof"
 
 REQUIRED_TOOL_PART_TOKENS = [
     "pub fn pending_tool_part(call: &ToolRequest)",
@@ -38,7 +39,7 @@ REQUIRED_TOOL_PART_TOKENS = [
     '"callID": call.id.clone().0.to_string()',
 ]
 
-REQUIRED_STATE_TOKENS = [
+REQUIRED_PROOF_TOKENS = [
     "anomalyco/opencode:packages/opencode/src/session/processor.ts",
     "anomalyco/opencode:packages/schema/src/v1/session.ts",
     "tool lifecycle",
@@ -50,13 +51,21 @@ def require_tokens(name: str, text: str, tokens: list[str]) -> list[str]:
     return [token for token in tokens if token not in text]
 
 
+def proof_memory_text() -> str:
+    chunks = [PROJECT_STATE.read_text(encoding="utf-8")]
+    if PROOF_DIR.exists():
+        for path in sorted(PROOF_DIR.glob("*.md")):
+            chunks.append(path.read_text(encoding="utf-8", errors="replace"))
+    return "\n".join(chunks)
+
+
 def main() -> int:
     tool_parts = TOOL_PARTS.read_text(encoding="utf-8")
-    project_state = PROJECT_STATE.read_text(encoding="utf-8")
+    proof_memory = proof_memory_text()
 
     missing: list[str] = []
     missing += [f"{TOOL_PARTS}: {token}" for token in require_tokens("tool_parts", tool_parts, REQUIRED_TOOL_PART_TOKENS)]
-    missing += [f"{PROJECT_STATE}: {token}" for token in require_tokens("project_state", project_state, REQUIRED_STATE_TOKENS)]
+    missing += [f"PROJECT_STATE.md or docs/generated/proof/*.md: {token}" for token in require_tokens("proof_memory", proof_memory, REQUIRED_PROOF_TOKENS)]
 
     if missing:
         print("OpenCode tool lifecycle contract check failed. Missing:")
