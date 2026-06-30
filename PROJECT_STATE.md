@@ -32,3 +32,8 @@ Updated: 2026-06-30
 
 - Browser session-turn grouping, message/assistant part rendering, basic tool-card rendering, and grouped tool-count summary behavior are the upstream UI concepts used as reference material.
 - Forge implementation paths under guard now include `crates/webui/src/chat_ui.rs`, `crates/webui/src/chat_ui.html`, and `crates/webui/src/chat_ui_enhancements.html`.
+
+## Current head note
+
+- Latest pushed head after the duplicate state refresh: `f12834ad59ea528839e19d8eafe80b1b3bb69aee`.
+- If GitHub does not emit same-head workflows for this no-content refresh, validate the nearest content-changing head containing the slice and avoid acceptance claims for `f12834ad59ea528839e19d8eafe80b1b3bb69aee` until checks exist.
