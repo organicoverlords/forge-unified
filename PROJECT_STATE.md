@@ -40,8 +40,8 @@ These exact source anchors and behavior tokens are kept because CI smoke gates r
 
 ### Durable tool lifecycle contract
 
-- Source anchors: `packages/opencode/src/session/processor.ts`, `packages/schema/src/v1/session.ts`, `packages/web/src/components/share/part.tsx`.
-- Required trail tokens: pending tool part, running tool part, started lifecycle parts, completed/error finished dispatch, same `callID` across request/result-derived parts, completed output metadata, error metadata, duration timing, and file attachments for file-changing tools.
+- Source anchors: `anomalyco/opencode:packages/opencode/src/session/processor.ts`, `anomalyco/opencode:packages/schema/src/v1/session.ts`, `packages/opencode/src/session/processor.ts`, `packages/schema/src/v1/session.ts`, `packages/web/src/components/share/part.tsx`.
+- Required trail tokens: tool lifecycle, ToolPart, pending tool part, running tool part, started lifecycle parts, completed/error finished dispatch, same `callID` across request/result-derived parts, completed output metadata, error metadata, duration timing, and file attachments for file-changing tools.
 - Forge implementation path under guard: `crates/engine/src/tool_parts.rs`.
 
 ### Search and glob contract
