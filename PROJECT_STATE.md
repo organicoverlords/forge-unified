@@ -5,9 +5,9 @@ Updated: 2026-06-30
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current selected head before this docs update: `8abb0846467c7b3f98f129425c243d68645970a4`
-- Latest same-head proof before this UI slice: CI `28410453891` success; Build Proof `28410453898` success; App Build Proof `28410453928` success; App Multistep Build Proof `28410453910` success; Fast WebUI Proof `28410453941` success; Live WebUI Feature Sprint `28410453924` success on head `1651dce2b6873c934c682b494ad7cdded044bb58`.
-- Latest implementation slice: central browser session-turn rendering in `crates/webui/src/chat_ui.html`, loaded by `crates/webui/src/chat_ui.rs`, plus stricter Fast WebUI proof gates for session-turn UI.
+- Current selected baseline before this slice: `484189c945d7b0ec90a70300ef960e868ed9a477`
+- Latest same-head proof before this slice: CI `28411907593` success; Build Proof `28411907450` success; Fast WebUI Proof `28411907448` success; Live WebUI Feature Sprint `28411907443` success; App Build Proof `28411907553` success; App Multistep Build Proof `28411907592` success on head `484189c945d7b0ec90a70300ef960e868ed9a477`.
+- Latest implementation/proof slice: deterministic OpenCode-backed durable tool lifecycle gate in `scripts/smoke/check-opencode-tool-lifecycle-contract.py`, wired into CI.
 - Do not claim the latest head containing this slice is same-head proven until CI / Build Proof / Fast WebUI Proof / Live WebUI Feature Sprint complete on that exact head and browser artifacts are inspected.
 
 ## Selection basis
@@ -18,18 +18,22 @@ Updated: 2026-06-30
 
 ## Latest workflow state inspected before this slice
 
-- Head `1651dce2b6873c934c682b494ad7cdded044bb58` had same-head green: CI, Build Proof, App Build Proof, App Multistep Build Proof, Fast WebUI Proof, and Live WebUI Feature Sprint.
-- Live WebUI Feature Sprint proof on `1651dce2b6873c934c682b494ad7cdded044bb58` used provider `nvidia_nim`, model `deepseek-ai/deepseek-v4-flash`, and produced browser screenshots/artifacts for full benchmark and natural feature work.
-- Current head after the central session-turn UI slice must be validated separately.
+- Head `484189c945d7b0ec90a70300ef960e868ed9a477` had same-head green: CI, Build Proof, App Build Proof, App Multistep Build Proof, Fast WebUI Proof, and Live WebUI Feature Sprint.
+- Live WebUI Feature Sprint proof artifact `7968060176` was present for run `28411907443` on head `484189c945d7b0ec90a70300ef960e868ed9a477`.
+- Current head after the tool lifecycle gate slice must be validated separately.
 
 ## Latest implementation changes
 
-- `crates/webui/src/chat_ui.rs` now loads the browser UI from `include_str!("chat_ui.html")`, keeping the UI reviewable instead of hiding it inside a giant Rust raw string.
-- `crates/webui/src/chat_ui.html` now renders central session turns: user prompt, assistant parts, live tool parts, completed tool cards, copy/retry actions, thinking/working state, changed files / file receipts, and a persistent right-side Session timeline.
-- Tool cards keep human labels and status badges visible while collapsed technical details remain outside the final proof view.
-- `scripts/smoke/fast-webui-proof.sh` now gates the browser proof on the central session-turn UI, copy/retry actions, collapsible tool cards, deferred technical content hooks, and absence of visible `OpenCode-style` branding.
-- `scripts/smoke/check-webui-proof-part-contract.py` now validates both `crates/webui/src/chat_ui.rs` and `crates/webui/src/chat_ui.html`, so the deterministic CI harness follows the current UI source of truth.
-- This is a source-backed browser WebUI parity slice, not a claim that complete OpenCode parity is done.
+- Added `scripts/smoke/check-opencode-tool-lifecycle-contract.py` to validate Forge's durable tool-part lifecycle source contract.
+- Wired that gate into `.github/workflows/ci.yml` under the deterministic WebUI proof harness smoke step.
+- Added proof doc `docs/generated/proof/opencode-tool-lifecycle-contract-gate-20260630T0048Z.md`.
+- This is a source-backed lifecycle/proof parity slice, not a claim that complete OpenCode parity is done.
+
+## Tool lifecycle contract evidence retained for CI
+
+- OpenCode source backing: `anomalyco/opencode:packages/opencode/src/session/processor.ts`, `anomalyco/opencode:packages/schema/src/v1/session.ts`, and `anomalyco/opencode:packages/web/src/components/share/part.tsx`.
+- Forge source path under guard: `crates/engine/src/tool_parts.rs`.
+- Required behavior tokens: pending tool part, running tool part, started lifecycle parts, completed/error finished dispatch, same `callID` across request/result-derived parts, completed output metadata, error metadata, duration timing, and file attachments for file-changing tools.
 
 ## User rejection that drove the WebUI proof work
 
