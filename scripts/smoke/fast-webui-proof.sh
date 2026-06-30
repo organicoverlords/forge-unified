@@ -136,10 +136,12 @@ set -e
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON" || true
 
 step "capture readable browser proof"
-curl -fsS --connect-timeout 2 --max-time 60 \
+# Fast proof only needs a readable session screenshot. DOM capture has its own Chrome pass
+# and can push the endpoint beyond the caller budget on hosted runners after NIM streaming.
+curl -fsS --connect-timeout 2 --max-time 90 \
   -X POST "$BASE/api/browser-proof" \
   -H 'content-type: application/json' \
-  --data-binary "$(jq -n --arg url "$BASE/?conversation=$CONV_ID&proof=final" '{url:$url,width:1440,height:1000,capture_dom:true}')" > "$BROWSER_JSON"
+  --data-binary "$(jq -n --arg url "$BASE/?conversation=$CONV_ID&proof=final" '{url:$url,width:1440,height:1000,capture_dom:false}')" > "$BROWSER_JSON"
 jq -e '.success == true and (.screenshot_base64 | length > 1000)' "$BROWSER_JSON" >/dev/null
 jq -r '.screenshot_base64' "$BROWSER_JSON" | base64 -d > "$SCREENSHOT"
 test -s "$SCREENSHOT"
