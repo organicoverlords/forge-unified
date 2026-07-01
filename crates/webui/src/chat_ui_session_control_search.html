@@ -1,0 +1,60 @@
+<style>
+.session-control-ledger-search-box{margin-top:.35rem;display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:.72rem}
+.session-control-ledger-search-input{min-width:12rem;max-width:22rem;padding:.22rem .45rem;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);font-size:.72rem}
+.session-control-ledger-search-count{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+.backend-session-control-event-row[data-session-search-hidden="true"]{display:none}
+</style>
+<script>
+(function(){
+  const PROOF='session-control-ledger-search session-control-ledger-search-input session-control-ledger-search-count session-control-search-query data-session-search-hidden';
+  let query='';
+  function textOf(row){return ((row.getAttribute('data-session-control-event')||'')+' '+(row.textContent||'')).toLowerCase()}
+  function rows(){return Array.from(document.querySelectorAll('.backend-session-control-event-row')).filter(row=>row.dataset.kind!=='overflow')}
+  function apply(){
+    const needle=query.trim().toLowerCase();
+    let visible=0;
+    let total=0;
+    for(const row of rows()){
+      total++;
+      const match=!needle||textOf(row).includes(needle);
+      row.dataset.sessionSearchHidden=match?'false':'true';
+      if(match)visible++;
+    }
+    document.querySelectorAll('.session-control-ledger-search-count').forEach(el=>{el.textContent=needle?`search showing ${visible}/${total}`:`search ready · ${total} events`;});
+  }
+  function box(){
+    const wrap=document.createElement('div');
+    wrap.className='session-control-ledger-search-box';
+    wrap.dataset.proof=PROOF;
+    const input=document.createElement('input');
+    input.type='search';
+    input.className='session-control-ledger-search-input';
+    input.placeholder='search session events';
+    input.setAttribute('aria-label','search session control event ledger');
+    input.dataset.proof='session-control-ledger-search-input session-control-search-query';
+    input.value=query;
+    input.oninput=e=>{query=e.currentTarget.value||'';apply()};
+    const count=document.createElement('span');
+    count.className='session-control-ledger-search-count';
+    count.dataset.proof='session-control-ledger-search-count';
+    count.textContent='search ready';
+    wrap.appendChild(input);
+    wrap.appendChild(count);
+    return wrap;
+  }
+  function enhance(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    document.querySelectorAll('.session-head').forEach(head=>{
+      if(!head.querySelector('.session-control-ledger-search-box')){
+        const ledger=head.querySelector('.backend-session-control-ledger');
+        const node=box();
+        if(ledger)ledger.insertAdjacentElement('beforebegin',node);else head.appendChild(node);
+      }
+    });
+    apply();
+  }
+  const observer=new MutationObserver(()=>enhance());
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
+</script>
