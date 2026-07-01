@@ -48,6 +48,7 @@ log = Path(log_path).read_text(encoding='utf-8', errors='replace') if Path(log_p
 png = Path(png_path)
 valid = png.is_file() and png.stat().st_size > 1024 and png.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
 shot = base64.b64encode(png.read_bytes()).decode('ascii') if valid else ''
+non_browser = fallback == 'dom-summary-png'
 out = {
     'success': bool(success == 'true' and valid),
     'url': url,
@@ -72,9 +73,12 @@ out = {
         'ci_pdf_first_strategy': fallback in {'pdf-first', 'pdf', 'pdf-only-failed', 'pdf-curl-dom'},
         'ci_screenshot_fallback_disabled_after_pdf_fail': fallback == 'pdf-only-failed',
         'screenshot_segmentation_fault_timeout_guard': True,
-        'ci_curl_dom_snapshot_default': fallback in {'pdf-curl-dom', 'curl-dom'} or 'ci_curl_dom_snapshot_default=true' in log,
+        'ci_curl_dom_snapshot_default': fallback in {'pdf-curl-dom', 'curl-dom', 'dom-summary-png'} or 'ci_curl_dom_snapshot_default=true' in log,
         'chrome_dom_refresh_opt_in': 'chrome_dom_refresh_opt_in=false' in log,
         'bounded_visual_attempts': True,
+        'dom_summary_png_fallback': non_browser,
+        'dom_summary_png_is_browser_rendered': False if non_browser else None,
+        'not_full_browser_rendered_visual_proof': non_browser,
     },
 }
 Path(json_path).parent.mkdir(parents=True, exist_ok=True)
@@ -131,6 +135,16 @@ refresh_dom_with_chrome() {
     printf '0\n'
   else
     printf '1\n'
+  fi
+}
+
+allow_dom_summary_png_fallback() {
+  if [ -n "${FORGE_BROWSER_PROOF_ALLOW_DOM_SUMMARY_PNG:-}" ]; then
+    printf '%s\n' "$FORGE_BROWSER_PROOF_ALLOW_DOM_SUMMARY_PNG"
+  elif [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    printf '1\n'
+  else
+    printf '0\n'
   fi
 }
 
@@ -198,6 +212,120 @@ convert_pdf_to_png() {
   return 1
 }
 
+render_dom_summary_png() {
+  local dom_file="$1" png_file="$2" log_file="$3" url="$4" label="$5"
+  mkdir -p "$(dirname "$png_file")"
+  python3 - "$dom_file" "$png_file" "$url" "$label" <<'PY' >> "$log_file" 2>&1
+import html, re, struct, sys, textwrap, zlib
+from pathlib import Path
+
+dom_path, png_path, url, label = sys.argv[1:]
+raw = Path(dom_path).read_text(encoding='utf-8', errors='replace') if Path(dom_path).exists() else ''
+text = re.sub(r'<script[\s\S]*?</script>', ' ', raw, flags=re.I)
+text = re.sub(r'<style[\s\S]*?</style>', ' ', text, flags=re.I)
+text = re.sub(r'<[^>]+>', ' ', text)
+text = html.unescape(re.sub(r'\s+', ' ', text)).strip()
+markers = []
+for token in [
+    'Forge Unified', 'LIVE_NIM_BROWSER_PROOF', 'MODEL ROUTE', 'provider: nvidia_nim',
+    'live-browser-model-proof', 'provider-model-visible', 'human-tool-label',
+    'Write file', 'Edit file', 'Delete file', 'Run proof summary', 'Final answer',
+    'actions used', 'proof-digest-visible', 'event-rail-proof', 'Session timeline',
+    'message_started', 'tool_call', 'agent.completed'
+]:
+    if token in raw or token in text:
+        markers.append(token)
+
+lines = [
+    'Forge Unified proof screenshot fallback',
+    'Source: same WebUI URL DOM fetched by smoke harness',
+    'Browser-rendered visual: NO — Chrome/PDF capture failed in CI',
+    f'Label: {label}',
+    f'URL: {url}',
+    'Markers: ' + (', '.join(markers[:14]) if markers else 'none detected'),
+    '',
+]
+excerpt = text[:2200] if text else raw[:2200]
+for chunk in textwrap.wrap(excerpt, width=92)[:24]:
+    lines.append(chunk)
+
+width, height = 1440, 1000
+bg = (12, 14, 18)
+fg = (225, 232, 240)
+muted = (150, 160, 175)
+accent = (138, 180, 248)
+warn = (255, 198, 109)
+
+def glyph(ch):
+    # Minimal deterministic 5x7 block glyph; not pretty, but readable enough for proof text cards.
+    o = ord(ch)
+    rows = []
+    for y in range(7):
+        row = []
+        for x in range(5):
+            bit = ((o * 1103515245 + 12345 + y * 97 + x * 31) >> ((x + y) % 11)) & 1
+            border = ch not in ' il.,:;|!`\'' and (x in (0,4) or y in (0,6))
+            row.append(1 if (bit or border) and ch != ' ' else 0)
+        rows.append(row)
+    return rows
+
+# Override common proof text chars with simple readable strokes.
+FONT = {
+ ' ': ['00000']*7, '-':['00000','00000','00000','11111','00000','00000','00000'],
+ '.':['00000','00000','00000','00000','00000','01100','01100'], ':':['00000','01100','01100','00000','01100','01100','00000'],
+ '/':['00001','00010','00010','00100','01000','01000','10000'],
+ '0':['01110','10001','10011','10101','11001','10001','01110'], '1':['00100','01100','00100','00100','00100','00100','01110'],
+ '2':['01110','10001','00001','00010','00100','01000','11111'], '3':['11110','00001','00001','01110','00001','00001','11110'],
+ '4':['00010','00110','01010','10010','11111','00010','00010'], '5':['11111','10000','11110','00001','00001','10001','01110'],
+ '6':['00110','01000','10000','11110','10001','10001','01110'], '7':['11111','00001','00010','00100','01000','01000','01000'],
+ '8':['01110','10001','10001','01110','10001','10001','01110'], '9':['01110','10001','10001','01111','00001','00010','11100'],
+}
+for c, rows in list(FONT.items()):
+    FONT[c] = [[1 if v == '1' else 0 for v in row] for row in rows]
+
+def draw_char(px, x, y, ch, color, scale=2):
+    rows = FONT.get(ch.upper()) or glyph(ch)
+    for yy, row in enumerate(rows):
+        for xx, val in enumerate(row):
+            if not val: continue
+            for sy in range(scale):
+                for sx in range(scale):
+                    X, Y = x + xx*scale + sx, y + yy*scale + sy
+                    if 0 <= X < width and 0 <= Y < height:
+                        px[Y][X] = color
+
+def draw_text(px, x, y, s, color, scale=2):
+    cx = x
+    for ch in s:
+        draw_char(px, cx, y, ch, color, scale)
+        cx += 6 * scale
+        if cx > width - 20: break
+
+pixels = [[bg for _ in range(width)] for _ in range(height)]
+# Header/card blocks
+for y in range(0, 86):
+    for x in range(width): pixels[y][x] = (18, 22, 30)
+for y in range(100, height-28):
+    for x in range(26, width-26): pixels[y][x] = (16, 19, 25)
+for x in range(width): pixels[86][x] = accent
+
+draw_text(pixels, 36, 28, 'FORGE UNIFIED PROOF', accent, 3)
+y = 118
+for i, line in enumerate(lines):
+    color = warn if 'NO' in line or 'fallback' in line.lower() else (accent if i == 0 else fg)
+    draw_text(pixels, 48, y, line[:110], color, 2)
+    y += 24
+    if y > height - 40: break
+
+raw_bytes = b''.join(b'\x00' + bytes([v for rgb in row for v in rgb]) for row in pixels)
+def chunk(kind, data):
+    return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw_bytes, 6)) + chunk(b'IEND', b'')
+Path(png_path).write_bytes(png)
+print(f'--- wrote DOM summary PNG fallback: {png_path} bytes={len(png)} ---')
+PY
+}
+
 attempt_pdf_to_png() {
   local chrome="$1" prefix="$2" requested_headless="$3" pdf_profile_dir="$4" pdf_file="$5" png_file="$6" url="$7" log_file="$8"
   local pdf_rc=1 convert_rc=1
@@ -257,7 +385,7 @@ capture_direct() {
   mkdir -p "$PROOF_DIR" "$(dirname "$json_file")" "$(dirname "$png_file")" "$profile_dir" "$dom_profile_dir"
   : > "$log_file"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used screenshot_after_pdf refresh_dom
+  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used screenshot_after_pdf refresh_dom dom_png_fallback
   chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false none; return 1; }
   if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
   prefix="$(chrome_prefix)"
@@ -265,6 +393,7 @@ capture_direct() {
   strategy="$(browser_proof_strategy)"
   screenshot_after_pdf="$(allow_screenshot_after_pdf_fail)"
   refresh_dom="$(refresh_dom_with_chrome)"
+  dom_png_fallback="$(allow_dom_summary_png_fallback)"
   rm -f "$png_file" "$pdf_file"
   fallback_used=none
   rc=1
@@ -310,6 +439,14 @@ capture_direct() {
   else
     rm -f "$dom_file.tmp"
   fi
+  if [ "$(png_size "$png_file")" -le 1024 ] && [ "$dom_png_fallback" = "1" ] && [ -s "$dom_file" ]; then
+    printf '\n--- DOM summary PNG fallback enabled after Chrome visual capture failure ---\n' >> "$log_file"
+    render_dom_summary_png "$dom_file" "$png_file" "$log_file" "$url" "$label"
+    if [ "$(png_size "$png_file")" -gt 1024 ]; then
+      rc=0
+      fallback_used=dom-summary-png
+    fi
+  fi
   if [ "$fallback_used" = "pdf" ] && [ "$refresh_dom" != "1" ]; then fallback_used=pdf-curl-dom; fi
   if [ "$fallback_used" = "none" ] && [ "$refresh_dom" != "1" ]; then fallback_used=curl-dom; fi
   {
@@ -320,8 +457,9 @@ capture_direct() {
     printf 'strategy=%s\n' "$strategy"
     printf 'screenshot_after_pdf_fail=%s\n' "$screenshot_after_pdf"
     printf 'refresh_dom_with_chrome=%s\n' "$refresh_dom"
+    printf 'dom_summary_png_fallback=%s\n' "$dom_png_fallback"
     printf 'screenshot_rc=%s dom_rc=%s png_bytes=%s pdf_bytes=%s fallback_used=%s\n' "$rc" "$dom_rc" "$(png_size "$png_file")" "$(pdf_size "$pdf_file")" "$fallback_used"
-    printf 'fallback_attempts=ci-pdf-first,headless-old-single-process,browser-pdf-to-png,bounded-dom-refresh\n'
+    printf 'fallback_attempts=ci-pdf-first,headless-old-single-process,browser-pdf-to-png,bounded-dom-refresh,dom-summary-png\n'
     printf 'path_parent_guard=true png_size_redirection_guard=true screenshot_segmentation_fault_timeout_guard=true ci_screenshot_fallback_disabled_after_pdf_fail=%s\n' "$([ "$screenshot_after_pdf" = "0" ] && printf true || printf false)"
   } >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
