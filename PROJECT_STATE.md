@@ -5,11 +5,11 @@ Updated: 2026-07-01
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Selected live head before this slice: `a271abaf6f44b5e6bcb20fa5a99a388de1f5ac62`.
+- Current implementation head before this note: `77184a330ea6b66b0a76533268c95aedaad2bd48`.
 - PR state verified live: open, non-draft, mergeable.
 - Same-head workflow state before this state-contract repair: `a271abaf6f44b5e6bcb20fa5a99a388de1f5ac62` had Build Proof success; CI failed only in deterministic Smoke Test while Check, Test, Cargo Deny, Security Audit, and File Size Gate succeeded.
 - Latest implementation slice: real WebUI human action summaries. Added `crates/webui/src/chat_ui_action_summaries.html` and wired it into `crates/webui/src/chat_ui.rs` so every visible tool card gets a user-facing action summary with action, target, outcome, next step, and copy controls.
-- Latest state-contract repair: restored exact deterministic session-control wording: `checkpoint, fork, revert latest turn, and retry source`.
+- Latest state-contract repair: restored exact deterministic wording for `checkpoint, fork, revert latest turn, and retry source` and retained formatter activation evidence phrases without overclaiming runtime activation parity.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
