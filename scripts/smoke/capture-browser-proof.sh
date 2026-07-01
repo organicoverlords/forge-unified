@@ -56,85 +56,106 @@ out = {
         'chrome_dbus_wrapped': wrapped == 'true',
         'chrome_dbus_default_disabled': True,
         'diagnosable_browser_failure': True,
+        'chrome_retry_fallbacks': True,
+        'headless_old_retry': True,
+        'single_process_retry': True,
     },
 }
 Path(json_path).write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 PY
 }
 
+chrome_common_flags() {
+  local profile_dir="$1"
+  printf '%s\n' \
+    --disable-gpu \
+    --no-sandbox \
+    --disable-setuid-sandbox \
+    --disable-dev-shm-usage \
+    --disable-background-networking \
+    --disable-component-update \
+    --disable-domain-reliability \
+    --disable-extensions \
+    --disable-sync \
+    --disable-default-apps \
+    --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
+    --disable-ipc-flooding-protection \
+    --hide-scrollbars \
+    --mute-audio \
+    --no-first-run \
+    --run-all-compositor-stages-before-draw \
+    --user-data-dir="$profile_dir"
+}
+
+run_chrome_screenshot_attempt() {
+  local chrome="$1" prefix="$2" headless_mode="$3" profile_dir="$4" png_file="$5" url="$6" log_file="$7" extra_flags="$8" attempt_label="$9"
+  {
+    printf '\n--- screenshot attempt: %s ---\n' "$attempt_label"
+    printf 'headless=%s extra_flags=%s\n' "$headless_mode" "$extra_flags"
+  } >> "$log_file"
+  timeout 45s bash -c "$prefix \"$chrome\" \
+    --headless=$headless_mode \
+    $(printf '%s ' $(chrome_common_flags "$profile_dir")) \
+    $extra_flags \
+    --screenshot=\"$png_file\" \
+    --window-size=1440,1000 \
+    --timeout=22000 \
+    --virtual-time-budget=7000 \
+    \"$url\"" >> "$log_file" 2>&1
+}
+
+run_chrome_dom_attempt() {
+  local chrome="$1" prefix="$2" headless_mode="$3" profile_dir="$4" dom_file="$5" url="$6" log_file="$7"
+  timeout 25s bash -c "$prefix \"$chrome\" \
+    --headless=$headless_mode \
+    $(printf '%s ' $(chrome_common_flags "$profile_dir")) \
+    --dump-dom \
+    --timeout=12000 \
+    --virtual-time-budget=5000 \
+    \"$url\"" > "$dom_file.tmp" 2>> "$log_file"
+}
+
 capture_direct() {
   local url="$1" json_file="$2" png_file="$3" label="$4"
   local dom_file="$PROOF_DIR/${label}-dom.html"
   local log_file="$PROOF_DIR/${label}-chrome.log"
-  local dom_log_file="$PROOF_DIR/${label}-dom-chrome.log"
   local profile_dir="$PROOF_DIR/${label}-chrome-profile"
   local dom_profile_dir="$PROOF_DIR/${label}-dom-chrome-profile"
   mkdir -p "$profile_dir" "$dom_profile_dir"
+  : > "$log_file"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome wrapped prefix headless_mode
+  local chrome wrapped prefix requested_headless headless_mode rc dom_rc png_bytes
   chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false; return 1; }
   if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
   prefix="$(chrome_prefix)"
-  headless_mode="${FORGE_CHROME_HEADLESS:-new}"
+  requested_headless="${FORGE_CHROME_HEADLESS:-new}"
+  rm -f "$png_file"
   set +e
-  timeout 60s bash -c "$prefix \"$chrome\" \
-    --headless=$headless_mode \
-    --disable-gpu \
-    --no-sandbox \
-    --disable-setuid-sandbox \
-    --disable-dev-shm-usage \
-    --disable-background-networking \
-    --disable-component-update \
-    --disable-domain-reliability \
-    --disable-extensions \
-    --disable-sync \
-    --disable-default-apps \
-    --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
-    --disable-ipc-flooding-protection \
-    --hide-scrollbars \
-    --mute-audio \
-    --no-first-run \
-    --run-all-compositor-stages-before-draw \
-    --user-data-dir=\"$profile_dir\" \
-    --screenshot=\"$png_file\" \
-    --window-size=1440,1000 \
-    --timeout=30000 \
-    --virtual-time-budget=8000 \
-    \"$url\"" > "$log_file" 2>&1
-  local rc=$?
-  timeout 35s bash -c "$prefix \"$chrome\" \
-    --headless=$headless_mode \
-    --disable-gpu \
-    --no-sandbox \
-    --disable-setuid-sandbox \
-    --disable-dev-shm-usage \
-    --disable-background-networking \
-    --disable-component-update \
-    --disable-domain-reliability \
-    --disable-extensions \
-    --disable-sync \
-    --disable-default-apps \
-    --disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging \
-    --disable-ipc-flooding-protection \
-    --hide-scrollbars \
-    --mute-audio \
-    --no-first-run \
-    --run-all-compositor-stages-before-draw \
-    --user-data-dir=\"$dom_profile_dir\" \
-    --dump-dom \
-    --timeout=16000 \
-    --virtual-time-budget=8000 \
-    \"$url\"" > "$dom_file.tmp" 2> "$dom_log_file"
-  local dom_rc=$?
+  run_chrome_screenshot_attempt "$chrome" "$prefix" "$requested_headless" "$profile_dir" "$png_file" "$url" "$log_file" "" "primary-$requested_headless"
+  rc=$?
+  png_bytes=$(wc -c < "$png_file" 2>/dev/null || printf 0)
+  if [ "$png_bytes" -le 1024 ]; then
+    rm -f "$png_file"
+    run_chrome_screenshot_attempt "$chrome" "$prefix" "old" "$profile_dir-old" "$png_file" "$url" "$log_file" "--single-process --disable-software-rasterizer" "fallback-old-single-process"
+    rc=$?
+    png_bytes=$(wc -c < "$png_file" 2>/dev/null || printf 0)
+  fi
+  headless_mode="$requested_headless"
+  run_chrome_dom_attempt "$chrome" "$prefix" "$requested_headless" "$dom_profile_dir" "$dom_file" "$url" "$log_file"
+  dom_rc=$?
+  if [ "$dom_rc" -ne 0 ] || [ ! -s "$dom_file.tmp" ]; then
+    run_chrome_dom_attempt "$chrome" "$prefix" "old" "$dom_profile_dir-old" "$dom_file" "$url" "$log_file"
+    dom_rc=$?
+  fi
   set -e
   if [ "$dom_rc" -eq 0 ] && [ -s "$dom_file.tmp" ]; then mv "$dom_file.tmp" "$dom_file"; else rm -f "$dom_file.tmp"; fi
-  cat "$dom_log_file" >> "$log_file" 2>/dev/null || true
   {
     printf '\n--- forge browser proof diagnostics ---\n'
     printf 'chrome=%s\n' "$chrome"
-    printf 'headless=%s\n' "$headless_mode"
+    printf 'headless_requested=%s\n' "$requested_headless"
     printf 'dbus_wrapped=%s\n' "$wrapped"
     printf 'screenshot_rc=%s dom_rc=%s png_bytes=%s\n' "$rc" "$dom_rc" "$(wc -c < "$png_file" 2>/dev/null || printf 0)"
+    printf 'fallback_attempts=headless-old-single-process\n'
   } >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
     write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false "$wrapped"
@@ -145,7 +166,7 @@ capture_direct() {
 
 capture_direct "$BASE/?conversation=$CONV_ID$QUERY_SUFFIX" "$BROWSER_JSON" "$WEBUI_PNG" browser
 if ! jq -e '.success == true' "$BROWSER_JSON" >/dev/null; then
-  tail -n 80 "$PROOF_DIR/browser-chrome.log" >&2 2>/dev/null || true
+  tail -n 120 "$PROOF_DIR/browser-chrome.log" >&2 2>/dev/null || true
   exit 1
 fi
 test -s "$WEBUI_PNG"
