@@ -29,6 +29,7 @@ CHAT_UI_PATHS = [
     Path("crates/webui/src/chat_ui.html"),
     Path("crates/webui/src/chat_ui_enhancements.html"),
     Path("crates/webui/src/chat_ui_tool_lifecycle.html"),
+    Path("crates/webui/src/chat_ui_action_summaries.html"),
 ]
 PROJECT_STATE = Path("PROJECT_STATE.md")
 PROOF_DOC_DIR = Path("docs/generated/proof")
@@ -106,6 +107,14 @@ REQUIRED_UI_TOKENS = [
     "aria-expanded",
     "aria-controls",
     "data-state=open",
+    "human-action-summary",
+    "action-digest-summary",
+    "action-count-summary-visible",
+    "action-digest-ok-count",
+    "action-digest-error-count",
+    "action-digest-running-count",
+    "action-digest-pending-count",
+    "copy action digest",
 ]
 
 REQUIRED_HUMAN_LABELS = [
@@ -148,6 +157,8 @@ REQUIRED_PROOF_TRAIL_TOKENS = [
     "flattened tool input",
     "diagnostics",
     "count summary",
+    "human action summaries",
+    "action digest summary",
     "tool lifecycle strip",
     "tool state timeline",
     "copy tool anchor",
@@ -196,6 +207,7 @@ def main() -> int:
             "include_str!(\"chat_ui.html\")",
             "include_str!(\"chat_ui_enhancements.html\")",
             "include_str!(\"chat_ui_tool_lifecycle.html\")",
+            "include_str!(\"chat_ui_action_summaries.html\")",
             "<body data-proof=",
         ]),
     })
@@ -307,6 +319,20 @@ def main() -> int:
             "running",
             "completed",
             "error",
+        ]),
+    })
+    checks.append({
+        "name": "human_action_summaries_have_turn_digest_counts_and_copy",
+        "passed": all(token in ui for token in [
+            "function updateDigest(scope)",
+            "action-digest-summary",
+            "action-count-summary-visible",
+            "action-digest-ok-count",
+            "action-digest-error-count",
+            "action-digest-running-count",
+            "action-digest-pending-count",
+            "copy action digest",
+            "data-owned-by=\"action-summaries\"",
         ]),
     })
 
