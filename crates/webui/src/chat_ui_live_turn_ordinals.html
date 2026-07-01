@@ -1,5 +1,5 @@
 
-<template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal">
+<template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt">
   <div data-slot="session-turn-content">
     <div data-slot="session-turn-message-container" data-turn-ordinal="1">
       <div data-slot="session-turn-message-content" data-component="message-part">Turn 1: Central session turn proof shell</div>
@@ -10,6 +10,7 @@
       <button type="button">retry</button>
       <button type="button">copy final answer</button>
       <span data-proof="live-feature-prompt-marker">Please run a Forge file tool formatter proof</span>
+      <span data-proof="full-six-phase-agentic-benchmark-prompt">Full six-phase agentic benchmark prompt</span>
     </div>
   </div>
 </template>
@@ -32,7 +33,7 @@ function forgeTurnExcerpt(text){
 }
 function forgeDecorateCentralSessionTurn(sec, ordinal, status){
   sec.dataset.component='session-turn';
-  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal';
+  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt';
   sec.dataset.turnOrdinal=String(ordinal);
   sec.dataset.slot='session-turn-content';
   const head=sec.querySelector('.turn-head');
