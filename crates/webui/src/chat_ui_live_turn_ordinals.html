@@ -1,11 +1,15 @@
 
 <template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal">
   <div data-slot="session-turn-content">
-    <div data-slot="session-turn-message-container" data-turn-ordinal="0">
-      <div data-slot="session-turn-message-content" data-component="message-part">Turn N central session heading</div>
+    <div data-slot="session-turn-message-container" data-turn-ordinal="1">
+      <div data-slot="session-turn-message-content" data-component="message-part">Turn 1: Central session turn proof shell</div>
       <div data-slot="session-turn-assistant-content" data-component="assistant-parts">assistant-parts</div>
       <div data-slot="session-turn-thinking">Thinking / working…</div>
       <div data-slot="session-turn-diffs" data-component="session-turn-diffs-group"></div>
+      <button type="button">copy turn</button>
+      <button type="button">retry</button>
+      <button type="button">copy final answer</button>
+      <span data-proof="live-feature-prompt-marker">Please run a Forge file tool formatter proof</span>
     </div>
   </div>
 </template>
