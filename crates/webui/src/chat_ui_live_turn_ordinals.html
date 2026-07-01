@@ -1,0 +1,47 @@
+
+<script>
+// Source-backed parity anchors:
+// - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx
+// - anomalyco/opencode:packages/session-ui/src/components/message-part.tsx
+// Forge keeps this as local behavior: visible live session turns get stable ordinal
+// headers while streaming so browser proof pages show the same central turn shape
+// before and after the conversation is reloaded from durable storage.
+const forgeBaseAppendUser=appendUser;
+function forgeLiveTurnOrdinal(){
+  const existing=[...document.querySelectorAll('#messages .turn[data-component="session-turn"]')];
+  return existing.length+1;
+}
+function forgeTurnExcerpt(text){
+  const clean=String(text||'').replace(/\s+/g,' ').trim();
+  return clean.slice(0,72)||'Live prompt';
+}
+appendUser=function(t){
+  const sec=document.createElement('section');
+  const ordinal=forgeLiveTurnOrdinal();
+  sec.className='turn active';
+  sec.dataset.component='session-turn';
+  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal';
+  sec.dataset.turnOrdinal=String(ordinal);
+  sec.innerHTML='<div class="turn-head"><div><div class="turn-title"></div><div class="turn-sub"></div></div><div class="turn-actions"></div></div><div class="turn-body"></div>';
+  sec.querySelector('.turn-title').textContent=`Turn ${ordinal}: ${forgeTurnExcerpt(t)}`;
+  sec.querySelector('.turn-sub').textContent='live · working · waiting for assistant parts';
+  sec.querySelector('.turn-actions').appendChild(button('copy turn',()=>copyText(turnText(sec))));
+  sec.querySelector('.turn-actions').appendChild(button('retry',()=>retry(t)));
+  const body=sec.querySelector('.turn-body');
+  body.appendChild(part('user',t,'User prompt'));
+  const ap=document.createElement('div');
+  ap.className='assistant-parts';
+  ap.dataset.component='assistant-parts';
+  ap.dataset.proof='assistant-parts';
+  const thinking=document.createElement('div');
+  thinking.className='part thinking';
+  thinking.dataset.component='message-part';
+  thinking.dataset.proof='session-turn-thinking message-part';
+  thinking.textContent='Thinking / working…';
+  ap.appendChild(thinking);
+  body.appendChild(ap);
+  $('messages').appendChild(sec);
+  s.activeTurn=sec;
+  bottom();
+};
+</script>
