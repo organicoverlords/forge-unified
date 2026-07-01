@@ -69,7 +69,8 @@ out = {
         'png_size_redirection_guard': True,
         'chrome_print_pdf_visual_fallback': fallback == 'pdf',
         'browser_rendered_pdf_to_png_fallback': fallback == 'pdf',
-        'ci_pdf_first_strategy': fallback == 'pdf-first' or fallback == 'pdf',
+        'ci_pdf_first_strategy': fallback == 'pdf-first' or fallback == 'pdf' or fallback == 'pdf-only-failed',
+        'ci_screenshot_fallback_disabled_after_pdf_fail': fallback == 'pdf-only-failed',
         'screenshot_segmentation_fault_timeout_guard': True,
     },
 }
@@ -107,6 +108,16 @@ browser_proof_strategy() {
     printf 'pdf-first\n'
   else
     printf 'screenshot-first\n'
+  fi
+}
+
+allow_screenshot_after_pdf_fail() {
+  if [ -n "${FORGE_BROWSER_PROOF_ALLOW_SCREENSHOT_AFTER_PDF_FAIL:-}" ]; then
+    printf '%s\n' "$FORGE_BROWSER_PROOF_ALLOW_SCREENSHOT_AFTER_PDF_FAIL"
+  elif [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    printf '0\n'
+  else
+    printf '1\n'
   fi
 }
 
@@ -223,12 +234,13 @@ capture_direct() {
   mkdir -p "$PROOF_DIR" "$(dirname "$json_file")" "$(dirname "$png_file")" "$profile_dir" "$dom_profile_dir"
   : > "$log_file"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used
+  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used screenshot_after_pdf
   chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false none; return 1; }
   if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
   prefix="$(chrome_prefix)"
   requested_headless="${FORGE_CHROME_HEADLESS:-new}"
   strategy="$(browser_proof_strategy)"
+  screenshot_after_pdf="$(allow_screenshot_after_pdf_fail)"
   rm -f "$png_file" "$pdf_file"
   fallback_used=none
   rc=1
@@ -238,9 +250,13 @@ capture_direct() {
     attempt_pdf_to_png "$chrome" "$prefix" "$requested_headless" "$profile_dir-pdf" "$pdf_file" "$png_file" "$url" "$log_file"
     rc=$?
     if [ "$rc" -eq 0 ]; then fallback_used=pdf; fi
-    if [ "$(png_size "$png_file")" -le 1024 ] && [ "${FORGE_BROWSER_PROOF_ALLOW_SCREENSHOT_AFTER_PDF_FAIL:-1}" = "1" ]; then
+    if [ "$(png_size "$png_file")" -le 1024 ] && [ "$screenshot_after_pdf" = "1" ]; then
       attempt_screenshot_to_png "$chrome" "$prefix" "$requested_headless" "$profile_dir" "$png_file" "$url" "$log_file"
       rc=$?
+    elif [ "$(png_size "$png_file")" -le 1024 ]; then
+      fallback_used=pdf-only-failed
+      rc=1
+      printf '\n--- CI screenshot fallback skipped after PDF failure; avoiding known Chrome --screenshot segfault path ---\n' >> "$log_file"
     fi
   else
     printf '\n--- strategy: screenshot-first ---\n' >> "$log_file"
@@ -266,9 +282,10 @@ capture_direct() {
     printf 'headless_requested=%s\n' "$requested_headless"
     printf 'dbus_wrapped=%s\n' "$wrapped"
     printf 'strategy=%s\n' "$strategy"
+    printf 'screenshot_after_pdf_fail=%s\n' "$screenshot_after_pdf"
     printf 'screenshot_rc=%s dom_rc=%s png_bytes=%s pdf_bytes=%s fallback_used=%s\n' "$rc" "$dom_rc" "$(png_size "$png_file")" "$(pdf_size "$pdf_file")" "$fallback_used"
     printf 'fallback_attempts=ci-pdf-first,headless-old-single-process,browser-pdf-to-png\n'
-    printf 'path_parent_guard=true png_size_redirection_guard=true screenshot_segmentation_fault_timeout_guard=true\n'
+    printf 'path_parent_guard=true png_size_redirection_guard=true screenshot_segmentation_fault_timeout_guard=true ci_screenshot_fallback_disabled_after_pdf_fail=%s\n' "$([ "$screenshot_after_pdf" = "0" ] && printf true || printf false)"
   } >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
     write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false "$wrapped" "$fallback_used"
@@ -291,4 +308,10 @@ if printf '%s' "$QUERY_SUFFIX" | grep -Fq 'proof=final'; then
 fi
 if [ "$MODE" = "tool" ]; then
   for marker in "Write file" "Edit file" "Delete file" "technical details" "human-tool-label"; do grep -Fq "$marker" "$BROWSER_JSON"; done
+fi
+if [ "$MODE" = "event" ]; then
+  capture_direct "$BASE/events/$CONV_ID" "$EVENT_JSON" "$EVENT_PNG" event
+  jq -e '.success == true' "$EVENT_JSON" >/dev/null
+  test -s "$EVENT_PNG"
+  for marker in "event-rail-proof" "Event rail" "Session timeline" "message_started" "tool_call" "agent.completed"; do grep -Fq "$marker" "$EVENT_JSON"; done
 fi
