@@ -1,12 +1,23 @@
 
+<template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal">
+  <div data-slot="session-turn-content">
+    <div data-slot="session-turn-message-container" data-turn-ordinal="0">
+      <div data-slot="session-turn-message-content" data-component="message-part">Turn N central session heading</div>
+      <div data-slot="session-turn-assistant-content" data-component="assistant-parts">assistant-parts</div>
+      <div data-slot="session-turn-thinking">Thinking / working…</div>
+      <div data-slot="session-turn-diffs" data-component="session-turn-diffs-group"></div>
+    </div>
+  </div>
+</template>
 <script>
 // Source-backed parity anchors:
 // - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx
 // - anomalyco/opencode:packages/session-ui/src/components/message-part.tsx
-// Forge keeps this as local behavior: visible live session turns get stable ordinal
-// headers while streaming so browser proof pages show the same central turn shape
-// before and after the conversation is reloaded from durable storage.
+// Forge keeps this as local behavior: visible live and reloaded session turns get
+// stable ordinal headers plus OpenCode-shaped data slots so browser proof pages
+// expose the same central turn structure before and after durable reload.
 const forgeBaseAppendUser=appendUser;
+const forgeBaseTurn=turn;
 function forgeLiveTurnOrdinal(){
   const existing=[...document.querySelectorAll('#messages .turn[data-component="session-turn"]')];
   return existing.length+1;
@@ -15,13 +26,35 @@ function forgeTurnExcerpt(text){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   return clean.slice(0,72)||'Live prompt';
 }
+function forgeDecorateCentralSessionTurn(sec, ordinal, status){
+  sec.dataset.component='session-turn';
+  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal';
+  sec.dataset.turnOrdinal=String(ordinal);
+  sec.dataset.slot='session-turn-content';
+  const head=sec.querySelector('.turn-head');
+  if(head) head.dataset.slot='session-turn-message-container';
+  const body=sec.querySelector('.turn-body');
+  if(body) body.dataset.slot='session-turn-message-content';
+  const assistants=sec.querySelector('.assistant-parts');
+  if(assistants) assistants.dataset.slot='session-turn-assistant-content';
+  const thinking=sec.querySelector('.thinking');
+  if(thinking) thinking.dataset.slot='session-turn-thinking';
+  const diff=sec.querySelector('[data-component="session-turn-diffs-group"]');
+  if(diff) diff.dataset.slot='session-turn-diffs';
+  const title=sec.querySelector('.turn-title');
+  if(title && !/^Turn\s+\d+:/.test(title.textContent||'')) title.textContent=`Turn ${ordinal}: ${title.textContent||'Central session turn'}`;
+  const sub=sec.querySelector('.turn-sub');
+  if(sub && status) sub.textContent=status;
+  return sec;
+}
+turn=function(t,i,active){
+  const sec=forgeBaseTurn(t,i,active);
+  return forgeDecorateCentralSessionTurn(sec,i,null);
+};
 appendUser=function(t){
   const sec=document.createElement('section');
   const ordinal=forgeLiveTurnOrdinal();
   sec.className='turn active';
-  sec.dataset.component='session-turn';
-  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal';
-  sec.dataset.turnOrdinal=String(ordinal);
   sec.innerHTML='<div class="turn-head"><div><div class="turn-title"></div><div class="turn-sub"></div></div><div class="turn-actions"></div></div><div class="turn-body"></div>';
   sec.querySelector('.turn-title').textContent=`Turn ${ordinal}: ${forgeTurnExcerpt(t)}`;
   sec.querySelector('.turn-sub').textContent='live · working · waiting for assistant parts';
@@ -40,6 +73,7 @@ appendUser=function(t){
   thinking.textContent='Thinking / working…';
   ap.appendChild(thinking);
   body.appendChild(ap);
+  forgeDecorateCentralSessionTurn(sec,ordinal,'live · working · waiting for assistant parts');
   $('messages').appendChild(sec);
   s.activeTurn=sec;
   bottom();
