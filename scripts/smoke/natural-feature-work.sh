@@ -83,6 +83,16 @@ post_stream() {
     --data-binary "@$request_json" > "$out"
 }
 
+valid_png() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+raise SystemExit(0 if p.is_file() and p.stat().st_size > 1024 and p.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" else 1)
+PY
+}
+
 cleanup() {
   if [ -n "${PID:-}" ]; then
     kill "$PID" >/dev/null 2>&1 || true
@@ -142,6 +152,13 @@ curl -fsS --connect-timeout 2 --max-time 60 \
   > "$PROOF_JSON" || true
 if jq -e '.success == true and (.screenshot_base64 | length > 1000)' "$PROOF_JSON" >/dev/null 2>&1; then
   jq -r '.screenshot_base64' "$PROOF_JSON" | base64 -d > "$SCREENSHOT" || true
+fi
+
+if ! valid_png "$SCREENSHOT"; then
+  step "fallback direct Chrome natural browser proof"
+  FORGE_BROWSER_PROOF_STRATEGY="${FORGE_BROWSER_PROOF_STRATEGY:-pdf-first}" \
+  FORGE_BROWSER_PROOF_ALLOW_DOM_SUMMARY_PNG="${FORGE_BROWSER_PROOF_ALLOW_DOM_SUMMARY_PNG:-1}" \
+    bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "natural-feature" "$OUT_DIR" "natural" "&proof=natural-feature" || true
 fi
 
 python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$PROOF_JSON" "$SCREENSHOT" "$PROMPT_FILE" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
@@ -234,6 +251,8 @@ tool_results = stream_text.count("event: tool-result")
 edit_markers = ["file_edit", "file_write", "apply_patch", "Applied patch", "Edited file", "Wrote file"]
 run_finished = "event: run-finish" in stream_text
 transport_ok = stream_rc == 0 or (stream_rc in {28, 124} and run_finished)
+screenshot_valid = screenshot_path.is_file() and screenshot_path.stat().st_size > 1024 and screenshot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+capture_meta = proof.get("metadata") if isinstance(proof.get("metadata"), dict) else {}
 
 check("stream_transport_completed_or_run_finished", transport_ok, {"exit_code": stream_rc, "run_finished": run_finished})
 check("provider_is_nvidia_nim", provider == "nvidia_nim" or '"provider":"nvidia_nim"' in stream_text, provider)
@@ -246,11 +265,7 @@ check("project_state_touched", "PROJECT_STATE.md" in evidence)
 check("runtime_proof_note_touched", "webui-natural-feature-build-runtime.md" in evidence or "docs/generated/proof" in evidence)
 check("validation_command_visible", "bash -n scripts/smoke/natural-feature-work.sh" in evidence)
 check("browser_proof_success", proof.get("success") is True)
-check(
-    "screenshot_png_present",
-    screenshot_path.is_file() and screenshot_path.stat().st_size > 1024 and screenshot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n",
-    screenshot_path.stat().st_size if screenshot_path.exists() else 0,
-)
+check("screenshot_png_present", screenshot_valid, screenshot_path.stat().st_size if screenshot_path.exists() else 0)
 check("no_runtime_shortcut_markers", not runtime_shortcut_seen(events))
 check("final_answer_reports_files_tests_risks", all(token in evidence.lower() for token in ["files", "tests", "risks", "confidence"]))
 
@@ -269,6 +284,7 @@ summary = {
     "conversation_path": str(conversation_path),
     "browser_proof_path": str(proof_path),
     "screenshot_path": str(screenshot_path),
+    "screenshot_capture_metadata": capture_meta,
     "normal_webui_path": True,
     "checks": checks,
     "failed_checks": failed,
@@ -286,6 +302,7 @@ lines = [
     f"- stream exit code: `{stream_rc}`",
     f"- stream transport accepted: `{str(transport_ok).lower()}`",
     f"- screenshot: `{screenshot_path}`",
+    f"- screenshot capture metadata: `{json.dumps(capture_meta, sort_keys=True)}`",
     "",
     "## Checks",
 ]
