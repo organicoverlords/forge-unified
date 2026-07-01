@@ -67,11 +67,14 @@ out = {
         'single_process_retry': True,
         'screenshot_path_parent_guard': True,
         'png_size_redirection_guard': True,
-        'chrome_print_pdf_visual_fallback': fallback == 'pdf',
-        'browser_rendered_pdf_to_png_fallback': fallback == 'pdf',
-        'ci_pdf_first_strategy': fallback == 'pdf-first' or fallback == 'pdf' or fallback == 'pdf-only-failed',
+        'chrome_print_pdf_visual_fallback': fallback in {'pdf', 'pdf-curl-dom'},
+        'browser_rendered_pdf_to_png_fallback': fallback in {'pdf', 'pdf-curl-dom'},
+        'ci_pdf_first_strategy': fallback in {'pdf-first', 'pdf', 'pdf-only-failed', 'pdf-curl-dom'},
         'ci_screenshot_fallback_disabled_after_pdf_fail': fallback == 'pdf-only-failed',
         'screenshot_segmentation_fault_timeout_guard': True,
+        'ci_curl_dom_snapshot_default': fallback in {'pdf-curl-dom', 'curl-dom'} or 'ci_curl_dom_snapshot_default=true' in log,
+        'chrome_dom_refresh_opt_in': 'chrome_dom_refresh_opt_in=false' in log,
+        'bounded_visual_attempts': True,
     },
 }
 Path(json_path).parent.mkdir(parents=True, exist_ok=True)
@@ -121,21 +124,41 @@ allow_screenshot_after_pdf_fail() {
   fi
 }
 
+refresh_dom_with_chrome() {
+  if [ -n "${FORGE_BROWSER_PROOF_REFRESH_DOM_WITH_CHROME:-}" ]; then
+    printf '%s\n' "$FORGE_BROWSER_PROOF_REFRESH_DOM_WITH_CHROME"
+  elif [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    printf '0\n'
+  else
+    printf '1\n'
+  fi
+}
+
+chrome_attempt_timeout() {
+  local kind="$1"
+  case "$kind" in
+    pdf) printf '%s\n' "${FORGE_BROWSER_PROOF_PDF_TIMEOUT_SECONDS:-18}" ;;
+    screenshot) printf '%s\n' "${FORGE_BROWSER_PROOF_SCREENSHOT_TIMEOUT_SECONDS:-16}" ;;
+    dom) printf '%s\n' "${FORGE_BROWSER_PROOF_DOM_TIMEOUT_SECONDS:-12}" ;;
+    *) printf '15\n' ;;
+  esac
+}
+
 run_chrome_screenshot_attempt() {
   local chrome="$1" prefix="$2" headless_mode="$3" profile_dir="$4" png_file="$5" url="$6" log_file="$7" extra_flags="$8" attempt_label="$9"
   mkdir -p "$(dirname "$png_file")" "$profile_dir"
   {
     printf '\n--- screenshot attempt: %s ---\n' "$attempt_label"
-    printf 'headless=%s extra_flags=%s\n' "$headless_mode" "$extra_flags"
+    printf 'headless=%s extra_flags=%s timeout_seconds=%s\n' "$headless_mode" "$extra_flags" "$(chrome_attempt_timeout screenshot)"
   } >> "$log_file"
-  timeout 25s bash -c "$prefix \"$chrome\" \
+  timeout "$(chrome_attempt_timeout screenshot)s" bash -c "$prefix \"$chrome\" \
     --headless=$headless_mode \
     $(printf '%s ' $(chrome_common_flags "$profile_dir")) \
     $extra_flags \
     --screenshot=\"$png_file\" \
     --window-size=1440,1000 \
-    --timeout=12000 \
-    --virtual-time-budget=4000 \
+    --timeout=8000 \
+    --virtual-time-budget=2500 \
     \"$url\"" >> "$log_file" 2>&1
 }
 
@@ -144,16 +167,16 @@ run_chrome_pdf_attempt() {
   mkdir -p "$(dirname "$pdf_file")" "$profile_dir"
   {
     printf '\n--- browser-rendered PDF visual fallback: %s ---\n' "$attempt_label"
-    printf 'headless=%s pdf=%s\n' "$headless_mode" "$pdf_file"
+    printf 'headless=%s pdf=%s timeout_seconds=%s\n' "$headless_mode" "$pdf_file" "$(chrome_attempt_timeout pdf)"
   } >> "$log_file"
-  timeout 35s bash -c "$prefix \"$chrome\" \
+  timeout "$(chrome_attempt_timeout pdf)s" bash -c "$prefix \"$chrome\" \
     --headless=$headless_mode \
     $(printf '%s ' $(chrome_common_flags "$profile_dir")) \
     --print-to-pdf=\"$pdf_file\" \
     --print-to-pdf-no-header \
     --window-size=1440,1000 \
-    --timeout=16000 \
-    --virtual-time-budget=5000 \
+    --timeout=9000 \
+    --virtual-time-budget=2500 \
     \"$url\"" >> "$log_file" 2>&1
 }
 
@@ -215,12 +238,12 @@ attempt_screenshot_to_png() {
 run_chrome_dom_attempt() {
   local chrome="$1" prefix="$2" headless_mode="$3" profile_dir="$4" dom_file="$5" url="$6" log_file="$7"
   mkdir -p "$(dirname "$dom_file")" "$profile_dir"
-  timeout 25s bash -c "$prefix \"$chrome\" \
+  timeout "$(chrome_attempt_timeout dom)s" bash -c "$prefix \"$chrome\" \
     --headless=$headless_mode \
     $(printf '%s ' $(chrome_common_flags "$profile_dir")) \
     --dump-dom \
-    --timeout=12000 \
-    --virtual-time-budget=5000 \
+    --timeout=7000 \
+    --virtual-time-budget=2000 \
     \"$url\"" > "$dom_file.tmp" 2>> "$log_file"
 }
 
@@ -234,13 +257,14 @@ capture_direct() {
   mkdir -p "$PROOF_DIR" "$(dirname "$json_file")" "$(dirname "$png_file")" "$profile_dir" "$dom_profile_dir"
   : > "$log_file"
   curl -fsS --connect-timeout 2 --max-time 20 "$url" -o "$dom_file"
-  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used screenshot_after_pdf
+  local chrome wrapped prefix requested_headless strategy dom_rc rc fallback_used screenshot_after_pdf refresh_dom
   chrome="$(find_chrome)" || { printf 'chrome not found\n' > "$log_file"; write_browser_json "$url" "$dom_file" "$png_file" "$json_file" "$log_file" false false none; return 1; }
   if [ "${FORGE_CHROME_USE_DBUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null 2>&1; then wrapped=true; else wrapped=false; fi
   prefix="$(chrome_prefix)"
   requested_headless="${FORGE_CHROME_HEADLESS:-new}"
   strategy="$(browser_proof_strategy)"
   screenshot_after_pdf="$(allow_screenshot_after_pdf_fail)"
+  refresh_dom="$(refresh_dom_with_chrome)"
   rm -f "$png_file" "$pdf_file"
   fallback_used=none
   rc=1
@@ -268,14 +292,26 @@ capture_direct() {
       if [ "$rc" -eq 0 ]; then fallback_used=pdf; fi
     fi
   fi
-  run_chrome_dom_attempt "$chrome" "$prefix" "$requested_headless" "$dom_profile_dir" "$dom_file" "$url" "$log_file"
-  dom_rc=$?
-  if [ "$dom_rc" -ne 0 ] || [ ! -s "$dom_file.tmp" ]; then
-    run_chrome_dom_attempt "$chrome" "$prefix" "old" "$dom_profile_dir-old" "$dom_file" "$url" "$log_file"
+  if [ "$refresh_dom" = "1" ]; then
+    run_chrome_dom_attempt "$chrome" "$prefix" "$requested_headless" "$dom_profile_dir" "$dom_file" "$url" "$log_file"
     dom_rc=$?
+    if [ "$dom_rc" -ne 0 ] || [ ! -s "$dom_file.tmp" ]; then
+      run_chrome_dom_attempt "$chrome" "$prefix" "old" "$dom_profile_dir-old" "$dom_file" "$url" "$log_file"
+      dom_rc=$?
+    fi
+  else
+    dom_rc=0
+    printf '\n--- CI DOM refresh skipped; using initial WebUI HTML fetched from the same URL ---\n' >> "$log_file"
+    printf 'ci_curl_dom_snapshot_default=true chrome_dom_refresh_opt_in=false\n' >> "$log_file"
   fi
   set -e
-  if [ "$dom_rc" -eq 0 ] && [ -s "$dom_file.tmp" ]; then mv "$dom_file.tmp" "$dom_file"; else rm -f "$dom_file.tmp"; fi
+  if [ "$refresh_dom" = "1" ]; then
+    if [ "$dom_rc" -eq 0 ] && [ -s "$dom_file.tmp" ]; then mv "$dom_file.tmp" "$dom_file"; else rm -f "$dom_file.tmp"; fi
+  else
+    rm -f "$dom_file.tmp"
+  fi
+  if [ "$fallback_used" = "pdf" ] && [ "$refresh_dom" != "1" ]; then fallback_used=pdf-curl-dom; fi
+  if [ "$fallback_used" = "none" ] && [ "$refresh_dom" != "1" ]; then fallback_used=curl-dom; fi
   {
     printf '\n--- forge browser proof diagnostics ---\n'
     printf 'chrome=%s\n' "$chrome"
@@ -283,8 +319,9 @@ capture_direct() {
     printf 'dbus_wrapped=%s\n' "$wrapped"
     printf 'strategy=%s\n' "$strategy"
     printf 'screenshot_after_pdf_fail=%s\n' "$screenshot_after_pdf"
+    printf 'refresh_dom_with_chrome=%s\n' "$refresh_dom"
     printf 'screenshot_rc=%s dom_rc=%s png_bytes=%s pdf_bytes=%s fallback_used=%s\n' "$rc" "$dom_rc" "$(png_size "$png_file")" "$(pdf_size "$pdf_file")" "$fallback_used"
-    printf 'fallback_attempts=ci-pdf-first,headless-old-single-process,browser-pdf-to-png\n'
+    printf 'fallback_attempts=ci-pdf-first,headless-old-single-process,browser-pdf-to-png,bounded-dom-refresh\n'
     printf 'path_parent_guard=true png_size_redirection_guard=true screenshot_segmentation_fault_timeout_guard=true ci_screenshot_fallback_disabled_after_pdf_fail=%s\n' "$([ "$screenshot_after_pdf" = "0" ] && printf true || printf false)"
   } >> "$log_file" 2>/dev/null || true
   if [ "$rc" -ne 0 ] && [ ! -s "$png_file" ]; then
