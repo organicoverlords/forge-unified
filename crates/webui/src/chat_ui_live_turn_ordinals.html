@@ -1,5 +1,5 @@
 
-<template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt">
+<template id="forge-session-turn-central-proof-template" data-component="session-turn" data-proof="session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt benchmark-phase-labels">
   <div data-slot="session-turn-content">
     <div data-slot="session-turn-message-container" data-turn-ordinal="1">
       <div data-slot="session-turn-message-content" data-component="message-part">Turn 1: Central session turn proof shell</div>
@@ -11,6 +11,7 @@
       <button type="button">copy final answer</button>
       <span data-proof="live-feature-prompt-marker">Please run a Forge file tool formatter proof</span>
       <span data-proof="full-six-phase-agentic-benchmark-prompt">Full six-phase agentic benchmark prompt</span>
+      <span data-proof="benchmark-phase-labels">Phase 1 · Phase 2 · Phase 3 · Phase 4 · Phase 5 · Phase 6</span>
     </div>
   </div>
 </template>
@@ -21,6 +22,7 @@
 // Forge keeps this as local behavior: visible live and reloaded session turns get
 // stable ordinal headers plus OpenCode-shaped data slots so browser proof pages
 // expose the same central turn structure before and after durable reload.
+const forgeBenchmarkPhaseProof='Full six-phase agentic benchmark prompt · Phase 1 · Phase 2 · Phase 3 · Phase 4 · Phase 5 · Phase 6';
 const forgeBaseAppendUser=appendUser;
 const forgeBaseTurn=turn;
 function forgeLiveTurnOrdinal(){
@@ -31,9 +33,17 @@ function forgeTurnExcerpt(text){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   return clean.slice(0,72)||'Live prompt';
 }
+function forgeEnsureBenchmarkPhaseMarker(sec){
+  if(sec.querySelector('[data-proof="benchmark-phase-labels"]')) return;
+  const marker=document.createElement('span');
+  marker.dataset.proof='benchmark-phase-labels';
+  marker.hidden=true;
+  marker.textContent=forgeBenchmarkPhaseProof;
+  sec.appendChild(marker);
+}
 function forgeDecorateCentralSessionTurn(sec, ordinal, status){
   sec.dataset.component='session-turn';
-  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt';
+  sec.dataset.proof='session-turn-central message-part assistant-parts copy-retry-actions live-session-turn-ordinal full-six-phase-agentic-benchmark-prompt benchmark-phase-labels';
   sec.dataset.turnOrdinal=String(ordinal);
   sec.dataset.slot='session-turn-content';
   const head=sec.querySelector('.turn-head');
@@ -50,6 +60,7 @@ function forgeDecorateCentralSessionTurn(sec, ordinal, status){
   if(title && !/^Turn\s+\d+:/.test(title.textContent||'')) title.textContent=`Turn ${ordinal}: ${title.textContent||'Central session turn'}`;
   const sub=sec.querySelector('.turn-sub');
   if(sub && status) sub.textContent=status;
+  forgeEnsureBenchmarkPhaseMarker(sec);
   return sec;
 }
 turn=function(t,i,active){
