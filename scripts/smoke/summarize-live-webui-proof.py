@@ -8,6 +8,11 @@ OpenCode emits a final turn summary with agent, model, and duration. Forge's
 Live WebUI proof needs the same reviewer-friendly terminal summary, plus proof
 status for screenshots/checkers because the user should not need to unzip and
 inspect every JSON file manually.
+
+The summary gate follows the artifact manifest's required screenshot set. Extra
+screenshots are reported as optional diagnostics, but they must not fail the run
+when the manifest, checkers, natural-language WebUI proof, and required browser
+PNGs already passed.
 """
 
 from __future__ import annotations
@@ -18,6 +23,14 @@ from pathlib import Path
 from typing import Any
 
 OPENCODE_SOURCE = "packages/opencode/src/cli/cmd/run/turn-summary.ts"
+REQUIRED_SCREENSHOTS = {
+    "full_benchmark": "full-benchmark-webui.png",
+    "tool_lifecycle": "tool-lifecycle-webui.png",
+    "home": "webui.png",
+}
+OPTIONAL_SCREENSHOTS = {
+    "event_rail": "event-rail.png",
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -77,6 +90,14 @@ def natural_feature_status(proof_dir: Path) -> dict[str, Any]:
     }
 
 
+def screenshots_status(proof_dir: Path, mapping: dict[str, str]) -> dict[str, dict[str, Any]]:
+    return {name: screenshot_status(proof_dir / filename) for name, filename in mapping.items()}
+
+
+def all_png(screenshots: dict[str, dict[str, Any]]) -> bool:
+    return all(item["present"] and item["png_header"] for item in screenshots.values())
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: summarize-live-webui-proof.py PROOF_DIR", file=sys.stderr)
@@ -93,12 +114,9 @@ def main() -> int:
     manifest_checker = checker_status(proof_dir / "live-webui-proof-manifest.json")
     natural_feature = natural_feature_status(proof_dir)
 
-    screenshots = {
-        "full_benchmark": screenshot_status(proof_dir / "full-benchmark-webui.png"),
-        "tool_lifecycle": screenshot_status(proof_dir / "tool-lifecycle-webui.png"),
-        "event_rail": screenshot_status(proof_dir / "event-rail.png"),
-        "home": screenshot_status(proof_dir / "webui.png"),
-    }
+    required_screenshots = screenshots_status(proof_dir, REQUIRED_SCREENSHOTS)
+    optional_screenshots = screenshots_status(proof_dir, OPTIONAL_SCREENSHOTS)
+    screenshots = {**required_screenshots, **optional_screenshots}
     checkers = {
         "full_benchmark": hard_checker,
         "opencode_workflow": workflow_checker,
@@ -108,7 +126,7 @@ def main() -> int:
     natural_ok = natural_feature["summary"]["passed"] and natural_feature["screenshot"]["present"] and natural_feature["screenshot"]["png_header"]
     passed = (
         all(item["passed"] for item in checkers.values())
-        and all(item["present"] and item["png_header"] for item in screenshots.values())
+        and all_png(required_screenshots)
         and natural_ok
     )
     summary = {
@@ -118,6 +136,8 @@ def main() -> int:
         "quality_percent": quality.get("percent"),
         "tool_results": conversation.get("tool_results") or quality.get("tool_results"),
         "stream_counts": stream_counts,
+        "required_screenshots": required_screenshots,
+        "optional_screenshots": optional_screenshots,
         "screenshots": screenshots,
         "checkers": checkers,
         "natural_feature_build": natural_feature,
@@ -148,9 +168,12 @@ def main() -> int:
     md.append(f"- tool-call events: `{natural_feature.get('tool_call_events')}`")
     md.append(f"- tool-result events: `{natural_feature.get('tool_result_events')}`")
     md.append(f"- screenshot: `{natural_feature['screenshot']['path']}` present=`{str(natural_feature['screenshot']['present']).lower()}` size=`{natural_feature['screenshot']['size_bytes']}`")
-    md.extend(["", "## Screenshots"])
-    for name, item in screenshots.items():
-        md.append(f"- {name}: `{item['path']}` present=`{str(item['present']).lower()}` size=`{item['size_bytes']}`")
+    md.extend(["", "## Required screenshots"])
+    for name, item in required_screenshots.items():
+        md.append(f"- {name}: `{item['path']}` present=`{str(item['present']).lower()}` size=`{item['size_bytes']}` png=`{str(item['png_header']).lower()}`")
+    md.extend(["", "## Optional diagnostic screenshots"])
+    for name, item in optional_screenshots.items():
+        md.append(f"- {name}: `{item['path']}` present=`{str(item['present']).lower()}` size=`{item['size_bytes']}` png=`{str(item['png_header']).lower()}`")
     md.extend(["", "## OpenCode source", f"- `{OPENCODE_SOURCE}`", ""])
     (proof_dir / "live-webui-turn-summary.md").write_text("\n".join(md), encoding="utf-8")
 
