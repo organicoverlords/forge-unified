@@ -332,7 +332,7 @@ def main() -> int:
             "action-digest-running-count",
             "action-digest-pending-count",
             "copy action digest",
-            "data-owned-by=\"action-summaries\"",
+            "dataset.ownedBy='action-summaries'",
         ]),
     })
 
