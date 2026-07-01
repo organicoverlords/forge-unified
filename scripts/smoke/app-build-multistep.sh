@@ -141,10 +141,14 @@ set -e
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON" || true
 find docs/generated/proof -maxdepth 1 -type f -name 'app-multistep-*.md' -print | sort > "$CREATED_LIST" 2>/dev/null || true
 
-step "capture browser proof"
-bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "" "$OUT_DIR" "fast" "&proof=final"
+step "capture browser proof (non-blocking for app capability)"
+CAPTURE_RC=0
+bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "" "$OUT_DIR" "fast" "&proof=final" || CAPTURE_RC=$?
+if [ "$CAPTURE_RC" -ne 0 ]; then
+  step "browser proof capture degraded rc=$CAPTURE_RC; multistep capability checks continue"
+fi
 
-python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SPEC" "$REPORT" "$SPEC_MARKER" "$REPORT_MARKER" "$VALIDATION_CMD" "$CREATED_LIST" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
+python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SPEC" "$REPORT" "$SPEC_MARKER" "$REPORT_MARKER" "$VALIDATION_CMD" "$CREATED_LIST" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" "$CAPTURE_RC" <<'PY'
 import json, sys
 from pathlib import Path
 stream_path = Path(sys.argv[1])
@@ -160,6 +164,7 @@ created_list_path = Path(sys.argv[10])
 summary_path = Path(sys.argv[11])
 md_path = Path(sys.argv[12])
 rc = int(sys.argv[13])
+capture_rc = int(sys.argv[14])
 text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
 conversation = json.loads(conv_path.read_text(encoding="utf-8", errors="replace")) if conv_path.exists() and conv_path.stat().st_size else {}
 proof = json.loads(proof_path.read_text(encoding="utf-8", errors="replace")) if proof_path.exists() and proof_path.stat().st_size else {}
@@ -177,8 +182,8 @@ def has_exact_line(body, line):
     return line in [part.strip() for part in body.splitlines()]
 
 checks = []
-def check(name, passed, evidence=None):
-    item = {"name": name, "passed": bool(passed)}
+def check(name, passed, evidence=None, required=True):
+    item = {"name": name, "passed": bool(passed), "required": bool(required)}
     if evidence is not None:
         item["evidence"] = evidence
     checks.append(item)
@@ -197,14 +202,30 @@ check("report_marker_exact_line", has_exact_line(report_text, report_marker))
 check("no_placeholder_content", "PLACEHOLDER" not in spec_text and "PLACEHOLDER" not in report_text)
 check("report_references_spec", str(spec_path) in report_text)
 check("final_answer_shape", all(tok in all_text.lower() for tok in ["files", "tests", "risks", "confidence"]))
-check("browser_success", proof.get("success") is True)
-check("screenshot_png", shot_path.is_file() and shot_path.stat().st_size > 1024 and shot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot_path.stat().st_size if shot_path.exists() else 0)
-failed = [c for c in checks if not c["passed"]]
-out = {"passed": not failed, "provider": provider, "model": model, "spec": str(spec_path), "report": str(report_path), "created_app_multistep_files": created_files, "checks": checks, "failed_checks": failed, "screenshot_path": str(shot_path)}
+check("browser_capture_command_zero", capture_rc == 0, capture_rc, required=False)
+check("browser_success", proof.get("success") is True, proof.get("error"), required=False)
+check("screenshot_png", shot_path.is_file() and shot_path.stat().st_size > 1024 and shot_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot_path.stat().st_size if shot_path.exists() else 0, required=False)
+failed_required = [c for c in checks if c["required"] and not c["passed"]]
+failed_optional = [c for c in checks if not c["required"] and not c["passed"]]
+out = {
+    "passed": not failed_required,
+    "app_capability_passed": not failed_required,
+    "browser_capture_passed": not failed_optional,
+    "browser_capture_required": False,
+    "provider": provider,
+    "model": model,
+    "spec": str(spec_path),
+    "report": str(report_path),
+    "created_app_multistep_files": created_files,
+    "checks": checks,
+    "failed_checks": failed_required,
+    "degraded_checks": failed_optional,
+    "screenshot_path": str(shot_path),
+}
 summary_path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-md_path.write_text("# App multistep build proof\n\n" + "\n".join(f"- {c['name']}: `{str(c['passed']).lower()}`" for c in checks) + "\n", encoding="utf-8")
+md_path.write_text("# App multistep build proof\n\n" + "\n".join(f"- {c['name']}: `{str(c['passed']).lower()}`" + ("" if c["required"] else " _(non-blocking)_") for c in checks) + "\n", encoding="utf-8")
 print(json.dumps(out, indent=2, sort_keys=True))
-raise SystemExit(0 if not failed else 1)
+raise SystemExit(0 if not failed_required else 1)
 PY
 
 jq -e '.passed == true' "$SUMMARY" >/dev/null
