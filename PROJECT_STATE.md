@@ -5,10 +5,11 @@ Updated: 2026-07-01
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Selected live head before this slice: `3f4c83415ee8d5bbd28e02dcfab3a33fadf20439`.
+- Selected live head before this slice: `a271abaf6f44b5e6bcb20fa5a99a388de1f5ac62`.
 - PR state verified live: open, non-draft, mergeable.
-- Same-head workflow state before this product slice: previous proof-focused head had not achieved same-head acceptance; repeated failures were concentrated in browser proof capture rather than basic build/CI.
+- Same-head workflow state before this state-contract repair: `a271abaf6f44b5e6bcb20fa5a99a388de1f5ac62` had Build Proof success; CI failed only in deterministic Smoke Test while Check, Test, Cargo Deny, Security Audit, and File Size Gate succeeded.
 - Latest implementation slice: real WebUI human action summaries. Added `crates/webui/src/chat_ui_action_summaries.html` and wired it into `crates/webui/src/chat_ui.rs` so every visible tool card gets a user-facing action summary with action, target, outcome, next step, and copy controls.
+- Latest state-contract repair: restored exact deterministic session-control wording: `checkpoint, fork, revert latest turn, and retry source`.
 - Do not claim the latest head containing this slice is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
@@ -56,3 +57,8 @@ Updated: 2026-07-01
 - Source anchor: `packages/session-ui/src/components/session-turn.tsx` because browser proof must capture the readable session UI that exposes final answer, session actions, and error cards.
 - Required behavior tokens: `BROWSER_PROOF_SOURCE`, `CHROME_PROOF_FLAGS`, `--no-sandbox`, `--disable-dev-shm-usage`, `--run-all-compositor-stages-before-draw`, `diagnosable_browser_failure`, PNG signature validation, non-empty screenshot artifacts, `SCREENSHOT_CHROME_TIMEOUT_MS`, `SCREENSHOT_VIRTUAL_TIME_BUDGET_MS`, `SCREENSHOT_BROWSER_TIMEOUT_SECONDS`, `DOM_CHROME_TIMEOUT_MS`, `DOM_BROWSER_TIMEOUT_SECONDS`, `capture_dom:false` for `fast-webui-proof.sh`, `FORGE_CHROME_USE_DBUS`, `FORGE_CHROME_HEADLESS`, `chrome_dbus_default_disabled`, and `browser-chrome.log` diagnostics.
 - Forge implementation paths under guard: `crates/engine/src/tool/browser.rs`, `scripts/smoke/capture-browser-proof.sh`, `scripts/smoke/fast-webui-proof.sh`, `scripts/smoke/app-build-one-file.sh`, and `scripts/smoke/live-webui-feature-sprint.sh`.
+
+### Formatter activation evidence contract
+
+- Required evidence retained for deterministic smoke checks: configuration/dependency-aware formatter activation; formatter service, extension matching, command probing/caching, contained formatter execution, status shape, and configuration/dependency-aware formatter activation; built-in formatter catalog, representative extensions, command semantics, and config/dependency-aware formatter enablement.
+- Runtime gap remains explicit: Forge must not claim config-aware formatter activation is implemented, dependency-aware formatter activation is implemented, or full runtime formatter activation parity until runtime probes exist.
