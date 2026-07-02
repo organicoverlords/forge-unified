@@ -3,21 +3,28 @@
 .session-control-source-focus-trail strong{color:var(--text);font-weight:600;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-control-source-focus-trail-meta{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;min-width:0}
 .session-control-source-focus-trail-actions{display:flex;gap:.28rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.session-control-source-focus-trail-chip,.session-control-source-focus-return,.session-control-source-focus-nav{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-focus-trail-chip,.session-control-source-focus-return,.session-control-source-focus-nav,.session-control-source-focus-lock{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-control-source-focus-nav[disabled]{opacity:.45;cursor:not-allowed}
+.session-control-source-focus-lock[aria-pressed="true"]{border-color:color-mix(in srgb,var(--accent,#7aa2ff) 70%,var(--border));color:var(--text);background:color-mix(in srgb,var(--accent,#7aa2ff) 18%,transparent)}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-source-focus-trail session-control-source-focus-return session-control-source-focus-nav session-control-source-focus-position opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
+  const PROOF='session-control-source-focus-trail session-control-source-focus-return session-control-source-focus-nav session-control-source-focus-position session-control-source-focus-lock session-control-source-focus-follow-paused opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-autoscroll-pause-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
+  let followPaused=false;
+  let lockedKey='';
   function receipt(row){const raw=row?.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
+  function rowKey(row){const value=receipt(row);return String(value.receipt_id||value.sequence||row?.getAttribute('data-receipt-id')||'')}
   function rows(){return Array.from(document.querySelectorAll('.backend-session-control-event-row'))}
-  function activeRow(){return document.querySelector('.backend-session-control-event-row[data-source-map-jump-target="true"]')||document.querySelector('.backend-session-control-event-row[data-source-map-selected="true"]')}
+  function rowByKey(key){return rows().find(row=>rowKey(row)===key)}
+  function activeRow(){if(followPaused&&lockedKey){const locked=rowByKey(lockedKey);if(locked)return locked}return document.querySelector('.backend-session-control-event-row[data-source-map-jump-target="true"]')||document.querySelector('.backend-session-control-event-row[data-source-map-selected="true"]')}
   function selectedPanel(){return document.querySelector('.session-control-source-map-selected')}
   function chip(label,value){const span=document.createElement('span');span.className='session-control-source-focus-trail-chip';span.dataset.proof='session-control-source-focus-trail opencode-session-turn-diff-meta-shape';span.textContent=`${label}: ${value||'unknown'}`;return span}
   function sameGroup(a,b){const av=receipt(a),bv=receipt(b);return (av.source||'forge.webui.session_controls')===(bv.source||'forge.webui.session_controls')&&(av.action||'session_control')===(bv.action||'session_control')}
   function groupRows(row){return rows().filter(x=>sameGroup(row,x))}
-  function focusRow(row){if(!row)return;rows().forEach(x=>{x.removeAttribute('data-source-map-jump-target');x.removeAttribute('data-source-map-selected')});row.setAttribute('data-source-map-jump-target','true');row.setAttribute('data-source-map-selected','true');row.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});row.setAttribute('tabindex',row.getAttribute('tabindex')||'-1');try{row.focus({preventScroll:true})}catch{row.focus()}ensureTrail()}
+  function markFocused(row){rows().forEach(x=>{x.removeAttribute('data-source-map-jump-target');x.removeAttribute('data-source-map-selected')});row.setAttribute('data-source-map-jump-target','true');row.setAttribute('data-source-map-selected','true');lockedKey=rowKey(row)||lockedKey}
+  function focusRow(row){if(!row)return;markFocused(row);row.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});row.setAttribute('tabindex',row.getAttribute('tabindex')||'-1');try{row.focus({preventScroll:true})}catch{row.focus()}ensureTrail()}
   function navButton(label,row,enabled){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-nav';b.dataset.proof='session-control-source-focus-nav opencode-session-turn-diffs-toggle opencode-session-turn-diffs-more';b.textContent=label;b.disabled=!enabled;b.onclick=e=>{e.stopPropagation();if(enabled)focusRow(row)};return b}
+  function lockButton(row){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-lock';b.dataset.proof='session-control-source-focus-lock opencode-session-turn-autoscroll-pause-shape';b.setAttribute('aria-pressed',followPaused?'true':'false');b.textContent=followPaused?'resume live focus':'pause focus follow';b.onclick=e=>{e.stopPropagation();followPaused=!followPaused;if(followPaused){lockedKey=rowKey(row)||lockedKey;document.body?.setAttribute('data-source-focus-follow-paused','true')}else{document.body?.removeAttribute('data-source-focus-follow-paused')}ensureTrail()};return b}
   function ensureTrail(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.session-control-source-focus-trail').forEach(x=>x.remove());
@@ -25,6 +32,7 @@
     const panel=selectedPanel();
     const ledger=document.querySelector('.backend-session-control-ledger');
     if(!row||!ledger)return;
+    if(followPaused)markFocused(row);
     const value=receipt(row);
     const source=value.source||'forge.webui.session_controls';
     const action=value.action||'session_control';
@@ -33,12 +41,14 @@
     const trail=document.createElement('div');
     trail.className='session-control-source-focus-trail';
     trail.dataset.proof='session-control-source-focus-trail opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape';
+    if(followPaused)trail.dataset.proof+=' session-control-source-focus-follow-paused';
     const meta=document.createElement('div');
     meta.className='session-control-source-focus-trail-meta';
     meta.appendChild(chip('source',source));
     meta.appendChild(chip('action',action));
     meta.appendChild(chip('position',`${pos+1}/${group.length||1}`));
     meta.lastChild.dataset.proof+=' session-control-source-focus-position opencode-session-turn-diffs-group-shape';
+    if(followPaused){const paused=chip('follow','paused');paused.dataset.proof+=' session-control-source-focus-follow-paused opencode-session-turn-autoscroll-pause-shape';meta.appendChild(paused)}
     const title=document.createElement('strong');
     title.dataset.proof='opencode-session-turn-diff-path-shape';
     title.textContent=`focused receipt · ${id}`;
@@ -46,6 +56,7 @@
     const actions=document.createElement('div');actions.className='session-control-source-focus-trail-actions';
     actions.appendChild(navButton('previous source receipt',group[pos-1],pos>0));
     actions.appendChild(navButton('next source receipt',group[pos+1],pos<group.length-1));
+    actions.appendChild(lockButton(row));
     const back=document.createElement('button');
     back.type='button';
     back.className='mini-btn session-control-source-focus-return';
