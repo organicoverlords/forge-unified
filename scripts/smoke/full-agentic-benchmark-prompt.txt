@@ -35,7 +35,9 @@ Use real tools only. Do not print tool JSON in prose. Tool failures must be repa
 9. Phase 4 is mandatory and must be the very next tool operation after that `.agent_test` verification. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result. A final answer before this dedicated Phase 4 edit tool result is a failed run.
 10. Validate and inspect state with exactly this `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
 11. STOP USING TOOLS after the validation shell result in step 10. Do not run the validation command again. Do not inspect git status again. Do not write another file. Do not ask for more evidence. Write the final Markdown answer immediately.
-12. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from existing tool evidence that you have a successful dedicated file-editing tool result outside `.agent_test`; if not, continue with the Phase 4 edit instead of answering.
+12. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from existing tool evidence that you have both a successful dedicated file-editing tool result outside `.agent_test` and the step 10 validation shell result. If either one is missing, do not answer yet: continue with the missing Phase 4 edit or the exact validation shell command.
+
+Critical validation priority: after the `PROJECT_STATE.md` file-editing tool succeeds, the exact step 10 validation shell command is more important than any prose, todo update, report writing, or cleanup. Never send the final answer immediately after the edit. The next assistant action after the edit must be that exact validation shell command.
 
 # Phase 1 — Environment + repo inspection
 
@@ -59,7 +61,7 @@ Read all three files back with actual file_read tool calls before deleting anyth
 
 # Phase 4 — Judgment test
 
-Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. Validate with the exact step 10 shell command and inspect `git status`/`git diff` in that same single tool result. Do not send the Founder report or Technical report until the successful Phase 4 file-editing tool result exists.
+Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. After that edit, your next action must be the exact step 10 validation shell command and nothing else. Do not send the Founder report or Technical report until both the successful Phase 4 file-editing tool result and the successful validation shell result exist.
 
 # Phase 5 — Writing quality
 
