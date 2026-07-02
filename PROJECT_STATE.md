@@ -5,23 +5,24 @@ Updated: 2026-07-02
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current implementation head before this state note: `7c719ff5e175796528c169614d751e8721f64d82`; state-file update head is the next commit after this note.
+- Current implementation head before this state note: `abb40f6f04c06d95cc518ddd1799290a095ce514`; state-file update head is the next commit after this note.
 - PR state verified live: open, non-draft, mergeable.
 - Source-of-truth selection: started from the provided branch URL; open PR #3 remains the meaningful current app-change PR for this branch. Open PRs #2 and #1 are older/superseded for this work.
-- Latest same-head status inspected before this slice for `ede8c6c68ab25ce30962ffb516089e3bdcee98f4`: CI `28587843560`, Build Proof `28587843584`, Fast WebUI Proof `28587843608`, Live WebUI Feature Sprint `28587843553`, App Build Proof `28587843592`, and App Multistep Build Proof `28587843606` all succeeded.
-- Live WebUI success boundary for the pre-slice head: NVIDIA NIM natural WebUI proof passed on run `28587843553`; job `84763810602`; artifact `8038163630` (`live-webui-feature-sprint-proof`).
-- Latest implementation slice: added OpenCode-shaped WebUI session-control source-map selected receipt detail disclosure.
+- Latest same-head status inspected before this slice for `d8ce1c0007b4f35c538d7e8e0ceb8d1abc8055c0`: CI `28591240646`, Build Proof `28591240654`, Fast WebUI Proof `28591240628`, Live WebUI Feature Sprint `28591240673`, App Build Proof `28591240642`, and App Multistep Build Proof `28591240727` all succeeded.
+- Live WebUI success boundary for the pre-slice head: NVIDIA NIM natural WebUI proof passed on run `28591240673`; job `84775071486`; artifact `8039752400` (`live-webui-feature-sprint-proof`).
+- Latest implementation slice: added OpenCode-shaped lazy rendering for selected WebUI session-control source-map receipt detail.
 - Do not claim this latest post-state-update head is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
 - Updated `crates/webui/src/chat_ui_session_control_source_map.html`.
-- Added selected receipt detail disclosure with `aria-expanded` state and bounded raw receipt detail view.
-- Kept compact selected source/action/kind/status/receipt metadata visible before expansion.
-- Kept `copy selected receipt`, now including raw detail only when the detail disclosure is open.
-- Preserved source/action/status filter chips, clear filter, shown/hidden counts, selected row highlighting, and per-row `copy source map`.
-- Added proof hooks for `session-control-source-map-selected-detail`, `session-control-source-map-selected-detail-toggle`, and `opencode-session-turn-diff-view-shape`.
-- Recorded proof in `docs/generated/proof/session-control-source-map-detail-disclosure-20260702T1545EEST.md`.
+- Added `detailRenderable` and `detailFrame` state for selected receipt detail rendering.
+- Added `requestAnimationFrame` lazy detail rendering so raw selected receipt detail appears only after the detail disclosure is open and the frame has advanced.
+- Added a bounded pending row: `preparing receipt details…`.
+- Kept `copy selected receipt` from including raw detail until the lazy detail view has actually rendered.
+- Preserved source/action/status filter chips, clear filter, shown/hidden counts, selected row highlighting, selected metadata chips, and per-row `copy source map`.
+- Added proof hooks for `session-control-source-map-lazy-detail`, `session-control-source-map-selected-detail-pending`, and `opencode-session-turn-diff-view-lazy-shape`.
+- Recorded proof in `docs/generated/proof/session-control-source-map-lazy-detail-20260702T1650EEST.md`.
 
 ## Preserved implementation and proof markers
 
@@ -35,7 +36,7 @@ Updated: 2026-07-02
 - Preserved the grouped session-control ledger markers: `session-control-grouped-ledger`, `session-control-group-strip`, `session-control-group-row`, `session-control-group-toggle`, `session-control-group-detail`, `session-control-group-count`, `session-control-group-visible`, `session-control-group-overflow`, `session-control-group-show-all`, `session-control-group-show-less`, `session-control-group-status-summary`, `session-control-group-status-chip`, `session-control-group-copy-summary`, `session-control-group-path-meta`, `session-control-group-directory`, `session-control-group-filename`, `session-control-group-meta`, `session-control-group-latest`, `opencode-session-turn-diffs-group-shape`, `opencode-session-turn-diff-path-shape`, and `opencode-session-turn-diff-meta-shape`.
 - Preserved source-map markers: `session-control-source-map`, `session-control-source-map-source`, `session-control-source-map-action`, `session-control-source-map-receipt`, `copy-session-control-source-map`, `session-control-source-map-filter`, `session-control-source-map-clear`, `source-map-filtered-event-count`, and `opencode-session-turn-diff-meta-shape`.
 - Preserved selected source-map markers: `session-control-source-map-selected`, `session-control-source-map-select`, `session-control-source-map-selected-copy`, and `opencode-session-turn-sticky-accordion-header-shape`.
-- Preserved selected detail markers: `session-control-source-map-selected-detail`, `session-control-source-map-selected-detail-toggle`, and `opencode-session-turn-diff-view-shape`.
+- Preserved selected detail markers: `session-control-source-map-selected-detail`, `session-control-source-map-selected-detail-toggle`, `opencode-session-turn-diff-view-shape`, `session-control-source-map-lazy-detail`, `session-control-source-map-selected-detail-pending`, and `opencode-session-turn-diff-view-lazy-shape`.
 - Preserved the prior Live WebUI turn-summary gate fix: required screenshots are `full-benchmark-webui.png`, `tool-lifecycle-webui.png`, and `webui.png`; `event-rail.png` remains optional diagnostic proof.
 - Preserved prior central session-turn proof shell and benchmark evidence markers: `Full six-phase agentic benchmark prompt`, `Phase 1` through `Phase 6`, `Founder report`, `Technical report`, `.agent_test/repo_summary.md`, `.agent_test/action_plan.json`, `.agent_test/investigation.md`, `copy benchmark evidence`, `copy turn`, `retry`, assistant parts, thinking/working message part, and central session-turn proof hooks.
 - Preserved existing browser-facing controls: session-part hooks, tool card hooks, changed-file/file receipt summaries, action digest summaries, pins, review checklist, reviewed-action visibility filtering, and session-control/search receipts.
@@ -43,9 +44,9 @@ Updated: 2026-07-02
 
 ## Source-backed contracts
 
-- OpenCode source anchor used for this slice: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, especially `Accordion.Trigger`, `StickyAccordionHeader`, `data-slot="session-turn-diff-trigger"`, `data-slot="session-turn-diff-meta"`, `data-slot="session-turn-diff-view"`, the compact diff trigger/meta row, and explicit expansion of detail content.
+- OpenCode source anchor used for this slice: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, especially `createSignal(false)`, `createEffect(on(active, ... requestAnimationFrame(... setShown(true))))`, `Accordion.Trigger`, `StickyAccordionHeader`, `data-slot="session-turn-diff-trigger"`, `data-slot="session-turn-diff-meta"`, and `data-slot="session-turn-diff-view"`.
 - Existing OpenCode source anchors preserved: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, `anomalyco/opencode:packages/session-ui/src/components/message-part.tsx`, `anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx`, and `anomalyco/opencode:packages/opencode/src/cli/cmd/run/turn-summary.ts`.
-- Forge implementation paths for this slice: `crates/webui/src/chat_ui_session_control_source_map.html`, `PROJECT_STATE.md`, `docs/generated/proof/session-control-source-map-detail-disclosure-20260702T1545EEST.md`.
+- Forge implementation paths for this slice: `crates/webui/src/chat_ui_session_control_source_map.html`, `PROJECT_STATE.md`, `docs/generated/proof/session-control-source-map-lazy-detail-20260702T1650EEST.md`.
 - Browser proof gap remains explicit until a same-head workflow artifact from the new head contains valid readable PNGs from the browser-real capture path and the natural-language NVIDIA NIM WebUI run passes its proof checker.
 
 ## State markers kept for CI proof harness
@@ -92,4 +93,7 @@ Updated: 2026-07-02
 - select receipt
 - copy selected receipt
 - session-control source-map selected detail
+- session-control source-map lazy detail
+- session-control source-map selected detail pending
 - opencode-session-turn-diff-view-shape
+- opencode-session-turn-diff-view-lazy-shape
