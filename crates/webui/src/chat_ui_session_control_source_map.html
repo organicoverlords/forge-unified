@@ -1,15 +1,66 @@
 <style>
 .session-control-source-map{margin-top:.35rem;display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:.72rem}
 .session-control-source-map-chip{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.session-control-source-map-copy{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px}
+.session-control-source-map-filter{cursor:pointer;background:color-mix(in srgb,var(--surface,#111) 88%,transparent)}
+.session-control-source-map-filter[aria-pressed="true"]{border-color:var(--accent,#7aa2ff);color:var(--text);background:color-mix(in srgb,var(--accent,#7aa2ff) 16%,var(--surface,#111))}
+.session-control-source-map-copy,.session-control-source-map-clear{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px}
+.session-control-source-map-toolbar{margin-top:.25rem;display:flex;gap:.35rem;align-items:center;color:var(--muted);font-size:.72rem}
 .backend-session-control-event-row[data-source-map="true"]{outline:1px solid color-mix(in srgb,var(--accent,#7aa2ff) 18%,transparent)}
+.backend-session-control-event-row[data-source-map-hidden="true"]{display:none!important}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-source-map session-control-source-map-chip session-control-source-map-source session-control-source-map-action session-control-source-map-receipt copy-session-control-source-map opencode-session-turn-diff-meta-shape crates/webui/src/conversation_controls.rs crates/webui/src/chat_ui_session_controls.html crates/webui/src/chat_ui_session_control_search.html';
+  const PROOF='session-control-source-map session-control-source-map-chip session-control-source-map-source session-control-source-map-action session-control-source-map-receipt copy-session-control-source-map session-control-source-map-filter session-control-source-map-clear source-map-filtered-event-count opencode-session-turn-diff-meta-shape opencode-session-turn-diff-trigger-shape crates/webui/src/conversation_controls.rs crates/webui/src/chat_ui_session_controls.html crates/webui/src/chat_ui_session_control_search.html';
+  let filter=null;
   function receipt(row){const raw=row.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
   function chip(label,value,proof){const span=document.createElement('span');span.className='session-control-source-map-chip';span.dataset.proof=`session-control-source-map-chip ${proof}`;span.textContent=`${label}: ${value||'unknown'}`;return span}
   function summary(row){const value=receipt(row);return {source:value.source||'forge.webui.session_controls',action:value.action||'session_control',receipt_id:value.receipt_id||'',sequence:value.sequence||'',status:value.status||row.dataset.status||'recorded'}}
+  function filterChip(row,label,value,field,proof){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='mini-btn session-control-source-map-chip session-control-source-map-filter';
+    button.dataset.proof=`session-control-source-map-filter ${proof}`;
+    button.dataset.filterField=field;
+    button.dataset.filterValue=value||'';
+    button.setAttribute('aria-pressed',String(!!filter&&filter.field===field&&filter.value===(value||'')));
+    button.textContent=`${label}: ${value||'unknown'}`;
+    button.onclick=e=>{e.stopPropagation();const next={field,value:value||''};filter=filter&&filter.field===next.field&&filter.value===next.value?null:next;enhance()};
+    return button;
+  }
+  function matches(row){
+    if(!filter)return true;
+    const value=summary(row);
+    return String(value[filter.field]||'')===filter.value;
+  }
+  function applyFilter(){
+    let shown=0,hidden=0;
+    document.querySelectorAll('.backend-session-control-event-row').forEach(row=>{
+      if(row.dataset.kind==='overflow')return;
+      const visible=matches(row);
+      row.dataset.sourceMapHidden=visible?'false':'true';
+      if(visible)shown++;else hidden++;
+    });
+    document.querySelectorAll('.session-control-source-map-toolbar').forEach(x=>x.remove());
+    const head=document.querySelector('.session-head');
+    if(head&&filter){
+      const toolbar=document.createElement('div');
+      toolbar.className='session-control-source-map-toolbar';
+      toolbar.dataset.proof='session-control-source-map-filter source-map-filtered-event-count opencode-session-turn-diff-trigger-shape';
+      const count=document.createElement('span');
+      count.dataset.proof='source-map-filtered-event-count';
+      count.textContent=`source map filter: ${filter.field}=${filter.value} · ${shown} shown · ${hidden} hidden`;
+      const clear=document.createElement('button');
+      clear.type='button';
+      clear.className='mini-btn session-control-source-map-clear';
+      clear.dataset.proof='session-control-source-map-clear session-control-source-map-filter';
+      clear.textContent='clear source-map filter';
+      clear.onclick=e=>{e.stopPropagation();filter=null;enhance()};
+      toolbar.appendChild(count);
+      toolbar.appendChild(clear);
+      const ledger=head.querySelector('.backend-session-control-ledger')||head;
+      ledger.insertAdjacentElement('beforebegin',toolbar);
+    }
+  }
   function sourceMap(row){const value=summary(row);return [
     `source=${value.source}`,
     `action=${value.action}`,
@@ -26,9 +77,10 @@
     const wrap=document.createElement('div');
     wrap.className='session-control-source-map';
     wrap.dataset.proof='session-control-source-map opencode-session-turn-diff-meta-shape';
-    wrap.appendChild(chip('source',value.source,'session-control-source-map-source'));
-    wrap.appendChild(chip('action',value.action,'session-control-source-map-action'));
+    wrap.appendChild(filterChip(row,'source',value.source,'source','session-control-source-map-source'));
+    wrap.appendChild(filterChip(row,'action',value.action,'action','session-control-source-map-action'));
     wrap.appendChild(chip('receipt',value.receipt_id||value.sequence,'session-control-source-map-receipt'));
+    wrap.appendChild(filterChip(row,'status',value.status,'status','session-control-source-map-status'));
     const button=document.createElement('button');
     button.type='button';
     button.className='mini-btn session-control-source-map-copy';
@@ -39,9 +91,18 @@
     const detail=row.querySelector('.backend-session-control-event-detail');
     if(detail)detail.insertAdjacentElement('beforebegin',wrap);else row.appendChild(wrap);
   }
+  function refreshPressed(){
+    document.querySelectorAll('.session-control-source-map-filter').forEach(button=>{
+      const field=button.dataset.filterField||'';
+      const value=button.dataset.filterValue||'';
+      button.setAttribute('aria-pressed',String(!!filter&&filter.field===field&&filter.value===value));
+    });
+  }
   function enhance(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.backend-session-control-event-row').forEach(decorate);
+    refreshPressed();
+    applyFilter();
   }
   const observer=new MutationObserver(()=>enhance());
   observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-session-control-event']});
