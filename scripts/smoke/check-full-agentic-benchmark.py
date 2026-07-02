@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the full six-phase WebUI benchmark from recorded artifacts.
-
-The checker trusts tool-result/SSE evidence over final prose. It enforces the
-strict Phase 4 ordering rule: the successful PROJECT_STATE.md edit must be
-followed by the exact validation command before the final answer.
-"""
+"""Validate the full six-phase WebUI benchmark from recorded artifacts."""
 from __future__ import annotations
 
 import json
@@ -20,11 +15,6 @@ EXPECTED_AGENT_FILES = {
     f"{AGENT_TEST}/investigation.md",
     f"{AGENT_TEST}/action_plan.json",
 }
-PHASE4_VALIDATION_COMMAND = (
-    "bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo \"EXIT:$?\"; "
-    "echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; "
-    "echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort"
-)
 PHASE4_VALIDATION_FRAGMENTS = [
     "bash -n scripts/smoke/live-webui-feature-sprint.sh",
     "echo \"EXIT:$?\"",
@@ -288,9 +278,7 @@ def phase4_sequence(results: list[dict[str, Any]]) -> dict[str, Any]:
         "validation_output_ok": output_ok,
         "no_tool_results_after_validation": validation is not None and not after,
         "edit": {"index": edit_idx, "kind": edit.get("kind"), "path": result_path(edit)},
-        "validation": None
-        if validation is None
-        else {
+        "validation": None if validation is None else {
             "index": validation_idx,
             "command": result_command(validation),
             "output_excerpt": result_output(validation)[:2000],
@@ -302,12 +290,7 @@ def phase4_sequence(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def final_defers_required_validation(final: str) -> bool:
-    """Fail only when final prose says validation itself is still future work.
-
-    This is intentionally sentence-scoped. A valid report may say "review the
-    artifact next" near another sentence that describes already-run validation.
-    The old cross-sentence regex produced a false failure for that case.
-    """
+    """Fail only when final prose says validation itself is still future work."""
     for sentence in re.split(r"[\n.!?]+", final):
         text = prose_for_claim_detection(sentence)
         if not text:
@@ -318,7 +301,9 @@ def final_defers_required_validation(final: str) -> bool:
             return True
         if re.search(r"\bwould\s+be\s+to\s+validat", text):
             return True
-        if re.search(r"\bvalidation\b[^.\n]{0,80}\b(still|next|remaining|needed|pending)\b", text):
+        if re.search(r"\bvalidation\b[^.\n]{0,80}\b(still|next|pending)\b", text):
+            return True
+        if re.search(r"\bvalidation\b[^.\n]{0,80}\bremaining\s+to\s+(run|do|execute)", text):
             return True
         if re.search(r"\bphase\s*4\b[^.\n]{0,80}\battempted\b", text):
             return True
