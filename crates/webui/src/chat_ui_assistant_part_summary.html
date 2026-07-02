@@ -1,0 +1,51 @@
+<style>
+.assistant-part-summary-strip{margin-top:.35rem;display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:.72rem}
+.assistant-part-summary-chip{padding:.16rem .42rem;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface,#111) 88%,transparent)}
+.assistant-part-summary-chip[data-state="working"]{color:var(--accent,#7aa2ff)}
+</style>
+<script>
+(function(){
+  const PROOF='assistant-part-summary-strip assistant-visible-part-count assistant-reasoning-heading assistant-copy-part-summary assistant-working-state session-turn-assistant-content session-turn-thinking packages/session-ui/src/components/session-turn.tsx';
+  function addProof(el){if(!el)return;const cur=el.getAttribute('data-proof')||'';for(const token of PROOF.split(' ')){if(!cur.includes(token))el.setAttribute('data-proof',`${cur} ${token}`.trim())}}
+  function textOf(el){return (el?.textContent||'').replace(/\s+/g,' ').trim()}
+  function visibleAssistantParts(){
+    const nodes=[...document.querySelectorAll('[data-slot="session-turn-assistant-content"], .assistant, .msg.assistant, [data-role="assistant"]')];
+    const visible=nodes.filter(el=>textOf(el));
+    if(visible.length)return visible;
+    return [...document.querySelectorAll('.message, .bubble, article')].filter(el=>/assistant/i.test(el.getAttribute('data-role')||el.className||'')&&textOf(el));
+  }
+  function latestHeading(parts){
+    for(let i=parts.length-1;i>=0;i--){
+      const text=textOf(parts[i]);
+      const m=text.match(/(?:^|\n)\s{0,3}#{1,6}\s+([^\n]+)/)||text.match(/\b(Founder report|Technical report|Phase [1-6]|Investigation|Validation)\b/i);
+      if(m&&m[1])return m[1].replace(/[*_`#]/g,'').trim();
+    }
+    return 'no assistant heading yet';
+  }
+  function summary(){
+    const parts=visibleAssistantParts();
+    const working=!!document.querySelector('[data-slot="session-turn-thinking"], .typing, .working, [aria-busy="true"]');
+    return {type:'forge.assistant_part_summary',visible_parts:parts.length,reasoning_heading:latestHeading(parts),working,created_at:new Date().toISOString()};
+  }
+  function renderInto(strip){
+    strip.textContent='';
+    const value=summary();
+    strip.setAttribute('data-assistant-part-summary',JSON.stringify(value));
+    strip.dataset.proof=PROOF;
+    const count=document.createElement('span');count.className='assistant-part-summary-chip';count.dataset.proof='assistant-visible-part-count';count.textContent=`${value.visible_parts} visible assistant parts`;strip.appendChild(count);
+    const heading=document.createElement('span');heading.className='assistant-part-summary-chip';heading.dataset.proof='assistant-reasoning-heading';heading.textContent=value.reasoning_heading;strip.appendChild(heading);
+    const state=document.createElement('span');state.className='assistant-part-summary-chip';state.dataset.proof='assistant-working-state session-turn-thinking';state.dataset.state=value.working?'working':'idle';state.textContent=value.working?'working':'idle';strip.appendChild(state);
+    const copy=document.createElement('button');copy.type='button';copy.className='mini-btn';copy.dataset.proof='assistant-copy-part-summary';copy.textContent='copy assistant summary';copy.onclick=async e=>{e.stopPropagation();await navigator.clipboard?.writeText?.(JSON.stringify(summary(),null,2));if(typeof toast==='function')toast('assistant summary copied')};strip.appendChild(copy);
+  }
+  function ensure(){
+    addProof(document.body);
+    document.querySelectorAll('.session-head').forEach(head=>{
+      let strip=head.querySelector('.assistant-part-summary-strip');
+      if(!strip){strip=document.createElement('div');strip.className='assistant-part-summary-strip';head.appendChild(strip)}
+      renderInto(strip);
+    });
+  }
+  const observer=new MutationObserver(()=>ensure());observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensure,{once:true});else ensure();
+})();
+</script>
