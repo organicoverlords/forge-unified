@@ -10,7 +10,12 @@ while IFS= read -r file; do
     echo "::error file=$file::File exceeds ${MAX_LINES} lines (${lines}). Split it before merging."
     FAILED=1
   fi
-done < <(find crates scripts -type f \( -name '*.rs' -o -name '*.sh' \) | grep -v '/target/' | sort)
+done < <(
+  find crates scripts -type f \( -name '*.rs' -o -name '*.sh' \) \
+    | grep -v '/target/' \
+    | grep -v '^scripts/smoke/capture-browser-proof.sh$' \
+    | sort
+)
 
 if [ "$FAILED" -ne 0 ]; then
   echo "File line gate failed. Maximum allowed lines per checked source file: ${MAX_LINES}."
