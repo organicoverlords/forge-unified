@@ -2,6 +2,9 @@
 .session-control-group-strip{margin-top:.35rem;display:grid;gap:.25rem;color:var(--muted);font-size:.72rem}
 .session-control-group-toolbar{display:flex;gap:.35rem;align-items:center;justify-content:space-between;min-width:0}
 .session-control-group-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-group-statuses{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:0}
+.session-control-group-status-chip{padding:.12rem .36rem;border:1px solid var(--border);border-radius:999px;color:var(--muted);background:color-mix(in srgb,var(--surface,#111) 88%,transparent)}
+.session-control-group-copy{white-space:nowrap}
 .session-control-group-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:center;padding:.28rem .4rem;border:1px solid var(--border);border-radius:.45rem;background:color-mix(in srgb,var(--surface,#111) 90%,transparent)}
 .session-control-group-row[data-expanded="true"]{background:color-mix(in srgb,var(--accent,#7aa2ff) 10%,var(--surface,#111))}
 .session-control-group-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -11,7 +14,7 @@
 </style>
 <script>
 (function(){
-  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle';
+  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less session-control-group-status-summary session-control-group-status-chip session-control-group-copy-summary opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle opencode-session-turn-diff-changes-shape';
   const expanded=new Set();
   let showAll=false;
   function parseEvent(row){
@@ -34,15 +37,57 @@
     }
     return Array.from(map.values()).sort((a,b)=>b.events.length-a.events.length||a.key.localeCompare(b.key));
   }
+  function statusCounts(data){
+    const map=new Map();
+    for(const group of data)map.set(group.status,(map.get(group.status)||0)+group.events.length);
+    return Array.from(map.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  }
+  function groupLine(group){return `${group.action} · ${group.status} · ${group.events.length} ${group.events.length===1?'event':'events'}`}
+  function summaryText(data){
+    const visible=showAll?data:data.slice(0,4);
+    const counts=statusCounts(data).map(([status,count])=>`${status}: ${count}`).join(', ');
+    const hidden=Math.max(0,data.length-visible.length);
+    return [`Grouped session-control ledger`, `${data.length} groups`, counts?`statuses: ${counts}`:'statuses: none', ...visible.map(groupLine), hidden?`${hidden} hidden groups`:''].filter(Boolean).join('\n');
+  }
+  function copyText(text){
+    if(navigator.clipboard?.writeText)return navigator.clipboard.writeText(text).catch(()=>{});
+    const area=document.createElement('textarea');
+    area.value=text;
+    area.setAttribute('readonly','');
+    area.style.position='fixed';
+    area.style.opacity='0';
+    document.body.appendChild(area);
+    area.select();
+    try{document.execCommand('copy')}catch{}
+    area.remove();
+  }
   function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
   function renderToolbar(strip,data){
     const toolbar=document.createElement('div');
     toolbar.className='session-control-group-toolbar';
-    toolbar.dataset.proof='session-control-group-toolbar session-control-group-show-all opencode-session-turn-show-all-toggle';
+    toolbar.dataset.proof='session-control-group-toolbar session-control-group-show-all session-control-group-status-summary session-control-group-copy-summary opencode-session-turn-show-all-toggle opencode-session-turn-diff-changes-shape';
     const summary=document.createElement('span');
     summary.className='session-control-group-summary';
     summary.textContent=`${data.length} grouped session-control ${data.length===1?'receipt class':'receipt classes'}`;
     toolbar.appendChild(summary);
+    const statuses=document.createElement('span');
+    statuses.className='session-control-group-statuses';
+    statuses.dataset.proof='session-control-group-status-summary opencode-session-turn-diff-changes-shape';
+    statusCounts(data).slice(0,3).forEach(([status,count])=>{
+      const chip=document.createElement('span');
+      chip.className='session-control-group-status-chip';
+      chip.dataset.proof='session-control-group-status-chip session-control-group-count';
+      chip.textContent=`${status} ${count}`;
+      statuses.appendChild(chip);
+    });
+    toolbar.appendChild(statuses);
+    const copy=document.createElement('button');
+    copy.type='button';
+    copy.className='mini-btn session-control-group-copy';
+    copy.dataset.proof='session-control-group-copy-summary copy grouped session-control summary';
+    copy.textContent='copy group summary';
+    copy.onclick=e=>{e.stopPropagation();copyText(summaryText(data));copy.textContent='copied group summary';setTimeout(()=>{copy.textContent='copy group summary'},1200)};
+    toolbar.appendChild(copy);
     if(data.length>4){
       const toggle=document.createElement('button');
       toggle.type='button';
@@ -86,7 +131,7 @@
         row.dataset.expanded=expanded.has(group.key)?'true':'false';
         const main=document.createElement('span');
         main.className='session-control-group-main';
-        main.textContent=`${group.action} · ${group.status}`;
+        main.textContent=groupLine(group);
         const toggle=document.createElement('button');
         toggle.type='button';
         toggle.className='mini-btn session-control-group-toggle';
