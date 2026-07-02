@@ -1,0 +1,85 @@
+name: Live WebUI Feature Sprint
+
+on:
+  pull_request:
+    branches: [master, main, dev]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Natural language feature prompt to run through Forge WebUI
+        required: false
+        type: string
+
+jobs:
+  live-webui-feature-sprint:
+    runs-on: ubuntu-latest
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
+      FORGE_FEATURE_PROMPT: ${{ github.event.inputs.prompt }}
+      FORGE_BENCH_MAX_ROUNDS: "44"
+      FORGE_BENCH_TIMEOUT_SECONDS: "900"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run live WebUI feature sprint
+        run: bash scripts/smoke/live-webui-feature-sprint.sh
+
+      - name: Run natural feature-build prompt through WebUI
+        env:
+          FORGE_NATURAL_OUT: forge-proof/live-webui-feature-sprint/natural-feature-work
+          FORGE_NATURAL_MAX_ROUNDS: "10"
+          FORGE_NATURAL_TIMEOUT_SECONDS: "420"
+        run: |
+          set -euo pipefail
+          bash scripts/smoke/natural-feature-work.sh
+          jq -e '.passed == true' forge-proof/live-webui-feature-sprint/natural-feature-work/summary.json >/dev/null
+
+      - name: Check full benchmark evidence and quality score
+        if: always()
+        run: |
+          set -euo pipefail
+          proof_dir="forge-proof/live-webui-feature-sprint"
+          conversation="$proof_dir/full-benchmark-conversation.json"
+          stream="$proof_dir/full-benchmark-stream.sse"
+          checker="$proof_dir/full-benchmark-checker.json"
+          workflow_checker="$proof_dir/opencode-workflow-checker.json"
+          quality_score="$proof_dir/quality-score.json"
+          proof_manifest="$proof_dir/live-webui-proof-manifest.json"
+          natural_summary="$proof_dir/natural-feature-work/summary.json"
+          natural_screenshot="$proof_dir/natural-feature-work/webui.png"
+          if [ ! -s "$conversation" ] || [ ! -s "$stream" ]; then
+            mkdir -p "$proof_dir"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$checker"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$workflow_checker"
+            printf '{"passed":false,"percent":0,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$quality_score"
+            printf '{"passed":false,"failed_checks":[{"name":"missing_full_benchmark_artifacts","passed":false}]}' > "$proof_manifest"
+            echo "::error::missing full benchmark conversation or stream artifact"
+            exit 1
+          fi
+          python3 scripts/smoke/check-full-agentic-benchmark.py "$conversation" "$stream" "$checker"
+          jq -e '.passed == true' "$checker" >/dev/null
+          python3 scripts/smoke/check-opencode-workflow-evidence.py "$conversation" "$stream" "$workflow_checker"
+          jq -e '.passed == true' "$workflow_checker" >/dev/null
+          python3 scripts/smoke/score-live-benchmark-quality.py "$proof_dir" "$quality_score"
+          jq -e '.passed == true and .percent >= 85' "$quality_score" >/dev/null
+          if [ ! -s "$natural_summary" ]; then
+            echo "::error::missing natural feature-build summary artifact"
+            exit 1
+          fi
+          jq -e '.passed == true' "$natural_summary" >/dev/null
+          test -s "$natural_screenshot"
+          python3 scripts/smoke/check-live-webui-proof-manifest.py "$proof_dir" "$proof_manifest"
+          jq -e '.passed == true' "$proof_manifest" >/dev/null
+          python3 scripts/smoke/summarize-live-webui-proof.py "$proof_dir"
+          jq -e '.passed == true' "$proof_dir/live-webui-turn-summary.json" >/dev/null
+
+      - name: Upload feature sprint proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-webui-feature-sprint-proof
+          path: forge-proof/live-webui-feature-sprint/

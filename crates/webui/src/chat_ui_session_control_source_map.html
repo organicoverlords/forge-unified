@@ -1,0 +1,212 @@
+<style>
+.session-control-source-map{margin-top:.35rem;display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:.72rem}
+.session-control-source-map-chip{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-map-filter{cursor:pointer;background:color-mix(in srgb,var(--surface,#111) 88%,transparent)}
+.session-control-source-map-filter[aria-pressed="true"],.session-control-source-map-select[aria-pressed="true"],.session-control-source-map-selected-detail-toggle[aria-expanded="true"]{border-color:var(--accent,#7aa2ff);color:var(--text);background:color-mix(in srgb,var(--accent,#7aa2ff) 16%,var(--surface,#111))}
+.session-control-source-map-copy,.session-control-source-map-clear,.session-control-source-map-select,.session-control-source-map-selected-copy,.session-control-source-map-selected-detail-toggle{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px}
+.session-control-source-map-toolbar{margin-top:.25rem;display:flex;gap:.35rem;align-items:center;color:var(--muted);font-size:.72rem}
+.session-control-source-map-selected{margin:.35rem 0;padding:.5rem .65rem;border:1px solid var(--border);border-radius:.75rem;background:color-mix(in srgb,var(--surface,#111) 92%,var(--accent,#7aa2ff) 8%);color:var(--text);font-size:.78rem}
+.session-control-source-map-selected-head{display:flex;justify-content:space-between;gap:.5rem;align-items:center;font-weight:600}
+.session-control-source-map-selected-actions{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}
+.session-control-source-map-selected-body{margin-top:.3rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.25rem;color:var(--muted)}
+.session-control-source-map-selected-detail,.session-control-source-map-selected-detail-pending{margin-top:.45rem;padding:.45rem;border:1px solid var(--border);border-radius:.55rem;background:color-mix(in srgb,var(--surface,#111) 86%,transparent);white-space:pre-wrap;max-height:14rem;overflow:auto;font-size:.72rem;color:var(--muted)}
+.backend-session-control-event-row[data-source-map="true"]{outline:1px solid color-mix(in srgb,var(--accent,#7aa2ff) 18%,transparent)}
+.backend-session-control-event-row[data-source-map-selected="true"]{outline:2px solid color-mix(in srgb,var(--accent,#7aa2ff) 58%,transparent)}
+.backend-session-control-event-row[data-source-map-hidden="true"]{display:none!important}
+</style>
+<script>
+(function(){
+  const PROOF='session-control-source-map session-control-source-map-lazy-detail session-control-source-map-selected-detail-pending session-control-source-map-chip session-control-source-map-source session-control-source-map-action session-control-source-map-receipt copy-session-control-source-map session-control-source-map-filter session-control-source-map-clear source-map-filtered-event-count session-control-source-map-selected session-control-source-map-select session-control-source-map-selected-copy session-control-source-map-selected-detail session-control-source-map-selected-detail-toggle opencode-session-turn-diff-meta-shape opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape crates/webui/src/conversation_controls.rs crates/webui/src/chat_ui_session_controls.html crates/webui/src/chat_ui_session_control_search.html';
+  let filter=null;
+  let selected=null;
+  let detailOpen=false;
+  let detailRenderable=false;
+  let detailFrame=0;
+  function receipt(row){const raw=row.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
+  function chip(label,value,proof){const span=document.createElement('span');span.className='session-control-source-map-chip';span.dataset.proof=`session-control-source-map-chip ${proof}`;span.textContent=`${label}: ${value||'unknown'}`;return span}
+  function summary(row){const value=receipt(row);return {source:value.source||'forge.webui.session_controls',action:value.action||'session_control',receipt_id:value.receipt_id||'',sequence:value.sequence||'',status:value.status||row.dataset.status||'recorded',kind:value.kind||row.dataset.kind||'event'}}
+  function selectedKey(row){const value=summary(row);return value.receipt_id||value.sequence||`${value.source}:${value.action}:${value.status}`}
+  function filterChip(row,label,value,field,proof){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='mini-btn session-control-source-map-chip session-control-source-map-filter';
+    button.dataset.proof=`session-control-source-map-filter ${proof}`;
+    button.dataset.filterField=field;
+    button.dataset.filterValue=value||'';
+    button.setAttribute('aria-pressed',String(!!filter&&filter.field===field&&filter.value===(value||'')));
+    button.textContent=`${label}: ${value||'unknown'}`;
+    button.onclick=e=>{e.stopPropagation();const next={field,value:value||''};filter=filter&&filter.field===next.field&&filter.value===next.value?null:next;enhance()};
+    return button;
+  }
+  function matches(row){
+    if(!filter)return true;
+    const value=summary(row);
+    return String(value[filter.field]||'')===filter.value;
+  }
+  function selectedRecord(){
+    if(!selected)return null;
+    return Array.from(document.querySelectorAll('.backend-session-control-event-row')).map(row=>({row,key:selectedKey(row),value:summary(row),raw:receipt(row)})).find(x=>x.key===selected)||null;
+  }
+  function selectedSummary(){const record=selectedRecord();return record?record.value:null}
+  function selectedRawText(){const record=selectedRecord();if(!record)return '';try{return JSON.stringify(record.raw,null,2)}catch{return String(record.raw?.raw||'')}}
+  function selectedText(){const value=selectedSummary();return value?[
+    `selected_receipt=${value.receipt_id||value.sequence||'missing'}`,
+    `source=${value.source}`,
+    `action=${value.action}`,
+    `kind=${value.kind}`,
+    `status=${value.status}`,
+    detailOpen&&detailRenderable?`detail=${selectedRawText()}`:''
+  ].filter(Boolean).join('\n'):''}
+  function scheduleDetailRender(){
+    detailRenderable=false;
+    detailFrame++;
+    const frame=detailFrame;
+    if(!detailOpen)return;
+    requestAnimationFrame(()=>{if(detailOpen&&frame===detailFrame){detailRenderable=true;enhance()}});
+  }
+  function renderSelectedPanel(){
+    document.querySelectorAll('.session-control-source-map-selected').forEach(x=>x.remove());
+    document.querySelectorAll('.backend-session-control-event-row').forEach(row=>{row.dataset.sourceMapSelected=selected&&selectedKey(row)===selected?'true':'false'});
+    const value=selectedSummary();
+    const head=document.querySelector('.session-head');
+    if(!head||!value)return;
+    const panel=document.createElement('div');
+    panel.className='session-control-source-map-selected';
+    panel.dataset.proof='session-control-source-map-selected opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-meta-shape';
+    const top=document.createElement('div');
+    top.className='session-control-source-map-selected-head';
+    top.dataset.proof='opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-trigger-shape';
+    const title=document.createElement('span');
+    title.textContent=`selected receipt · ${value.action}`;
+    const actions=document.createElement('div');
+    actions.className='session-control-source-map-selected-actions';
+    const detailButton=document.createElement('button');
+    detailButton.type='button';
+    detailButton.className='mini-btn session-control-source-map-selected-detail-toggle';
+    detailButton.dataset.proof='session-control-source-map-selected-detail-toggle opencode-session-turn-diff-trigger-shape opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape';
+    detailButton.setAttribute('aria-expanded',String(detailOpen));
+    detailButton.textContent=detailOpen?'hide receipt details':'show receipt details';
+    detailButton.onclick=e=>{e.stopPropagation();detailOpen=!detailOpen;scheduleDetailRender();enhance()};
+    const copyButton=document.createElement('button');
+    copyButton.type='button';
+    copyButton.className='mini-btn session-control-source-map-selected-copy';
+    copyButton.dataset.proof='session-control-source-map-selected-copy copy-session-control-source-map';
+    copyButton.textContent='copy selected receipt';
+    copyButton.onclick=async e=>{e.stopPropagation();await navigator.clipboard?.writeText?.(selectedText());if(typeof toast==='function')toast('selected session-control receipt copied')};
+    actions.appendChild(detailButton);actions.appendChild(copyButton);
+    top.appendChild(title);top.appendChild(actions);
+    const body=document.createElement('div');
+    body.className='session-control-source-map-selected-body';
+    body.dataset.proof='opencode-session-turn-diff-meta-shape';
+    [['source',value.source],['status',value.status],['kind',value.kind],['receipt',value.receipt_id||value.sequence||'missing']].forEach(([label,val])=>body.appendChild(chip(label,val,'session-control-source-map-selected')));
+    panel.appendChild(top);panel.appendChild(body);
+    if(detailOpen){
+      if(!detailRenderable){
+        const pending=document.createElement('div');
+        pending.className='session-control-source-map-selected-detail-pending';
+        pending.dataset.proof='session-control-source-map-lazy-detail session-control-source-map-selected-detail-pending opencode-session-turn-diff-view-lazy-shape';
+        pending.textContent='preparing receipt details…';
+        panel.appendChild(pending);
+      }else{
+        const detail=document.createElement('pre');
+        detail.className='session-control-source-map-selected-detail';
+        detail.dataset.proof='session-control-source-map-selected-detail session-control-source-map-lazy-detail opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape';
+        detail.textContent=selectedRawText()||'no raw receipt payload';
+        panel.appendChild(detail);
+      }
+    }
+    const ledger=head.querySelector('.backend-session-control-ledger')||head;
+    ledger.insertAdjacentElement('beforebegin',panel);
+  }
+  function applyFilter(){
+    let shown=0,hidden=0;
+    document.querySelectorAll('.backend-session-control-event-row').forEach(row=>{
+      if(row.dataset.kind==='overflow')return;
+      const visible=matches(row);
+      row.dataset.sourceMapHidden=visible?'false':'true';
+      if(visible)shown++;else hidden++;
+    });
+    document.querySelectorAll('.session-control-source-map-toolbar').forEach(x=>x.remove());
+    const head=document.querySelector('.session-head');
+    if(head&&filter){
+      const toolbar=document.createElement('div');
+      toolbar.className='session-control-source-map-toolbar';
+      toolbar.dataset.proof='session-control-source-map-filter source-map-filtered-event-count opencode-session-turn-diff-trigger-shape';
+      const count=document.createElement('span');
+      count.dataset.proof='source-map-filtered-event-count';
+      count.textContent=`source map filter: ${filter.field}=${filter.value} · ${shown} shown · ${hidden} hidden`;
+      const clear=document.createElement('button');
+      clear.type='button';
+      clear.className='mini-btn session-control-source-map-clear';
+      clear.dataset.proof='session-control-source-map-clear session-control-source-map-filter';
+      clear.textContent='clear source-map filter';
+      clear.onclick=e=>{e.stopPropagation();filter=null;enhance()};
+      toolbar.appendChild(count);
+      toolbar.appendChild(clear);
+      const ledger=head.querySelector('.backend-session-control-ledger')||head;
+      ledger.insertAdjacentElement('beforebegin',toolbar);
+    }
+  }
+  function sourceMap(row){const value=summary(row);return [
+    `source=${value.source}`,
+    `action=${value.action}`,
+    `kind=${value.kind}`,
+    value.receipt_id?`receipt_id=${value.receipt_id}`:'receipt_id=missing',
+    value.sequence?`sequence=${value.sequence}`:'sequence=missing',
+    `status=${value.status}`
+  ].join('\n')}
+  async function copy(row){await navigator.clipboard?.writeText?.(sourceMap(row));if(typeof toast==='function')toast('session control source map copied')}
+  function decorate(row){
+    if(row.dataset.sourceMap==='true'||row.dataset.kind==='overflow')return;
+    const value=summary(row);
+    row.dataset.sourceMap='true';
+    row.dataset.proof=((row.dataset.proof||'')+' '+PROOF).trim();
+    const wrap=document.createElement('div');
+    wrap.className='session-control-source-map';
+    wrap.dataset.proof='session-control-source-map opencode-session-turn-diff-meta-shape';
+    wrap.appendChild(filterChip(row,'source',value.source,'source','session-control-source-map-source'));
+    wrap.appendChild(filterChip(row,'action',value.action,'action','session-control-source-map-action'));
+    wrap.appendChild(chip('receipt',value.receipt_id||value.sequence,'session-control-source-map-receipt'));
+    wrap.appendChild(filterChip(row,'status',value.status,'status','session-control-source-map-status'));
+    const selectButton=document.createElement('button');
+    selectButton.type='button';
+    selectButton.className='mini-btn session-control-source-map-select';
+    selectButton.dataset.proof='session-control-source-map-select session-control-source-map-selected opencode-session-turn-sticky-accordion-header-shape';
+    selectButton.textContent='select receipt';
+    selectButton.onclick=e=>{e.stopPropagation();const key=selectedKey(row);if(selected===key){selected=null;detailOpen=false;scheduleDetailRender()}else{selected=key;detailOpen=false;scheduleDetailRender()}enhance()};
+    wrap.appendChild(selectButton);
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='mini-btn session-control-source-map-copy';
+    button.dataset.proof='copy-session-control-source-map session-control-source-map';
+    button.textContent='copy source map';
+    button.onclick=e=>{e.stopPropagation();copy(row)};
+    wrap.appendChild(button);
+    const detail=row.querySelector('.backend-session-control-event-detail');
+    if(detail)detail.insertAdjacentElement('beforebegin',wrap);else row.appendChild(wrap);
+  }
+  function refreshPressed(){
+    document.querySelectorAll('.session-control-source-map-filter').forEach(button=>{
+      const field=button.dataset.filterField||'';
+      const value=button.dataset.filterValue||'';
+      button.setAttribute('aria-pressed',String(!!filter&&filter.field===field&&filter.value===value));
+    });
+    document.querySelectorAll('.session-control-source-map-select').forEach(button=>{
+      const row=button.closest('.backend-session-control-event-row');
+      const active=!!row&&!!selected&&selectedKey(row)===selected;
+      button.setAttribute('aria-pressed',String(active));
+      button.textContent=active?'selected receipt':'select receipt';
+    });
+  }
+  function enhance(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    document.querySelectorAll('.backend-session-control-event-row').forEach(decorate);
+    refreshPressed();
+    applyFilter();
+    renderSelectedPanel();
+  }
+  const observer=new MutationObserver(()=>enhance());
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-session-control-event']});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
+</script>

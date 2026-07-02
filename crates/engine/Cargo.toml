@@ -33,6 +33,7 @@ url = { workspace = true }
 dirs = { workspace = true }
 urlencoding = { workspace = true }
 regex = { workspace = true }
+notify = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 image = "0.25"

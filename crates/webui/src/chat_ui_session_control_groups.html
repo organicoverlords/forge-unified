@@ -1,0 +1,210 @@
+<style>
+.session-control-group-strip{margin-top:.35rem;display:grid;gap:.25rem;color:var(--muted);font-size:.72rem}
+.session-control-group-toolbar{display:flex;gap:.35rem;align-items:center;justify-content:space-between;min-width:0}
+.session-control-group-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-group-statuses{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:0}
+.session-control-group-status-chip{padding:.12rem .36rem;border:1px solid var(--border);border-radius:999px;color:var(--muted);background:color-mix(in srgb,var(--surface,#111) 88%,transparent)}
+.session-control-group-copy{white-space:nowrap}
+.session-control-group-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:center;padding:.28rem .4rem;border:1px solid var(--border);border-radius:.45rem;background:color-mix(in srgb,var(--surface,#111) 90%,transparent)}
+.session-control-group-row[data-expanded="true"]{background:color-mix(in srgb,var(--accent,#7aa2ff) 10%,var(--surface,#111))}
+.session-control-group-main{min-width:0;display:grid;gap:.1rem}
+.session-control-group-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.session-control-group-path{display:flex;gap:.12rem;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;color:var(--muted)}
+.session-control-group-directory{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.session-control-group-filename{font-weight:600;color:var(--text)}
+.session-control-group-meta{display:flex;gap:.25rem;align-items:center;justify-content:flex-end;min-width:0}
+.session-control-group-latest{padding:.14rem .36rem;border:1px solid var(--border);border-radius:999px;max-width:7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.session-control-group-detail{grid-column:1/-1;display:none;white-space:pre-wrap;overflow:auto;max-height:8rem;color:var(--text);border-top:1px solid var(--border);padding-top:.25rem}
+.session-control-group-row[data-expanded="true"] .session-control-group-detail{display:block}
+.session-control-group-count{padding:.14rem .36rem;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+</style>
+<script>
+(function(){
+  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less session-control-group-status-summary session-control-group-status-chip session-control-group-copy-summary session-control-group-path-meta session-control-group-directory session-control-group-filename session-control-group-latest opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-diff-changes-shape';
+  const expanded=new Set();
+  let showAll=false;
+  function parseEvent(row){
+    const raw=row.getAttribute('data-session-control-event')||'';
+    let value={};
+    try{value=raw?JSON.parse(raw):{}}catch{value={raw}}
+    const action=String(value.action||value.type||'session_control');
+    const status=String(value.status||row.dataset.status||'ok');
+    const path=String(value.path||value.file||value.target_path||value.receipt_path||'session_control');
+    const id=String(value.receipt_id||value.sequence||value.created_at||raw||row.textContent||Math.random());
+    return {action,status,path,id,raw,value};
+  }
+  function groups(){
+    const rows=Array.from(document.querySelectorAll('.backend-session-control-event-row')).filter(row=>row.dataset.kind!=='overflow');
+    const map=new Map();
+    for(const row of rows){
+      const event=parseEvent(row);
+      const key=`${event.status}:${event.action}:${event.path}`;
+      if(!map.has(key))map.set(key,{key,status:event.status,action:event.action,path:event.path,events:[]});
+      if(!map.get(key).events.some(x=>x.id===event.id))map.get(key).events.push(event);
+    }
+    return Array.from(map.values()).sort((a,b)=>b.events.length-a.events.length||a.key.localeCompare(b.key));
+  }
+  function statusCounts(data){
+    const map=new Map();
+    for(const group of data)map.set(group.status,(map.get(group.status)||0)+group.events.length);
+    return Array.from(map.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  }
+  function splitPath(path){
+    const clean=String(path||'session_control').replace(/^\/+|\/+$/g,'')||'session_control';
+    const slash=clean.lastIndexOf('/');
+    if(slash<0)return {directory:'',filename:clean};
+    return {directory:clean.slice(0,slash),filename:clean.slice(slash+1)||clean};
+  }
+  function groupLine(group){return `${group.action} · ${group.status} · ${group.events.length} ${group.events.length===1?'event':'events'}`}
+  function shortId(group){return String(group.events[group.events.length-1]?.id||'').slice(0,12)}
+  function summaryText(data){
+    const visible=showAll?data:data.slice(0,4);
+    const counts=statusCounts(data).map(([status,count])=>`${status}: ${count}`).join(', ');
+    const hidden=Math.max(0,data.length-visible.length);
+    return [`Grouped session-control ledger`, `${data.length} groups`, counts?`statuses: ${counts}`:'statuses: none', ...visible.map(group=>`${groupLine(group)} · ${group.path}`), hidden?`${hidden} hidden groups`:''].filter(Boolean).join('\n');
+  }
+  function copyText(text){
+    if(navigator.clipboard?.writeText)return navigator.clipboard.writeText(text).catch(()=>{});
+    const area=document.createElement('textarea');
+    area.value=text;
+    area.setAttribute('readonly','');
+    area.style.position='fixed';
+    area.style.opacity='0';
+    document.body.appendChild(area);
+    area.select();
+    try{document.execCommand('copy')}catch{}
+    area.remove();
+  }
+  function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status} · ${event.path}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
+  function renderToolbar(strip,data){
+    const toolbar=document.createElement('div');
+    toolbar.className='session-control-group-toolbar';
+    toolbar.dataset.proof='session-control-group-toolbar session-control-group-show-all session-control-group-status-summary session-control-group-copy-summary opencode-session-turn-show-all-toggle opencode-session-turn-diff-changes-shape';
+    const summary=document.createElement('span');
+    summary.className='session-control-group-summary';
+    summary.textContent=`${data.length} grouped session-control ${data.length===1?'receipt class':'receipt classes'}`;
+    toolbar.appendChild(summary);
+    const statuses=document.createElement('span');
+    statuses.className='session-control-group-statuses';
+    statuses.dataset.proof='session-control-group-status-summary opencode-session-turn-diff-changes-shape';
+    statusCounts(data).slice(0,3).forEach(([status,count])=>{
+      const chip=document.createElement('span');
+      chip.className='session-control-group-status-chip';
+      chip.dataset.proof='session-control-group-status-chip session-control-group-count';
+      chip.textContent=`${status} ${count}`;
+      statuses.appendChild(chip);
+    });
+    toolbar.appendChild(statuses);
+    const copy=document.createElement('button');
+    copy.type='button';
+    copy.className='mini-btn session-control-group-copy';
+    copy.dataset.proof='session-control-group-copy-summary copy grouped session-control summary';
+    copy.textContent='copy group summary';
+    copy.onclick=e=>{e.stopPropagation();copyText(summaryText(data));copy.textContent='copied group summary';setTimeout(()=>{copy.textContent='copy group summary'},1200)};
+    toolbar.appendChild(copy);
+    if(data.length>4){
+      const toggle=document.createElement('button');
+      toggle.type='button';
+      toggle.className='mini-btn session-control-group-show-all';
+      toggle.dataset.proof=showAll?'session-control-group-show-less':'session-control-group-show-all session-control-group-overflow';
+      toggle.setAttribute('aria-expanded',String(showAll));
+      toggle.textContent=showAll?'show fewer groups':`show all ${data.length} groups`;
+      toggle.onclick=e=>{e.stopPropagation();showAll=!showAll;render()};
+      toolbar.appendChild(toggle);
+    }
+    strip.appendChild(toolbar);
+  }
+  function renderPath(group){
+    const path=splitPath(group.path);
+    const wrap=document.createElement('span');
+    wrap.className='session-control-group-path';
+    wrap.dataset.proof='session-control-group-path-meta opencode-session-turn-diff-path-shape';
+    if(path.directory){
+      const dir=document.createElement('span');
+      dir.className='session-control-group-directory';
+      dir.dataset.proof='session-control-group-directory';
+      dir.textContent=`${path.directory}/`;
+      wrap.appendChild(dir);
+    }
+    const file=document.createElement('span');
+    file.className='session-control-group-filename';
+    file.dataset.proof='session-control-group-filename';
+    file.textContent=path.filename;
+    wrap.appendChild(file);
+    return wrap;
+  }
+  function render(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    document.querySelectorAll('.session-head').forEach(head=>{
+      let strip=head.querySelector('.session-control-group-strip');
+      if(!strip){
+        strip=document.createElement('div');
+        strip.className='session-control-group-strip';
+        strip.dataset.proof=PROOF;
+        const ledger=head.querySelector('.backend-session-control-ledger');
+        if(ledger)ledger.insertAdjacentElement('beforebegin',strip);else head.appendChild(strip);
+      }
+      const data=groups();
+      strip.textContent='';
+      if(!data.length){
+        const empty=document.createElement('div');
+        empty.className='session-control-group-row';
+        empty.dataset.proof=PROOF;
+        empty.textContent='Grouped session-control ledger is waiting for receipts.';
+        strip.appendChild(empty);
+        return;
+      }
+      renderToolbar(strip,data);
+      const visible=showAll?data:data.slice(0,4);
+      visible.forEach(group=>{
+        const row=document.createElement('div');
+        row.className='session-control-group-row';
+        row.dataset.proof=PROOF;
+        row.dataset.status=group.status;
+        row.dataset.expanded=expanded.has(group.key)?'true':'false';
+        const main=document.createElement('span');
+        main.className='session-control-group-main';
+        const title=document.createElement('span');
+        title.className='session-control-group-title';
+        title.textContent=groupLine(group);
+        main.appendChild(title);
+        main.appendChild(renderPath(group));
+        const meta=document.createElement('span');
+        meta.className='session-control-group-meta';
+        meta.dataset.proof='session-control-group-meta opencode-session-turn-diff-meta-shape';
+        const latest=document.createElement('span');
+        latest.className='session-control-group-latest';
+        latest.dataset.proof='session-control-group-latest';
+        latest.textContent=shortId(group)?`latest ${shortId(group)}`:'latest receipt';
+        const toggle=document.createElement('button');
+        toggle.type='button';
+        toggle.className='mini-btn session-control-group-toggle';
+        toggle.dataset.proof='session-control-group-toggle session-control-group-visible';
+        toggle.setAttribute('aria-expanded',row.dataset.expanded);
+        toggle.textContent=expanded.has(group.key)?'hide group':`${group.events.length} events`;
+        toggle.onclick=e=>{e.stopPropagation();if(expanded.has(group.key))expanded.delete(group.key);else expanded.add(group.key);render()};
+        meta.appendChild(latest);
+        meta.appendChild(toggle);
+        const detail=document.createElement('pre');
+        detail.className='session-control-group-detail';
+        detail.dataset.proof='session-control-group-detail session-control-group-visible';
+        detail.textContent=detailText(group);
+        row.appendChild(main);
+        row.appendChild(meta);
+        row.appendChild(detail);
+        strip.appendChild(row);
+      });
+      if(!showAll&&data.length>4){
+        const overflow=document.createElement('div');
+        overflow.className='session-control-group-row';
+        overflow.dataset.proof='session-control-group-overflow session-control-group-count';
+        overflow.textContent=`${data.length-4} more session-control groups hidden`;
+        strip.appendChild(overflow);
+      }
+    });
+  }
+  const observer=new MutationObserver(()=>render());
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-session-control-event','data-status','data-expanded']});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
+})();
+</script>

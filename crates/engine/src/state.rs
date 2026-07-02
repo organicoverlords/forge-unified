@@ -1,8 +1,8 @@
 //! Engine state — shared mutable state for the running engine.
 
 use crate::config::Config;
-use crate::types::{ConversationId, ProviderId, ModelId, RunId, AgentMode};
-use std::collections::HashMap;
+use crate::types::{AgentMode, ConversationId, ModelId, ProviderId, RunId};
+use std::collections::{HashMap, HashSet};
 
 pub struct EngineState {
     pub default_provider: ProviderId,
@@ -13,14 +13,26 @@ pub struct EngineState {
     pub active_runs: HashMap<ConversationId, RunId>,
 }
 
-use std::collections::HashSet;
-
 impl EngineState {
     pub fn new(config: &Config) -> Self {
-        let default_provider = config.default_provider.clone()
-            .unwrap_or(ProviderId("nvidia_nim".to_string()));
-        let default_model = config.default_model.clone()
-            .unwrap_or(ModelId("meta/llama-3.1-70b-instruct".to_string()));
+        let first_enabled_provider = config.provider_priority_order().into_iter().next();
+
+        let default_provider = config
+            .default_provider
+            .clone()
+            .or_else(|| first_enabled_provider.map(|provider| provider.id.clone()))
+            .unwrap_or_else(|| ProviderId("nvidia_nim".to_string()));
+
+        let first_enabled_model = config
+            .provider_priority_order()
+            .into_iter()
+            .find_map(|provider| provider.models.first().map(|model| model.id.clone()));
+
+        let default_model = config
+            .default_model
+            .clone()
+            .or(first_enabled_model)
+            .unwrap_or_else(|| ModelId("mistralai/mistral-small-4-119b-2603".to_string()));
 
         Self {
             default_provider,

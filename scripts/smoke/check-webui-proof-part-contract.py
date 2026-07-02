@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""Validate Forge's browser WebUI proof-part rendering contract.
+
+OpenCode source anchors are developer-only references for behavior and
+structure, not Forge runtime branding:
+- anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx
+- anomalyco/opencode:packages/session-ui/src/components/message-part.tsx
+- anomalyco/opencode:packages/session-ui/src/components/basic-tool.tsx
+- anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx
+- anomalyco/opencode:packages/web/src/components/share/part.tsx
+- anomalyco/opencode:packages/web/src/components/share/part.module.css
+
+This guard is intentionally source-backed and UI-facing: final browser proof
+must render stable, readable session turns, assistant parts, typed tool cards,
+provider/model route proof, copy/retry affordances, file receipts, turn receipt
+summaries, timeline actions, flattened public tool input, previews,
+diagnostics, count summaries, tool lifecycle state/timing, accessible disclosure
+state, and collapsed technical details instead of relying on raw JSON or raw
+tool identifiers as the primary user-visible evidence.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+CHAT_UI_PATHS = [
+    Path("crates/webui/src/chat_ui.rs"),
+    Path("crates/webui/src/chat_ui.html"),
+    Path("crates/webui/src/chat_ui_enhancements.html"),
+    Path("crates/webui/src/chat_ui_tool_lifecycle.html"),
+    Path("crates/webui/src/chat_ui_action_summaries.html"),
+]
+PROJECT_STATE = Path("PROJECT_STATE.md")
+PROOF_DOC_DIR = Path("docs/generated/proof")
+OPENCODE_SOURCES = [
+    "packages/session-ui/src/components/session-turn.tsx",
+    "packages/session-ui/src/components/message-part.tsx",
+    "packages/session-ui/src/components/basic-tool.tsx",
+    "packages/session-ui/src/components/tool-count-summary.tsx",
+    "packages/web/src/components/share/part.tsx",
+    "packages/web/src/components/share/part.module.css",
+]
+
+REQUIRED_UI_TOKENS = [
+    "proof-digest-visible",
+    "final-answer-visible",
+    "provider-model-visible",
+    "human-tool-label",
+    "session-turn-central",
+    "session-turn-diffs-group",
+    "assistant-parts",
+    "message-part",
+    "opencode-tool-result-card",
+    "opencode-live-toolpart",
+    "collapsible-tool-card",
+    "deferred-technical-content",
+    "copy-retry-actions",
+    "provider-executed action:",
+    "technical details",
+    "Session timeline",
+    "Thinking / working",
+    "Changed files / file receipts",
+    "todo-status-summary",
+    "todo-counts",
+    "Plan updated",
+    "timeline-file-diff-groups",
+    "timeline-action-groups",
+    "turn-receipt-toolbar",
+    "file-diff-summary-visible",
+    "stable-session-receipts",
+    "Receipts grouped by turn",
+    "copy timeline",
+    "copy receipts",
+    "typed-tool-renderer",
+    "tool-target-visible",
+    "tool-result-toggle",
+    "tool-duration-visible",
+    "tool-args-visible",
+    "tool-diagnostics-visible",
+    "tool-count-summary-visible",
+    "typed-tool-summary",
+    "show result",
+    "copy result",
+    "copy input",
+    "Read preview",
+    "Write target",
+    "Diff target",
+    "Command output",
+    "Matched paths",
+    "Matched lines",
+    "tool-lifecycle-strip",
+    "tool-state-timeline",
+    "tool-status-visible",
+    "copy-tool-anchor",
+    "tool-output-duration-visible",
+    "copy tool link",
+    "copy status",
+    "tool-preview-visible",
+    "tool-preview-toggle",
+    "tool-preview-copy",
+    "tool-preview-pane",
+    "show preview",
+    "copy preview",
+    "tool-toggle-aria-expanded",
+    "tool-toggle-state-visible",
+    "aria-expanded",
+    "aria-controls",
+    "data-state=open",
+    "human-action-summary",
+    "action-digest-summary",
+    "action-count-summary-visible",
+    "action-digest-ok-count",
+    "action-digest-error-count",
+    "action-digest-running-count",
+    "action-digest-pending-count",
+    "copy action digest",
+]
+
+REQUIRED_HUMAN_LABELS = [
+    "Read file",
+    "Write file",
+    "Edit file",
+    "Run command",
+    "Run tools in parallel",
+    "Delegate subtask",
+    "Apply patch",
+    "Update plan",
+]
+
+FORBIDDEN_PRIMARY_MARKERS = [
+    "raw tool:",
+    "Raw tool",
+    "OpenCode-style",
+]
+
+REQUIRED_PROOF_TRAIL_TOKENS = [
+    "packages/session-ui/src/components/session-turn.tsx",
+    "packages/session-ui/src/components/message-part.tsx",
+    "packages/session-ui/src/components/basic-tool.tsx",
+    "packages/session-ui/src/components/tool-count-summary.tsx",
+    "packages/web/src/components/share/part.tsx",
+    "packages/web/src/components/share/part.module.css",
+    "proof-final",
+    "session turn",
+    "assistant parts",
+    "copy/retry",
+    "changed files",
+    "collapsed technical details",
+    "turn receipt grouping",
+    "stable session receipts",
+    "timeline action groups",
+    "file diff summary",
+    "typed tool cards",
+    "tool targets",
+    "result toggles",
+    "flattened tool input",
+    "diagnostics",
+    "count summary",
+    "human action summaries",
+    "action digest summary",
+    "tool lifecycle strip",
+    "tool state timeline",
+    "copy tool anchor",
+    "duration footer",
+    "preview pane",
+    "preview toggle",
+    "copy preview",
+    "accessible disclosure state",
+    "aria-expanded",
+    "aria-controls",
+]
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+
+def ui_text() -> str:
+    return "\n".join(read(path) for path in CHAT_UI_PATHS)
+
+
+def proof_trail_text() -> str:
+    chunks = [read(PROJECT_STATE)]
+    if PROOF_DOC_DIR.exists():
+        chunks.extend(read(path) for path in PROOF_DOC_DIR.glob("*.md"))
+    return "\n".join(chunks).lower()
+
+
+def main() -> int:
+    ui = ui_text()
+    trail = proof_trail_text()
+    checks: list[dict[str, object]] = []
+
+    for token in REQUIRED_UI_TOKENS:
+        checks.append({"name": f"ui_token:{token}", "passed": token in ui})
+    for label in REQUIRED_HUMAN_LABELS:
+        checks.append({"name": f"human_label:{label}", "passed": label in ui})
+    for marker in FORBIDDEN_PRIMARY_MARKERS:
+        checks.append({"name": f"forbidden_primary_marker_absent:{marker}", "passed": marker not in ui})
+    for token in REQUIRED_PROOF_TRAIL_TOKENS:
+        checks.append({"name": f"proof_trail:{token}", "passed": token.lower() in trail})
+
+    checks.append({
+        "name": "ui_bundle_is_reviewable_html_not_giant_rust_string",
+        "passed": all(token in ui for token in [
+            "include_str!(\"chat_ui.html\")",
+            "include_str!(\"chat_ui_enhancements.html\")",
+            "include_str!(\"chat_ui_tool_lifecycle.html\")",
+            "include_str!(\"chat_ui_action_summaries.html\")",
+            "<body data-proof=",
+        ]),
+    })
+    checks.append({
+        "name": "final_proof_has_digest_before_session_turns",
+        "passed": "if(proofFinal)box.appendChild(proofDigest());" in ui,
+    })
+    checks.append({
+        "name": "technical_details_are_collapsed_and_hidden_from_final_proof",
+        "passed": "className='technical-details'" in ui and "body.proof-final .technical-details{display:none}" in ui,
+    })
+    checks.append({
+        "name": "todo_write_gets_status_summary_not_generic_json",
+        "passed": "todo-status-summary" in ui and "if(n==='todo_write')return'Plan updated.'" in ui,
+    })
+    checks.append({
+        "name": "central_session_turn_has_actions_and_file_receipts",
+        "passed": all(token in ui for token in ["function turn(t,i,active)", "copy turn", "retry", "Changed files / file receipts"]),
+    })
+    checks.append({
+        "name": "turn_receipt_enhancer_groups_files_tools_and_statuses",
+        "passed": all(token in ui for token in [
+            "function enhanceTurn(turn)",
+            "Receipts grouped by turn",
+            "file receipts",
+            "tool cards",
+            "status chips",
+            "copy receipts",
+            "copy files",
+        ]),
+    })
+    checks.append({
+        "name": "session_timeline_has_real_copy_retry_actions",
+        "passed": all(token in ui for token in [
+            "copy timeline",
+            "retry latest prompt",
+            "copy latest files",
+            "Stable session receipts",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_show_action_target_output_and_copy_toggle",
+        "passed": all(token in ui for token in [
+            "function enhanceTool(tool)",
+            "typed-tool-renderer",
+            "tool-target-visible",
+            "show result",
+            "copy result",
+            "Read preview",
+            "Write target",
+            "Diff target",
+            "Command output",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_flatten_input_diagnostics_counts_and_scrub_source_refs",
+        "passed": all(token in ui for token in [
+            "function flattenArgs(obj,prefix='')",
+            "function diagnosticsFrom(meta)",
+            "function toolCount(result,meta)",
+            "function scrubValue(value)",
+            "tool-args-grid",
+            "tool-diagnostic-list",
+            "tool-result-count",
+            "copy input",
+            "No public input fields recorded.",
+            "if(/^opencode/i.test(key))continue",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_cards_have_preview_pane_and_copy_controls",
+        "passed": all(token in ui for token in [
+            "function previewFrom(kind,state,result,args)",
+            "tool-preview-pane",
+            "tool-preview-visible",
+            "tool-preview-toggle",
+            "tool-preview-copy",
+            "show preview",
+            "copy preview",
+            "No preview recorded.",
+        ]),
+    })
+    checks.append({
+        "name": "typed_tool_disclosures_are_accessible_and_stateful",
+        "passed": all(token in ui for token in [
+            "function disclosureButton(showLabel,hideLabel,pane,mode)",
+            "setAttribute('aria-controls'",
+            "setAttribute('aria-expanded'",
+            "tool-toggle-aria-expanded",
+            "tool-toggle-state-visible",
+            "dataset.state=open?'open':'closed'",
+            "data-state=open",
+        ]),
+    })
+    checks.append({
+        "name": "tool_lifecycle_overlay_shows_state_timing_and_copyable_anchor",
+        "passed": all(token in ui for token in [
+            "function statusFrom(tool,state)",
+            "function durationFrom(state)",
+            "function targetFrom(tool,state)",
+            "tool-lifecycle-strip",
+            "tool-state-timeline",
+            "tool-status-visible",
+            "copy-tool-anchor",
+            "tool-output-duration-visible",
+            "copy tool link",
+            "copy status",
+            "pending",
+            "running",
+            "completed",
+            "error",
+        ]),
+    })
+    checks.append({
+        "name": "human_action_summaries_have_turn_digest_counts_and_copy",
+        "passed": all(token in ui for token in [
+            "function updateDigest(scope)",
+            "action-digest-summary",
+            "action-count-summary-visible",
+            "action-digest-ok-count",
+            "action-digest-error-count",
+            "action-digest-running-count",
+            "action-digest-pending-count",
+            "copy action digest",
+            "dataset.ownedBy='action-summaries'",
+        ]),
+    })
+
+    failed = [check for check in checks if not check["passed"]]
+    report = {
+        "passed": not failed,
+        "opencode_sources": OPENCODE_SOURCES,
+        "forge_paths": [str(path) for path in CHAT_UI_PATHS] + [str(PROJECT_STATE), "docs/generated/proof/*.md"],
+        "checks": checks,
+        "failed_checks": failed,
+    }
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if not failed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

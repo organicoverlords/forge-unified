@@ -1,0 +1,77 @@
+<style>
+.session-error-unwrap-card{margin-top:.35rem;padding:.45rem .55rem;border:1px solid color-mix(in srgb,var(--danger,#ff8a8a) 55%,var(--border));border-radius:.55rem;color:var(--danger,#ff8a8a);font-size:.72rem;background:color-mix(in srgb,var(--danger,#ff8a8a) 8%,transparent);white-space:pre-wrap;overflow-wrap:anywhere}
+.session-error-unwrap-card[data-empty="true"]{color:var(--muted);border-color:var(--border);background:transparent}
+.session-error-unwrap-card strong{display:block;color:inherit;margin-bottom:.2rem}
+</style>
+<script>
+(function(){
+  // Source-backed parity anchors:
+  // - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx unwrap() error extraction
+  // - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx error Card render
+  // Forge applies the same idea to browser session-control failures: nested JSON/provider
+  // errors are unwrapped into a readable card while raw event JSON remains copyable.
+  const PROOF='session-error-unwrap-card opencode-error-unwrap-parity opencode-error-card-parity readable-session-control-error-card latest-session-control-error-unwrapped copy-session-control-error-unwrapped packages/session-ui/src/components/session-turn.tsx';
+  const errors=[];
+  function record(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
+  function parse(value){try{return JSON.parse(value)}catch{return undefined}}
+  function read(value){const first=parse(value);if(typeof first!=='string')return first;return parse(first.trim())}
+  function unwrap(message){
+    const text=String(message||'').replace(/^Error:\s*/,'').trim();
+    let json=read(text);
+    if(json===undefined){
+      const start=text.indexOf('{');
+      const end=text.lastIndexOf('}');
+      if(start!==-1&&end>start)json=read(text.slice(start,end+1));
+    }
+    if(!record(json))return text||String(message||'session control failed');
+    const err=record(json.error)?json.error:undefined;
+    if(err){
+      const type=typeof err.type==='string'?err.type:undefined;
+      const msg=typeof err.message==='string'?err.message:undefined;
+      if(type&&msg)return `${type}: ${msg}`;
+      if(msg)return msg;
+      if(type)return type;
+      const code=typeof err.code==='string'?err.code:undefined;
+      if(code)return code;
+    }
+    const msg=typeof json.message==='string'?json.message:undefined;
+    if(msg)return msg;
+    const reason=typeof json.error==='string'?json.error:undefined;
+    if(reason)return reason;
+    return text||String(message||'session control failed');
+  }
+  function rawText(value){try{return JSON.stringify(value,null,2)}catch{return String(value)}}
+  function payloadOf(value){return record(value&&value.payload)?value.payload:{}}
+  function rawError(value){
+    if(!value)return 'No session control errors recorded.';
+    if(typeof value.error==='string')return value.error;
+    const p=payloadOf(value);
+    if(typeof p.error==='string')return p.error;
+    if(record(p.error)&&typeof p.error.message==='string')return p.error.message;
+    if(record(value.error)&&typeof value.error.message==='string')return value.error.message;
+    return value.action?`${value.action} failed`:'session control failed';
+  }
+  function latest(){return errors[0]||null}
+  function addProof(el){if(!el)return;const have=new Set(String(el.getAttribute('data-proof')||'').split(/\s+/).filter(Boolean));for(const token of PROOF.split(' '))have.add(token);el.setAttribute('data-proof',[...have].join(' '))}
+  function render(){
+    document.querySelectorAll('.session-error-unwrap-card').forEach(card=>{
+      const err=latest();
+      card.dataset.empty=err?'false':'true';
+      card.setAttribute('data-session-control-event',err?rawText(err):'');
+      card.textContent='';
+      const title=document.createElement('strong');
+      title.textContent=err?'Readable latest error':'Readable latest error';
+      const body=document.createElement('span');
+      body.dataset.proof='latest-session-control-error-unwrapped readable-session-control-error-card';
+      body.textContent=err?unwrap(rawError(err)):'No session control errors recorded.';
+      card.appendChild(title);
+      card.appendChild(body);
+    });
+  }
+  function cardNode(){const card=document.createElement('div');card.className='session-error-unwrap-card';card.dataset.proof='session-error-unwrap-card opencode-error-unwrap-parity opencode-error-card-parity readable-session-control-error-card latest-session-control-error-unwrapped data-session-control-event';card.dataset.empty='true';card.textContent='No session control errors recorded.';return card}
+  function copyButton(){const b=document.createElement('button');b.type='button';b.className='mini-btn';b.dataset.proof='copy-session-control-error-unwrapped latest-session-control-error-unwrapped readable-session-control-error-card';b.textContent='copy readable error';b.onclick=async e=>{e.stopPropagation();const err=latest();const value=err?unwrap(rawError(err)):'No session control errors recorded.';await navigator.clipboard?.writeText?.(value);if(typeof toast==='function')toast(err?'readable session error copied':'no session error to copy')};return b}
+  function enhance(){addProof(document.body);document.querySelectorAll('.session-head').forEach(head=>{if(!head.querySelector('.session-error-unwrap-card')){const existing=head.querySelector('.backend-session-control-error-card')||head.querySelector('.backend-session-control-receipt');if(existing)existing.insertAdjacentElement('afterend',cardNode());else head.appendChild(cardNode())}});document.querySelectorAll('.backend-session-controls').forEach(controls=>{if(!controls.querySelector('[data-proof*="copy-session-control-error-unwrapped"]'))controls.appendChild(copyButton())});render()}
+  document.addEventListener('forge:session-control',event=>{const detail=event.detail||{};if(detail.status==='error'){errors.unshift(detail);errors.splice(4)}render()});
+  const observer=new MutationObserver(()=>enhance());observer.observe(document.documentElement,{childList:true,subtree:true});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
+</script>

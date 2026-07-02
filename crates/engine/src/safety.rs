@@ -17,6 +17,7 @@ impl SafetyChecker {
                 ToolKind::FileWrite,
                 ToolKind::FileEdit,
                 ToolKind::FileDelete,
+                ToolKind::ApplyPatch,
                 ToolKind::ShellCommand,
                 ToolKind::TerminalRun,
             ]),
@@ -79,9 +80,12 @@ impl ToolKind {
             ToolKind::BatchParallel,
             ToolKind::RepoInfo,
             ToolKind::ProposePatch,
+            ToolKind::ApplyPatch,
             ToolKind::SwitchMode,
             ToolKind::BrowserProof,
             ToolKind::VisionReview,
+            ToolKind::GraphBuild,
+            ToolKind::GraphQuery,
         ]
     }
 }

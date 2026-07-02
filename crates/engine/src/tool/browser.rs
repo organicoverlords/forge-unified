@@ -2,7 +2,36 @@ use crate::tool::ToolExecutor;
 use crate::types::{ToolRequest, ToolResult, ToolKind, BrowserProofResult, BrowserProofRequest, VisionReviewResult, VisionReviewRequest};
 use anyhow::Result;
 use std::collections::HashMap;
-use std::process::Command;
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const BROWSER_PROOF_SOURCE: &str = "packages/session-ui/src/components/session-turn.tsx";
+const SCREENSHOT_BROWSER_TIMEOUT_SECONDS: u64 = 45;
+const SCREENSHOT_CHROME_TIMEOUT_MS: u64 = 30000;
+const SCREENSHOT_VIRTUAL_TIME_BUDGET_MS: u64 = 15000;
+const DOM_BROWSER_TIMEOUT_SECONDS: u64 = 18;
+const DOM_CHROME_TIMEOUT_MS: u64 = 12000;
+const DOM_VIRTUAL_TIME_BUDGET_MS: u64 = 5000;
+const CHROME_PROOF_FLAGS: &[&str] = &[
+    "--headless=chrome",
+    "--disable-gpu",
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-domain-reliability",
+    "--disable-extensions",
+    "--disable-sync",
+    "--disable-default-apps",
+    "--disable-features=TranslateUI,UseDBus,MediaRouter,DialMediaRouteProvider,OptimizationHints,BackgroundFetch,PushMessaging",
+    "--hide-scrollbars",
+    "--mute-audio",
+    "--no-first-run",
+    "--run-all-compositor-stages-before-draw",
+];
 
 impl ToolExecutor {
     pub async fn execute_browser_proof(&self, request: ToolRequest) -> Result<ToolResult> {
@@ -19,78 +48,86 @@ impl ToolExecutor {
 
         let ts = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let out_dir = std::env::temp_dir().join(format!("forge-browser-{}", ts));
-        std::fs::create_dir_all(&out_dir)?;
+        let profile_dir = out_dir.join("profile");
+        std::fs::create_dir_all(&profile_dir)?;
 
         let screenshot_path = out_dir.join("screenshot.png");
-
-        let screenshot_output = Command::new(&chrome)
-            .arg("--headless=new")
-            .arg("--disable-gpu")
+        let mut screenshot_cmd = chrome_command(&chrome);
+        screenshot_cmd
+            .arg(format!("--user-data-dir={}", profile_dir.display()))
             .arg(format!("--screenshot={}", screenshot_path.display()))
             .arg(format!("--window-size={},{}", width, height))
-            .arg("--virtual-time-budget=15000")
-            .arg(&args.url)
-            .output();
+            .arg(format!("--timeout={}", SCREENSHOT_CHROME_TIMEOUT_MS))
+            .arg(format!("--virtual-time-budget={}", SCREENSHOT_VIRTUAL_TIME_BUDGET_MS))
+            .arg(&args.url);
+        let screenshot_output = run_command_with_timeout(
+            screenshot_cmd,
+            Duration::from_secs(SCREENSHOT_BROWSER_TIMEOUT_SECONDS),
+        );
 
         match screenshot_output {
-            Ok(output) if output.status.success() => {
-                let bytes = std::fs::read(&screenshot_path).unwrap_or_default();
-                let b64 = base64_encode(&bytes);
+            Ok((true, output)) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if let Some(bytes) = readable_png(&screenshot_path) {
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return browser_success_result(
+                        request.id,
+                        args.url,
+                        width,
+                        height,
+                        bytes,
+                        None,
+                        String::new(),
+                        vec![format!(
+                            "Chrome exceeded Forge's {}s browser-proof budget after writing a readable PNG screenshot; Forge stopped the process and kept the proof artifact.",
+                            SCREENSHOT_BROWSER_TIMEOUT_SECONDS,
+                        )],
+                    );
+                }
+                let _ = std::fs::remove_dir_all(&out_dir);
+                Ok(browser_failure_result(request.id, "Chrome screenshot command timed out before writing a readable PNG", stderr))
+            }
+            Ok((false, output)) if output.status.success() => {
+                let Some(bytes) = readable_png(&screenshot_path) else {
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return Ok(browser_failure_result(
+                        request.id,
+                        "Chrome finished but did not write a readable PNG screenshot",
+                        stderr,
+                    ));
+                };
 
                 let (dom_snapshot, page_title) = if capture_dom {
-                    capture_dom_and_title(&chrome, &args.url)
+                    capture_dom_and_title(&chrome, &args.url, &out_dir)
                 } else {
                     (None, String::new())
                 };
 
                 let _ = std::fs::remove_dir_all(&out_dir);
-
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: true,
-                    output: serde_json::to_string(&BrowserProofResult {
-                        screenshot_base64: b64,
-                        console_logs: vec![],
-                        dom_snapshot,
-                        url: args.url.clone(),
-                        page_title,
-                        success: true,
-                        error: None,
-                    })?,
-                    error: None,
-                    duration_ms: 0,
-                    metadata: HashMap::from([
-                        ("url".to_string(), serde_json::json!(args.url)),
-                        ("width".to_string(), serde_json::json!(width)),
-                        ("height".to_string(), serde_json::json!(height)),
-                    ]),
-                })
+                browser_success_result(request.id, args.url, width, height, bytes, dom_snapshot, page_title, vec![])
             }
-            Ok(output) => {
+            Ok((false, output)) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if let Some(bytes) = readable_png(&screenshot_path) {
+                    let _ = std::fs::remove_dir_all(&out_dir);
+                    return browser_success_result(
+                        request.id,
+                        args.url,
+                        width,
+                        height,
+                        bytes,
+                        None,
+                        String::new(),
+                        vec!["Chrome exited nonzero after writing a readable PNG screenshot; Forge kept the proof artifact.".to_string()],
+                    );
+                }
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Chrome error: {}", stderr)),
-                    duration_ms: 0,
-                    metadata: HashMap::new(),
-                })
+                Ok(browser_failure_result(request.id, "Chrome screenshot command failed before writing a readable PNG", stderr))
             }
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&out_dir);
-                Ok(ToolResult {
-                    id: request.id,
-                    kind: ToolKind::BrowserProof,
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Failed to launch Chrome: {}", e)),
-                    duration_ms: 0,
-                    metadata: HashMap::new(),
-                })
+                Ok(browser_failure_result(request.id, "Failed to launch Chrome", e.to_string()))
             }
         }
     }
@@ -113,6 +150,116 @@ impl ToolExecutor {
                 ("model".to_string(), serde_json::json!(result.model.0)),
             ]),
         })
+    }
+}
+
+fn chrome_command(chrome: &str) -> Command {
+    let mut command = if command_exists("dbus-run-session") {
+        let mut wrapped = Command::new("dbus-run-session");
+        wrapped.arg("--").arg(chrome);
+        wrapped
+    } else {
+        Command::new(chrome)
+    };
+    command.env_remove("DBUS_SESSION_BUS_ADDRESS");
+    command.env_remove("DBUS_SYSTEM_BUS_ADDRESS");
+    command.env("NO_AT_BRIDGE", "1");
+    for flag in CHROME_PROOF_FLAGS {
+        command.arg(flag);
+    }
+    command
+}
+
+fn command_exists(name: &str) -> bool {
+    Command::new("which").arg(name).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+fn run_command_with_timeout(mut command: Command, timeout: Duration) -> std::io::Result<(bool, Output)> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let started = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output().map(|output| (false, output));
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            return child.wait_with_output().map(|output| (true, output));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn readable_png(path: &Path) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() >= 1024 && bytes.starts_with(b"\x89PNG\r\n\x1a\n") { Some(bytes) } else { None }
+}
+
+fn browser_success_result(
+    id: crate::types::ToolCallId,
+    url: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+    dom_snapshot: Option<String>,
+    page_title: String,
+    console_logs: Vec<String>,
+) -> Result<ToolResult> {
+    Ok(ToolResult {
+        id,
+        kind: ToolKind::BrowserProof,
+        success: true,
+        output: serde_json::to_string(&BrowserProofResult {
+            screenshot_base64: base64_encode(&bytes),
+            console_logs,
+            dom_snapshot,
+            url,
+            page_title,
+            success: true,
+            error: None,
+        })?,
+        error: None,
+        duration_ms: 0,
+        metadata: HashMap::from([
+            ("width".to_string(), serde_json::json!(width)),
+            ("height".to_string(), serde_json::json!(height)),
+            ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
+            ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
+            ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
+            ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
+            ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
+            ("chrome_dbus_wrapped".to_string(), serde_json::json!(command_exists("dbus-run-session"))),
+        ]),
+    })
+}
+
+fn browser_failure_result(id: crate::types::ToolCallId, message: &str, detail: String) -> ToolResult {
+    let error = format!("{}: {}", message, detail);
+    let output = serde_json::to_string(&BrowserProofResult {
+        screenshot_base64: String::new(),
+        console_logs: vec![error.clone()],
+        dom_snapshot: None,
+        url: String::new(),
+        page_title: String::new(),
+        success: false,
+        error: Some(error.clone()),
+    }).unwrap_or_else(|_| String::new());
+    ToolResult {
+        id,
+        kind: ToolKind::BrowserProof,
+        success: false,
+        output,
+        error: Some(error),
+        duration_ms: 0,
+        metadata: HashMap::from([
+            ("chrome_flags".to_string(), serde_json::json!(CHROME_PROOF_FLAGS)),
+            ("browser_proof_source".to_string(), serde_json::json!(BROWSER_PROOF_SOURCE)),
+            ("diagnosable_browser_failure".to_string(), serde_json::json!(true)),
+            ("chrome_timeout_ms".to_string(), serde_json::json!(SCREENSHOT_CHROME_TIMEOUT_MS)),
+            ("chrome_virtual_time_budget_ms".to_string(), serde_json::json!(SCREENSHOT_VIRTUAL_TIME_BUDGET_MS)),
+            ("chrome_timeout_seconds".to_string(), serde_json::json!(SCREENSHOT_BROWSER_TIMEOUT_SECONDS)),
+            ("chrome_dbus_wrapped".to_string(), serde_json::json!(command_exists("dbus-run-session"))),
+        ]),
     }
 }
 
@@ -198,17 +345,19 @@ fn base64_encode(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-fn capture_dom_and_title(chrome: &str, url: &str) -> (Option<String>, String) {
-    let dom_output = Command::new(chrome)
-        .arg("--headless=new")
-        .arg("--disable-gpu")
+fn capture_dom_and_title(chrome: &str, url: &str, out_dir: &Path) -> (Option<String>, String) {
+    let dom_profile = out_dir.join("dom-profile");
+    let _ = std::fs::create_dir_all(&dom_profile);
+    let mut dom_cmd = chrome_command(chrome);
+    dom_cmd
+        .arg(format!("--user-data-dir={}", dom_profile.display()))
         .arg("--dump-dom")
-        .arg("--virtual-time-budget=10000")
-        .arg(url)
-        .output();
+        .arg(format!("--timeout={}", DOM_CHROME_TIMEOUT_MS))
+        .arg(format!("--virtual-time-budget={}", DOM_VIRTUAL_TIME_BUDGET_MS))
+        .arg(url);
 
-    match dom_output {
-        Ok(dom) if dom.status.success() => {
+    match run_command_with_timeout(dom_cmd, Duration::from_secs(DOM_BROWSER_TIMEOUT_SECONDS)) {
+        Ok((false, dom)) if dom.status.success() => {
             let raw = String::from_utf8_lossy(&dom.stdout).to_string();
             let title = extract_title_from_dom(&raw);
             (Some(raw), title)

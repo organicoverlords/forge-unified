@@ -1,0 +1,44 @@
+name: App Build Proof
+
+on:
+  pull_request:
+    branches: [master, main, dev]
+  workflow_dispatch:
+
+jobs:
+  app-build-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NIM_KEY: ${{ secrets['NIM_KEY'] }}
+      NVIDIA_NIM_API_KEY: ${{ secrets['NIM_KEY'] }}
+      FORGE_APP_BUILD_OUT: forge-proof/app-build-proof
+      FORGE_APP_BUILD_TIMEOUT_SECONDS: "220"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-app-build-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('crates/**/*.rs', 'Cargo.toml', 'crates/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-app-build-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-app-build-cargo-
+
+      - name: Build one file through WebUI
+        run: bash scripts/smoke/app-build-one-file.sh
+
+      - name: Upload app build proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build-proof
+          path: forge-proof/app-build-proof/

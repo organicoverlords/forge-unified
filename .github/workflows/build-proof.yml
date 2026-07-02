@@ -1,0 +1,54 @@
+name: Build Proof
+
+on:
+  pull_request:
+    branches: [master, main, dev]
+  workflow_dispatch:
+
+jobs:
+  build-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: File line gate
+        run: bash scripts/ci/check-file-lines.sh
+      - name: Cargo check
+        run: |
+          set -o pipefail
+          mkdir -p forge-proof/build
+          cargo check --workspace --all-targets > /tmp/forge-cargo-check.log 2>&1 || {
+            echo "cargo check failed; tail follows"
+            tail -n 220 /tmp/forge-cargo-check.log | tee forge-proof/build/cargo-check-tail.txt
+            exit 1
+          }
+          tail -n 40 /tmp/forge-cargo-check.log | tee forge-proof/build/cargo-check-tail.txt
+      - name: Cargo test
+        run: |
+          set -o pipefail
+          mkdir -p forge-proof/build
+          cargo test --workspace --all-targets > /tmp/forge-cargo-test.log 2>&1 || {
+            echo "cargo test failed; tail follows"
+            tail -n 220 /tmp/forge-cargo-test.log | tee forge-proof/build/cargo-test-tail.txt
+            exit 1
+          }
+          tail -n 40 /tmp/forge-cargo-test.log | tee forge-proof/build/cargo-test-tail.txt
+      - name: Validate WebUI proof harness
+        run: |
+          set -euo pipefail
+          mkdir -p forge-proof/build
+          bash -n scripts/smoke/live-webui-feature-sprint.sh
+          bash -n scripts/smoke/capture-browser-proof.sh
+          python3 -m py_compile scripts/smoke/check-full-agentic-benchmark.py
+          python3 -m py_compile scripts/smoke/check-opencode-workflow-evidence.py
+          if [ -f scripts/smoke/check-live-webui-proof-manifest.py ]; then
+            python3 -m py_compile scripts/smoke/check-live-webui-proof-manifest.py
+          fi
+          printf 'Build Proof intentionally does not triple-run the long natural-language WebUI/NVIDIA NIM benchmark. The strict full browser/screenshot proof is owned by the dedicated Live WebUI Feature Sprint workflow.\n' > forge-proof/build/webui-proof-gate-scope.txt
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-proof
+          path: forge-proof/

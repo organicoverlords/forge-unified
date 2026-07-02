@@ -1,0 +1,130 @@
+You are running inside the Forge WebUI with repo-local coding tools.
+
+Complete all six phases before reporting. This is a live NVIDIA NIM/WebUI proof run, so finish quickly and stop inspecting as soon as the required evidence exists.
+
+Hard rule: after the batch_parallel call and one task call below, do not inspect any more source files for Phase 2. Go directly to Phase 3 file operations. Do not read these timeout-prone implementation files during this benchmark: `crates/engine/src/orchestrator.rs`, `crates/webui/src/agent_benchmark.rs`, `crates/engine/src/tool/file_ops.rs`, or `scripts/smoke/live-webui-feature-sprint.sh`. Validate the script only with `bash -n scripts/smoke/live-webui-feature-sprint.sh`.
+
+OpenCode max-step reference behavior applies only after the final Phase 4 validation shell result from step 10 exists. The earlier Phase 2 `bash -n` result inside `batch_parallel` is inspection evidence, not the final stop point. After the step 10 validation result exists, tools are disabled: any additional tool call after that validation result is a failure. Respond with text only, summarizing work done, remaining tasks, and next recommendations. Source backing: `packages/core/src/session/runner/max-steps.ts`.
+
+Use real tools only. Do not print tool JSON in prose. Tool failures must be repaired with the correct file/shell/repo tool; do not switch models because a repo tool fails.
+
+# Required exact fast path
+
+1. Use `todo_write` first with six todos, one per phase.
+2. Use `batch_parallel` once with independent nested requests for exactly this evidence:
+   - `repo_info`
+   - `file_read` of `Cargo.toml`
+   - `file_list` of the repo root
+   - `shell_command`: `pwd; echo '---'; git rev-parse --show-toplevel; echo '---'; git branch --show-current; echo '---'; git rev-parse HEAD; echo '---'; git remote -v; echo '---'; git status --short`
+   - `shell_command`: `du -sh . --exclude=target 2>/dev/null | head -1; echo '---'; find . -maxdepth 2 -type f | sed 's#^./##' | sort | head -80`
+   - `file_search` in `crates` for `TODO|FIXME|HACK`
+   - `shell_command`: `find crates -name '*.rs' | sort | head -60`
+   - `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"`
+3. Use the real `task` tool exactly once with agent `repo-explorer` and description `summarize architecture and one safe benchmark risk from existing evidence`. Keep its prompt short. Do not ask it to inspect forbidden files.
+4. Stop Phase 1/2 inspection. The batch_parallel nested results plus task result are enough. Do not call more file_read/file_search/shell inspection tools before Phase 3.
+5. Phase 3: create exactly these files with dedicated `file_write` tools:
+   - `.agent_test/repo_summary.md`
+   - `.agent_test/investigation.md`
+   - `.agent_test/action_plan.json`
+6. Immediately read back all three files with dedicated `file_read` tools. Use `batch_parallel` for exactly these three reads if available, and do not delete anything until all three file_read results exist:
+   - `.agent_test/action_plan.json`
+   - `.agent_test/investigation.md`
+   - `.agent_test/repo_summary.md`
+7. Delete only `.agent_test/investigation.md` with `file_delete`.
+8. Verify remaining files with `shell_command`: `find .agent_test -maxdepth 1 -type f -print | sort`.
+9. Phase 4 is mandatory and must be the very next tool operation after that `.agent_test` verification. Make one tiny safe repository edit outside `.agent_test` with a dedicated `file_edit`, `file_write`, or `apply_patch` tool. Prefer appending one dated benchmark note to `PROJECT_STATE.md`. Do not use shell redirection for this edit, because the checker requires a file-editing tool result. A final answer before this dedicated Phase 4 edit tool result is a failed run.
+10. Validate and inspect state with exactly this `shell_command`: `bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo "EXIT:$?"; echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort`.
+11. STOP USING TOOLS after the validation shell result in step 10. Do not run the validation command again. Do not inspect git status again. Do not write another file. Do not ask for more evidence. Write the final Markdown answer immediately.
+12. The final answer must be plain Markdown text, not JSON, not tool calls, and not an empty message. Before sending it, verify from existing tool evidence that you have both a successful dedicated file-editing tool result outside `.agent_test` and the step 10 validation shell result. If either one is missing, do not answer yet: continue with the missing Phase 4 edit or the exact validation shell command.
+
+Critical validation priority: after the `PROJECT_STATE.md` file-editing tool succeeds, the exact step 10 validation shell command is more important than any prose, todo update, report writing, or cleanup. Never send the final answer immediately after the edit. The next assistant action after the edit must be that exact validation shell command.
+
+# Phase 1 — Environment + repo inspection
+
+Use the batch_parallel results to identify current working directory, repo root, branch, HEAD, remotes, dirty state, build system, package manager, test commands, repo size, repo map, scripts/docs/configs/tests, TODO/FIXME/HACK evidence, and likely risks. Keep this concise.
+
+# Phase 2 — Long tool loop test
+
+Use this suspicious issue: `benchmark proof instructions can cause over-inspection before file operation proof`.
+
+Your Phase 2 investigation is complete once the batch_parallel nested results and the one task result exist. Do not investigate deeply beyond that. Your hypothesis should be based on evidence already gathered: too much inspection can starve Phase 3 within the WebUI proof timeout.
+
+# Phase 3 — File operation stress test
+
+Create `.agent_test/` implicitly by writing files if needed. The three required files are:
+
+- `.agent_test/repo_summary.md`: short repo overview, probable architecture, biggest risks.
+- `.agent_test/investigation.md`: Phase 2 finding, confidence level, proof.
+- `.agent_test/action_plan.json`: JSON object with `top_issues`, `recommended_order`, `quick_wins`, `risky_changes`, and `confidence_score`.
+
+Read all three files back with actual file_read tool calls before deleting anything. The final proof will fail unless `.agent_test/action_plan.json` has a dedicated successful file_read result. Then remove only `.agent_test/investigation.md`. Verify only `repo_summary.md` and `action_plan.json` remain.
+
+# Phase 4 — Judgment test
+
+Immediately after the `.agent_test` verification command, write one short assistant paragraph containing these exact lowercase phrases: why it matters, blast radius, implementation difficulty, rollback difficulty. Then edit `PROJECT_STATE.md` only with a dedicated file editing tool, not shell redirection. After that edit, your next action must be the exact step 10 validation shell command and nothing else. Do not send the Founder report or Technical report until both the successful Phase 4 file-editing tool result and the successful validation shell result exist.
+
+# Phase 5 — Writing quality
+
+Your final answer must copy this literal Markdown template. Keep every heading and lowercase label exactly. Fill the bracketed text briefly, but do not remove any label.
+
+confidence (0-100)
+85
+- VERIFIED: [tool evidence directly proves this]
+- LIKELY: [supported conclusion not fully proven]
+- UNKNOWN: [remaining uncertainty]
+
+## Founder report
+
+[Under 130 words: what you investigated, what changed, risk, and next step.]
+
+## Technical report
+
+evidence
+- VERIFIED: [specific successful tool evidence]
+
+assumptions
+- LIKELY: [one supported assumption]
+
+failed hypotheses
+- UNKNOWN: [one thing not proven or a hypothesis not resolved]
+
+confidence
+- VERIFIED: [what tool evidence proves]
+- LIKELY: [what is supported but not fully proven]
+- UNKNOWN: [what remains uncertain]
+
+rollback strategy
+- [rollback command or action]
+
+blast radius
+- [low/medium/high plus reason]
+
+implementation difficulty
+- [low/medium/high plus reason]
+
+rollback difficulty
+- [low/medium/high plus reason]
+
+files created
+- [paths]
+
+files removed
+- [paths]
+
+files modified
+- [paths]
+
+tests run
+- [exact validation command]
+
+unresolved risks
+- [remaining risk]
+
+confidence (0-100)
+85
+
+# Phase 6 — Cleanup discipline
+
+Before final answer, use only the existing step 10 tool evidence to verify repo state and `.agent_test` contents. Do not call another tool for Phase 6 after step 10. Final answer must include these exact strings: `confidence (0-100)`, `VERIFIED`, `LIKELY`, `UNKNOWN`, `## Founder report`, `## Technical report`, `evidence`, `assumptions`, `failed hypotheses`, `rollback strategy`, `blast radius`, `implementation difficulty`, `rollback difficulty`, `files created`, `files removed`, `files modified`, `tests run`, `unresolved risks`.
+
+Final self-check before sending the final answer: if the answer is blank, JSON, a tool call, or missing any exact string from that list, rewrite it as Markdown before sending. Do not claim cargo build/check/test success unless that exact cargo command succeeded in a tool result. `bash -n scripts/smoke/live-webui-feature-sprint.sh` is the required validation command for this run. You are not done after Phase 3: a Phase 4 file-editing tool result outside `.agent_test`, validation shell result, and final Markdown report are all required.
