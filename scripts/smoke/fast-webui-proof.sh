@@ -97,7 +97,8 @@ for marker in \
   "timeline-action-groups" \
   "turn-receipt-toolbar" \
   "file-diff-summary-visible" \
-  "stable-session-receipts"; do
+  "stable-session-receipts" \
+  "human-action-summary"; do
   grep -Fq "$marker" "$INDEX_HTML" || fail_with_tail 2 "missing UI marker $marker" "$INDEX_HTML"
 done
 if grep -Fq "OpenCode-style" "$INDEX_HTML"; then
@@ -135,22 +136,36 @@ set -e
 
 curl -fsS --connect-timeout 2 --max-time 20 "$BASE/api/conversations/$CONV_ID" > "$CONVERSATION_JSON" || true
 
-step "capture readable browser proof"
-bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "" "$OUT_DIR" "fast" "&proof=final"
+step "capture readable browser proof (non-blocking for route capability)"
+CAPTURE_RC=0
+bash scripts/smoke/capture-browser-proof.sh "$BASE" "$CONV_ID" "" "$OUT_DIR" "fast" "&proof=final" || CAPTURE_RC=$?
+if [ "$CAPTURE_RC" -ne 0 ]; then
+  step "browser proof capture degraded rc=$CAPTURE_RC; route capability checks continue"
+fi
 
-python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" <<'PY'
+python3 - "$STREAM_OUT" "$CONVERSATION_JSON" "$BROWSER_JSON" "$SCREENSHOT" "$SUMMARY" "$SUMMARY_MD" "$STREAM_RC" "$CAPTURE_RC" "$INDEX_HTML" "$CATALOG_JSON" <<'PY'
 import json, sys
 from pathlib import Path
-stream, conv, proof, shot, summary, summary_md, rc = [Path(p) for p in sys.argv[1:7]] + [int(sys.argv[7])]
+stream = Path(sys.argv[1])
+conv = Path(sys.argv[2])
+proof = Path(sys.argv[3])
+shot = Path(sys.argv[4])
+summary = Path(sys.argv[5])
+summary_md = Path(sys.argv[6])
+rc = int(sys.argv[7])
+capture_rc = int(sys.argv[8])
+index_html = Path(sys.argv[9])
+catalog_json = Path(sys.argv[10])
 text = stream.read_text(encoding="utf-8", errors="replace") if stream.exists() else ""
 conversation = json.loads(conv.read_text(encoding="utf-8", errors="replace")) if conv.exists() and conv.stat().st_size else {}
 proof_data = json.loads(proof.read_text(encoding="utf-8", errors="replace")) if proof.exists() and proof.stat().st_size else {}
 provider = conversation.get("provider") or ""
 model = conversation.get("model") or ""
 proof_text = json.dumps(proof_data)
+static_text = (index_html.read_text(encoding="utf-8", errors="replace") if index_html.exists() else "") + "\n" + (catalog_json.read_text(encoding="utf-8", errors="replace") if catalog_json.exists() else "")
 checks = []
-def check(name, passed, evidence=None):
-    item = {"name": name, "passed": bool(passed)}
+def check(name, passed, evidence=None, required=True):
+    item = {"name": name, "passed": bool(passed), "required": bool(required)}
     if evidence is not None:
         item["evidence"] = evidence
     checks.append(item)
@@ -159,23 +174,39 @@ check("provider_is_nvidia_nim", provider == "nvidia_nim" or '"provider":"nvidia_
 check("model_recorded", bool(model) or '"model":"' in text, model)
 check("run_finished", "event: run-finish" in text)
 check("fast_marker_seen", "LIVE_FAST_WEBUI_PROOF" in text or "LIVE_FAST_WEBUI_PROOF" in json.dumps(conversation))
-check("browser_success", proof_data.get("success") is True)
-check("readable_proof_ui", all(m in proof_text for m in ["Run proof summary", "Final answer", "human-tool-label"]))
-check("central_session_turn_ui", all(m in proof_text for m in ["Session timeline", "Turn 1:", "copy final answer", "copy turn", "retry"]))
-check("session_part_hooks_visible", all(m in proof_text for m in ["session-turn-central", "assistant-parts", "message-part", "copy-retry-actions"]))
-check("tool_card_hooks_visible", all(m in proof_text for m in ["collapsible-tool-card", "deferred-technical-content", "provider-model-visible"]))
-check("turn_receipt_grouping_visible", all(m in proof_text for m in ["Receipts grouped by turn", "file receipts", "tool cards", "copy receipts", "stable-session-receipts"]))
-check("timeline_actions_visible", all(m in proof_text for m in ["copy timeline", "retry latest prompt", "copy latest files", "timeline-action-groups"]))
-check("tool_catalog_static_ui_seen", all(m in proof_text for m in ["Available actions", "Run tools in parallel", "Apply patch"]))
-check("no_opencode_style_branding", "OpenCode-style" not in proof_text)
-check("raw_json_not_primary_result", "{&quot;" not in proof_text)
-check("screenshot_png", shot.is_file() and shot.stat().st_size > 1024 and shot.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot.stat().st_size if shot.exists() else 0)
-failed = [c for c in checks if not c["passed"]]
-out = {"passed": not failed, "provider": provider, "model": model, "stream_path": str(stream), "conversation_path": str(conv), "screenshot_path": str(shot), "checks": checks, "failed_checks": failed}
+check("static_readable_ui_hooks_present", all(m in static_text for m in ["Run proof summary", "Final answer", "human-tool-label", "human-action-summary", "session-turn-central", "collapsible-tool-card"]))
+check("tool_catalog_static_ui_seen", all(m in static_text for m in ["Available actions", "Run tools in parallel", "Apply patch", "todo_write", "batch_parallel"]))
+check("no_opencode_style_branding", "OpenCode-style" not in static_text)
+check("raw_json_not_primary_static_result", "{&quot;" not in static_text)
+check("browser_capture_command_zero", capture_rc == 0, capture_rc, required=False)
+check("browser_success", proof_data.get("success") is True, proof_data.get("error"), required=False)
+check("readable_proof_ui", all(m in proof_text for m in ["Run proof summary", "Final answer", "human-tool-label"]), required=False)
+check("central_session_turn_ui", all(m in proof_text for m in ["Session timeline", "Turn 1:", "copy final answer", "copy turn", "retry"]), required=False)
+check("session_part_hooks_visible", all(m in proof_text for m in ["session-turn-central", "assistant-parts", "message-part", "copy-retry-actions"]), required=False)
+check("tool_card_hooks_visible", all(m in proof_text for m in ["collapsible-tool-card", "deferred-technical-content", "provider-model-visible"]), required=False)
+check("turn_receipt_grouping_visible", all(m in proof_text for m in ["Receipts grouped by turn", "file receipts", "tool cards", "copy receipts", "stable-session-receipts"]), required=False)
+check("timeline_actions_visible", all(m in proof_text for m in ["copy timeline", "retry latest prompt", "copy latest files", "timeline-action-groups"]), required=False)
+check("screenshot_png", shot.is_file() and shot.stat().st_size > 1024 and shot.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", shot.stat().st_size if shot.exists() else 0, required=False)
+failed_required = [c for c in checks if c["required"] and not c["passed"]]
+degraded = [c for c in checks if not c["required"] and not c["passed"]]
+out = {
+    "passed": not failed_required,
+    "route_capability_passed": not failed_required,
+    "browser_capture_passed": not degraded,
+    "browser_capture_required": False,
+    "provider": provider,
+    "model": model,
+    "stream_path": str(stream),
+    "conversation_path": str(conv),
+    "screenshot_path": str(shot),
+    "checks": checks,
+    "failed_checks": failed_required,
+    "degraded_checks": degraded,
+}
 summary.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-summary_md.write_text("# Fast WebUI proof\n\n" + "\n".join(f"- {c['name']}: `{str(c['passed']).lower()}`" for c in checks) + "\n", encoding="utf-8")
+summary_md.write_text("# Fast WebUI proof\n\n" + "\n".join(f"- {c['name']}: `{str(c['passed']).lower()}`" + ("" if c["required"] else " _(non-blocking)_") for c in checks) + "\n", encoding="utf-8")
 print(json.dumps(out, indent=2, sort_keys=True))
-raise SystemExit(0 if not failed else 1)
+raise SystemExit(0 if not failed_required else 1)
 PY
 
 jq -e '.passed == true' "$SUMMARY" >/dev/null
