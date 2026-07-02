@@ -1,0 +1,94 @@
+<style>
+.session-control-group-strip{margin-top:.35rem;display:grid;gap:.25rem;color:var(--muted);font-size:.72rem}
+.session-control-group-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:center;padding:.28rem .4rem;border:1px solid var(--border);border-radius:.45rem;background:color-mix(in srgb,var(--surface,#111) 90%,transparent)}
+.session-control-group-row[data-expanded="true"]{background:color-mix(in srgb,var(--accent,#7aa2ff) 10%,var(--surface,#111))}
+.session-control-group-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-group-detail{grid-column:1/-1;display:none;white-space:pre-wrap;overflow:auto;max-height:8rem;color:var(--text);border-top:1px solid var(--border);padding-top:.25rem}
+.session-control-group-row[data-expanded="true"] .session-control-group-detail{display:block}
+.session-control-group-count{padding:.14rem .36rem;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+</style>
+<script>
+(function(){
+  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow opencode-session-turn-diffs-group-shape';
+  const expanded=new Set();
+  function parseEvent(row){
+    const raw=row.getAttribute('data-session-control-event')||'';
+    let value={};
+    try{value=raw?JSON.parse(raw):{}}catch{value={raw}}
+    const action=String(value.action||value.type||'session_control');
+    const status=String(value.status||row.dataset.status||'ok');
+    const id=String(value.receipt_id||value.sequence||value.created_at||raw||row.textContent||Math.random());
+    return {action,status,id,raw,value};
+  }
+  function groups(){
+    const rows=Array.from(document.querySelectorAll('.backend-session-control-event-row')).filter(row=>row.dataset.kind!=='overflow');
+    const map=new Map();
+    for(const row of rows){
+      const event=parseEvent(row);
+      const key=`${event.status}:${event.action}`;
+      if(!map.has(key))map.set(key,{key,status:event.status,action:event.action,events:[]});
+      if(!map.get(key).events.some(x=>x.id===event.id))map.get(key).events.push(event);
+    }
+    return Array.from(map.values()).sort((a,b)=>b.events.length-a.events.length||a.key.localeCompare(b.key));
+  }
+  function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
+  function render(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    document.querySelectorAll('.session-head').forEach(head=>{
+      let strip=head.querySelector('.session-control-group-strip');
+      if(!strip){
+        strip=document.createElement('div');
+        strip.className='session-control-group-strip';
+        strip.dataset.proof=PROOF;
+        const ledger=head.querySelector('.backend-session-control-ledger');
+        if(ledger)ledger.insertAdjacentElement('beforebegin',strip);else head.appendChild(strip);
+      }
+      const data=groups();
+      strip.textContent='';
+      if(!data.length){
+        const empty=document.createElement('div');
+        empty.className='session-control-group-row';
+        empty.dataset.proof=PROOF;
+        empty.textContent='Grouped session-control ledger is waiting for receipts.';
+        strip.appendChild(empty);
+        return;
+      }
+      data.slice(0,4).forEach(group=>{
+        const row=document.createElement('div');
+        row.className='session-control-group-row';
+        row.dataset.proof=PROOF;
+        row.dataset.status=group.status;
+        row.dataset.expanded=expanded.has(group.key)?'true':'false';
+        const main=document.createElement('span');
+        main.className='session-control-group-main';
+        main.textContent=`${group.action} · ${group.status}`;
+        const toggle=document.createElement('button');
+        toggle.type='button';
+        toggle.className='mini-btn session-control-group-toggle';
+        toggle.dataset.proof='session-control-group-toggle session-control-group-visible';
+        toggle.setAttribute('aria-expanded',row.dataset.expanded);
+        toggle.textContent=expanded.has(group.key)?'hide group':`${group.events.length} events`;
+        toggle.onclick=e=>{e.stopPropagation();if(expanded.has(group.key))expanded.delete(group.key);else expanded.add(group.key);render()};
+        const detail=document.createElement('pre');
+        detail.className='session-control-group-detail';
+        detail.dataset.proof='session-control-group-detail session-control-group-visible';
+        detail.textContent=detailText(group);
+        row.appendChild(main);
+        row.appendChild(toggle);
+        row.appendChild(detail);
+        strip.appendChild(row);
+      });
+      if(data.length>4){
+        const overflow=document.createElement('div');
+        overflow.className='session-control-group-row';
+        overflow.dataset.proof='session-control-group-overflow session-control-group-count';
+        overflow.textContent=`${data.length-4} more session-control groups hidden`;
+        strip.appendChild(overflow);
+      }
+    });
+  }
+  const observer=new MutationObserver(()=>render());
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-session-control-event','data-status','data-expanded']});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
+})();
+</script>
