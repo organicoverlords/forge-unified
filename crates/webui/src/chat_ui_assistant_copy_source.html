@@ -1,0 +1,71 @@
+<section class="forge-card forge-assistant-copy-source" data-component="assistant-copy-source-strip" data-opencode-source="packages/session-ui/src/components/session-turn.tsx:showAssistantCopyPartID,assistantCopyPartID" aria-label="Assistant copy source">
+  <div class="forge-card-title">Assistant copy source</div>
+  <div class="forge-muted">Mirrors the latest completed assistant text-part copy target without exposing upstream branding.</div>
+  <div class="forge-chip-row">
+    <span class="forge-chip" data-slot="assistant-copy-source-state">copy target: latest completed assistant text</span>
+    <span class="forge-chip" data-slot="assistant-copy-source-working-guard">disabled while working</span>
+    <span class="forge-chip" data-slot="assistant-copy-source-part-id">part id: pending</span>
+  </div>
+  <button type="button" class="forge-copy" data-action="copy-assistant-copy-source">copy latest assistant text</button>
+</section>
+<script>
+(() => {
+  const root = document.querySelector('[data-component="assistant-copy-source-strip"]');
+  if (!root) return;
+  const partChip = root.querySelector('[data-slot="assistant-copy-source-part-id"]');
+  const stateChip = root.querySelector('[data-slot="assistant-copy-source-state"]');
+  const guardChip = root.querySelector('[data-slot="assistant-copy-source-working-guard"]');
+  const button = root.querySelector('[data-action="copy-assistant-copy-source"]');
+
+  function textOf(node) {
+    return (node?.innerText || node?.textContent || '').trim();
+  }
+
+  function assistantCandidates() {
+    return Array.from(document.querySelectorAll([
+      '[data-role="assistant"]',
+      '[data-slot="session-turn-assistant-content"]',
+      '.assistant-message',
+      '.message.assistant',
+      '.forge-assistant-message'
+    ].join(','))).filter((node) => textOf(node));
+  }
+
+  function isWorking() {
+    return Boolean(document.querySelector('[data-slot="session-turn-thinking"], [data-working="true"], .thinking, .streaming'));
+  }
+
+  function latestCandidate() {
+    const items = assistantCandidates();
+    return items.length ? items[items.length - 1] : null;
+  }
+
+  function refresh() {
+    const candidate = latestCandidate();
+    const working = isWorking();
+    const id = candidate?.getAttribute('data-part-id') || candidate?.getAttribute('data-message') || candidate?.id || 'latest-visible-assistant-text';
+    if (partChip) partChip.textContent = candidate ? `part id: ${id}` : 'part id: none yet';
+    if (stateChip) stateChip.textContent = candidate ? 'copy target: latest completed assistant text' : 'copy target: waiting for assistant text';
+    if (guardChip) guardChip.textContent = working ? 'disabled while working' : 'ready after completion';
+    if (button) button.disabled = !candidate || working;
+  }
+
+  button?.addEventListener('click', async () => {
+    const candidate = latestCandidate();
+    if (!candidate || isWorking()) return;
+    const payload = textOf(candidate);
+    try {
+      await navigator.clipboard.writeText(payload);
+      button.textContent = 'copied latest assistant text';
+    } catch {
+      button.setAttribute('data-copy-fallback', payload.slice(0, 4096));
+      button.textContent = 'copy fallback stored';
+    }
+    setTimeout(() => { button.textContent = 'copy latest assistant text'; }, 1600);
+  });
+
+  refresh();
+  const observer = new MutationObserver(refresh);
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+})();
+</script>
