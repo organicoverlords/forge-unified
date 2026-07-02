@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Validate the full six-phase WebUI benchmark from recorded artifacts.
 
-The checker trusts tool-result/SSE evidence over final prose. It only requires
-matching cargo evidence when the final answer makes a non-negated success claim
-for that exact cargo command.
+The checker trusts tool-result/SSE evidence over final prose. It enforces the
+strict Phase 4 ordering rule: the successful PROJECT_STATE.md edit must be
+followed by the exact validation command before the final answer.
 """
 from __future__ import annotations
 
@@ -20,6 +20,11 @@ EXPECTED_AGENT_FILES = {
     f"{AGENT_TEST}/investigation.md",
     f"{AGENT_TEST}/action_plan.json",
 }
+PHASE4_VALIDATION_COMMAND = (
+    "bash -n scripts/smoke/live-webui-feature-sprint.sh 2>&1; echo \"EXIT:$?\"; "
+    "echo '---STATUS---'; git status --short; echo '---DIFF---'; git diff -- PROJECT_STATE.md; "
+    "echo '---AGENT_TEST---'; find .agent_test -maxdepth 1 -type f -print | sort"
+)
 PHASE4_VALIDATION_FRAGMENTS = [
     "bash -n scripts/smoke/live-webui-feature-sprint.sh",
     "echo \"EXIT:$?\"",
@@ -171,10 +176,8 @@ def has_provider_local_event(events: list[dict[str, Any]]) -> bool:
 
 
 def prose_for_claim_detection(line: str) -> str:
-    """Normalize Markdown/code punctuation before claim/negation matching."""
     text = re.sub(r"[`*_]", "", line.lower())
-    text = re.sub(r"\s+", " ", text)
-    return text
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def non_negated_claim_line(line: str) -> bool:
@@ -227,7 +230,16 @@ def phase4_validation_command_matches(command: str) -> bool:
 
 
 def phase4_validation_output_matches(output: str) -> bool:
-    return all(fragment in output for fragment in ["EXIT:0", "---STATUS---", "---DIFF---", "---AGENT_TEST---", f"{AGENT_TEST}/repo_summary.md", f"{AGENT_TEST}/action_plan.json"]) and f"{AGENT_TEST}/investigation.md" not in output.split("---AGENT_TEST---")[-1]
+    agent_listing = output.split("---AGENT_TEST---")[-1]
+    return (
+        "EXIT:0" in output
+        and "---STATUS---" in output
+        and "---DIFF---" in output
+        and "---AGENT_TEST---" in output
+        and f"{AGENT_TEST}/repo_summary.md" in output
+        and f"{AGENT_TEST}/action_plan.json" in output
+        and f"{AGENT_TEST}/investigation.md" not in agent_listing
+    )
 
 
 def phase4_project_state_edit(result: dict[str, Any]) -> bool:
@@ -276,20 +288,41 @@ def phase4_sequence(results: list[dict[str, Any]]) -> dict[str, Any]:
         "validation_output_ok": output_ok,
         "no_tool_results_after_validation": validation is not None and not after,
         "edit": {"index": edit_idx, "kind": edit.get("kind"), "path": result_path(edit)},
-        "validation": None if validation is None else {"index": validation_idx, "command": result_command(validation), "output_excerpt": result_output(validation)[:2000]},
-        "tool_results_after_validation": [{"kind": r.get("kind"), "path": result_path(r), "command": result_command(r)} for r in after],
+        "validation": None
+        if validation is None
+        else {
+            "index": validation_idx,
+            "command": result_command(validation),
+            "output_excerpt": result_output(validation)[:2000],
+        },
+        "tool_results_after_validation": [
+            {"kind": r.get("kind"), "path": result_path(r), "command": result_command(r)} for r in after
+        ],
     }
 
 
 def final_defers_required_validation(final: str) -> bool:
-    lowered = prose_for_claim_detection(final)
-    risky_patterns = [
-        r"next (recommendation|step).*validat",
-        r"recommendation is to validate",
-        r"validation .*next",
-        r"phase 4 .*attempted",
-    ]
-    return any(re.search(pattern, lowered, re.S) for pattern in risky_patterns)
+    """Fail only when final prose says validation itself is still future work.
+
+    This is intentionally sentence-scoped. A valid report may say "review the
+    artifact next" near another sentence that describes already-run validation.
+    The old cross-sentence regex produced a false failure for that case.
+    """
+    for sentence in re.split(r"[\n.!?]+", final):
+        text = prose_for_claim_detection(sentence)
+        if not text:
+            continue
+        if re.search(r"\bnext\s+(recommendation|step)\b[^.\n]{0,100}\bvalidat", text):
+            return True
+        if re.search(r"\brecommendation\s+is\s+to\s+validat", text):
+            return True
+        if re.search(r"\bwould\s+be\s+to\s+validat", text):
+            return True
+        if re.search(r"\bvalidation\b[^.\n]{0,80}\b(still|next|remaining|needed|pending)\b", text):
+            return True
+        if re.search(r"\bphase\s*4\b[^.\n]{0,80}\battempted\b", text):
+            return True
+    return False
 
 
 def main() -> int:
