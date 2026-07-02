@@ -1,0 +1,40 @@
+<style>
+.session-control-source-map-jump{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px}
+.backend-session-control-event-row[data-source-map-jump-target="true"]{outline:2px solid color-mix(in srgb,var(--accent,#7aa2ff) 72%,transparent);scroll-margin-top:5rem}
+</style>
+<script>
+(function(){
+  const PROOF='session-control-source-map-jump session-control-source-map-jump-target opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape crates/webui/src/chat_ui_session_control_source_jump.html';
+  function selectedRow(){
+    return document.querySelector('.backend-session-control-event-row[data-source-map-selected="true"]');
+  }
+  function clearTargets(){
+    document.querySelectorAll('.backend-session-control-event-row[data-source-map-jump-target="true"]').forEach(row=>{row.dataset.sourceMapJumpTarget='false'});
+  }
+  function jump(){
+    const row=selectedRow();
+    clearTargets();
+    if(!row)return;
+    row.dataset.sourceMapJumpTarget='true';
+    row.setAttribute('tabindex',row.getAttribute('tabindex')||'-1');
+    row.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});
+    try{row.focus({preventScroll:true})}catch{row.focus()}
+    if(typeof toast==='function')toast('selected receipt source focused');
+  }
+  function ensureButton(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    const actions=document.querySelector('.session-control-source-map-selected-actions');
+    if(!actions||actions.querySelector('.session-control-source-map-jump'))return;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='mini-btn session-control-source-map-jump';
+    button.dataset.proof='session-control-source-map-jump opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape';
+    button.textContent='jump to receipt source';
+    button.onclick=e=>{e.stopPropagation();jump()};
+    actions.insertBefore(button,actions.firstChild);
+  }
+  const observer=new MutationObserver(ensureButton);
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-source-map-selected']});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureButton,{once:true});else ensureButton();
+})();
+</script>
