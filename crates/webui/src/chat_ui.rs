@@ -2,6 +2,7 @@ pub const CHAT_HTML: &str = concat!(
     include_str!("chat_ui.html"),
     include_str!("chat_ui_live_turn_ordinals.html"),
     include_str!("chat_ui_turn_summary_strip.html"),
+    include_str!("chat_ui_assistant_part_summary.html"),
     include_str!("chat_ui_enhancements.html"),
     include_str!("chat_ui_action_summaries.html"),
     include_str!("chat_ui_action_pins.html"),
