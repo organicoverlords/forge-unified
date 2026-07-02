@@ -7,14 +7,20 @@
 .session-control-group-copy{white-space:nowrap}
 .session-control-group-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:center;padding:.28rem .4rem;border:1px solid var(--border);border-radius:.45rem;background:color-mix(in srgb,var(--surface,#111) 90%,transparent)}
 .session-control-group-row[data-expanded="true"]{background:color-mix(in srgb,var(--accent,#7aa2ff) 10%,var(--surface,#111))}
-.session-control-group-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-group-main{min-width:0;display:grid;gap:.1rem}
+.session-control-group-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.session-control-group-path{display:flex;gap:.12rem;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;color:var(--muted)}
+.session-control-group-directory{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.session-control-group-filename{font-weight:600;color:var(--text)}
+.session-control-group-meta{display:flex;gap:.25rem;align-items:center;justify-content:flex-end;min-width:0}
+.session-control-group-latest{padding:.14rem .36rem;border:1px solid var(--border);border-radius:999px;max-width:7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .session-control-group-detail{grid-column:1/-1;display:none;white-space:pre-wrap;overflow:auto;max-height:8rem;color:var(--text);border-top:1px solid var(--border);padding-top:.25rem}
 .session-control-group-row[data-expanded="true"] .session-control-group-detail{display:block}
 .session-control-group-count{padding:.14rem .36rem;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less session-control-group-status-summary session-control-group-status-chip session-control-group-copy-summary opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle opencode-session-turn-diff-changes-shape';
+  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less session-control-group-status-summary session-control-group-status-chip session-control-group-copy-summary session-control-group-path-meta session-control-group-directory session-control-group-filename session-control-group-latest opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-diff-changes-shape';
   const expanded=new Set();
   let showAll=false;
   function parseEvent(row){
@@ -23,16 +29,17 @@
     try{value=raw?JSON.parse(raw):{}}catch{value={raw}}
     const action=String(value.action||value.type||'session_control');
     const status=String(value.status||row.dataset.status||'ok');
+    const path=String(value.path||value.file||value.target_path||value.receipt_path||'session_control');
     const id=String(value.receipt_id||value.sequence||value.created_at||raw||row.textContent||Math.random());
-    return {action,status,id,raw,value};
+    return {action,status,path,id,raw,value};
   }
   function groups(){
     const rows=Array.from(document.querySelectorAll('.backend-session-control-event-row')).filter(row=>row.dataset.kind!=='overflow');
     const map=new Map();
     for(const row of rows){
       const event=parseEvent(row);
-      const key=`${event.status}:${event.action}`;
-      if(!map.has(key))map.set(key,{key,status:event.status,action:event.action,events:[]});
+      const key=`${event.status}:${event.action}:${event.path}`;
+      if(!map.has(key))map.set(key,{key,status:event.status,action:event.action,path:event.path,events:[]});
       if(!map.get(key).events.some(x=>x.id===event.id))map.get(key).events.push(event);
     }
     return Array.from(map.values()).sort((a,b)=>b.events.length-a.events.length||a.key.localeCompare(b.key));
@@ -42,12 +49,19 @@
     for(const group of data)map.set(group.status,(map.get(group.status)||0)+group.events.length);
     return Array.from(map.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   }
+  function splitPath(path){
+    const clean=String(path||'session_control').replace(/^\/+|\/+$/g,'')||'session_control';
+    const slash=clean.lastIndexOf('/');
+    if(slash<0)return {directory:'',filename:clean};
+    return {directory:clean.slice(0,slash),filename:clean.slice(slash+1)||clean};
+  }
   function groupLine(group){return `${group.action} · ${group.status} · ${group.events.length} ${group.events.length===1?'event':'events'}`}
+  function shortId(group){return String(group.events[group.events.length-1]?.id||'').slice(0,12)}
   function summaryText(data){
     const visible=showAll?data:data.slice(0,4);
     const counts=statusCounts(data).map(([status,count])=>`${status}: ${count}`).join(', ');
     const hidden=Math.max(0,data.length-visible.length);
-    return [`Grouped session-control ledger`, `${data.length} groups`, counts?`statuses: ${counts}`:'statuses: none', ...visible.map(groupLine), hidden?`${hidden} hidden groups`:''].filter(Boolean).join('\n');
+    return [`Grouped session-control ledger`, `${data.length} groups`, counts?`statuses: ${counts}`:'statuses: none', ...visible.map(group=>`${groupLine(group)} · ${group.path}`), hidden?`${hidden} hidden groups`:''].filter(Boolean).join('\n');
   }
   function copyText(text){
     if(navigator.clipboard?.writeText)return navigator.clipboard.writeText(text).catch(()=>{});
@@ -61,7 +75,7 @@
     try{document.execCommand('copy')}catch{}
     area.remove();
   }
-  function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
+  function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status} · ${event.path}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
   function renderToolbar(strip,data){
     const toolbar=document.createElement('div');
     toolbar.className='session-control-group-toolbar';
@@ -100,6 +114,25 @@
     }
     strip.appendChild(toolbar);
   }
+  function renderPath(group){
+    const path=splitPath(group.path);
+    const wrap=document.createElement('span');
+    wrap.className='session-control-group-path';
+    wrap.dataset.proof='session-control-group-path-meta opencode-session-turn-diff-path-shape';
+    if(path.directory){
+      const dir=document.createElement('span');
+      dir.className='session-control-group-directory';
+      dir.dataset.proof='session-control-group-directory';
+      dir.textContent=`${path.directory}/`;
+      wrap.appendChild(dir);
+    }
+    const file=document.createElement('span');
+    file.className='session-control-group-filename';
+    file.dataset.proof='session-control-group-filename';
+    file.textContent=path.filename;
+    wrap.appendChild(file);
+    return wrap;
+  }
   function render(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.session-head').forEach(head=>{
@@ -131,7 +164,18 @@
         row.dataset.expanded=expanded.has(group.key)?'true':'false';
         const main=document.createElement('span');
         main.className='session-control-group-main';
-        main.textContent=groupLine(group);
+        const title=document.createElement('span');
+        title.className='session-control-group-title';
+        title.textContent=groupLine(group);
+        main.appendChild(title);
+        main.appendChild(renderPath(group));
+        const meta=document.createElement('span');
+        meta.className='session-control-group-meta';
+        meta.dataset.proof='session-control-group-meta opencode-session-turn-diff-meta-shape';
+        const latest=document.createElement('span');
+        latest.className='session-control-group-latest';
+        latest.dataset.proof='session-control-group-latest';
+        latest.textContent=shortId(group)?`latest ${shortId(group)}`:'latest receipt';
         const toggle=document.createElement('button');
         toggle.type='button';
         toggle.className='mini-btn session-control-group-toggle';
@@ -139,12 +183,14 @@
         toggle.setAttribute('aria-expanded',row.dataset.expanded);
         toggle.textContent=expanded.has(group.key)?'hide group':`${group.events.length} events`;
         toggle.onclick=e=>{e.stopPropagation();if(expanded.has(group.key))expanded.delete(group.key);else expanded.add(group.key);render()};
+        meta.appendChild(latest);
+        meta.appendChild(toggle);
         const detail=document.createElement('pre');
         detail.className='session-control-group-detail';
         detail.dataset.proof='session-control-group-detail session-control-group-visible';
         detail.textContent=detailText(group);
         row.appendChild(main);
-        row.appendChild(toggle);
+        row.appendChild(meta);
         row.appendChild(detail);
         strip.appendChild(row);
       });
