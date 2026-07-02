@@ -1,0 +1,60 @@
+<style>
+.session-turn-summary-strip{margin:.4rem 0 .25rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:.72rem}
+.session-turn-summary-chip{display:inline-flex;align-items:center;gap:.25rem;padding:.16rem .45rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.03);color:var(--muted)}
+.session-turn-summary-chip strong{color:var(--text);font-weight:600}
+</style>
+<script>
+(function(){
+  const PROOF='turn-summary-strip opencode-turn-summary-commit-shape turn-summary-agent-model-duration data-turn-summary-source';
+  function text(el){return (el&&el.textContent||'').trim();}
+  function count(selector){return document.querySelectorAll(selector).length;}
+  function modelLabel(){
+    const candidates=['[data-model-id]','[data-model]','.provider-model-visible','.model-chip','.model'];
+    for(const selector of candidates){
+      const node=document.querySelector(selector);
+      const value=(node?.getAttribute('data-model-id')||node?.getAttribute('data-model')||text(node)||'').trim();
+      if(value)return value.replace(/^model[:\s]*/i,'');
+    }
+    return 'model recorded in run receipt';
+  }
+  function durationLabel(){
+    const finished=count('[data-turn-state="completed"],.ToolStateCompleted,[data-tool-state="completed"]');
+    const running=count('[data-turn-state="running"],.ToolStateRunning,[data-tool-state="running"]');
+    if(running>0)return 'running';
+    if(finished>0)return `${finished} completed events`;
+    return 'ready';
+  }
+  function render(){
+    document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
+    const heads=document.querySelectorAll('.session-head');
+    heads.forEach(head=>{
+      let strip=head.querySelector('.session-turn-summary-strip');
+      if(!strip){
+        strip=document.createElement('div');
+        strip.className='session-turn-summary-strip';
+        strip.dataset.proof=PROOF;
+        strip.dataset.turnSummarySource='anomalyco/opencode:packages/opencode/src/cli/cmd/run/turn-summary.ts';
+        const anchor=head.querySelector('.session-control-ledger-search-box,.backend-session-control-ledger,.session-control-actions');
+        if(anchor)anchor.insertAdjacentElement('beforebegin',strip);else head.appendChild(strip);
+      }
+      strip.innerHTML='';
+      const agent=document.createElement('span');
+      agent.className='session-turn-summary-chip';
+      agent.dataset.proof='turn-summary-agent';
+      agent.innerHTML='▣ <strong>Forge</strong>';
+      const model=document.createElement('span');
+      model.className='session-turn-summary-chip';
+      model.dataset.proof='turn-summary-model';
+      model.textContent=modelLabel();
+      const duration=document.createElement('span');
+      duration.className='session-turn-summary-chip';
+      duration.dataset.proof='turn-summary-duration';
+      duration.textContent=durationLabel();
+      strip.append(agent,model,duration);
+    });
+  }
+  const observer=new MutationObserver(()=>render());
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-turn-state','data-tool-state','class']});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
+})();
+</script>
