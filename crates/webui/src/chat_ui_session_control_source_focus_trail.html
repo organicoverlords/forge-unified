@@ -2,15 +2,22 @@
 .session-control-source-focus-trail{position:sticky;top:.35rem;z-index:2;margin:.35rem 0;padding:.42rem .6rem;border:1px solid var(--border);border-radius:.72rem;background:color-mix(in srgb,var(--surface,#111) 90%,var(--accent,#7aa2ff) 10%);display:flex;gap:.45rem;align-items:center;justify-content:space-between;color:var(--muted);font-size:.74rem;box-shadow:0 .25rem .75rem color-mix(in srgb,#000 18%,transparent)}
 .session-control-source-focus-trail strong{color:var(--text);font-weight:600;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-control-source-focus-trail-meta{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;min-width:0}
-.session-control-source-focus-trail-chip,.session-control-source-focus-return{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-focus-trail-actions{display:flex;gap:.28rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.session-control-source-focus-trail-chip,.session-control-source-focus-return,.session-control-source-focus-nav{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-focus-nav[disabled]{opacity:.45;cursor:not-allowed}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-source-focus-trail session-control-source-focus-return opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
+  const PROOF='session-control-source-focus-trail session-control-source-focus-return session-control-source-focus-nav session-control-source-focus-position opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
   function receipt(row){const raw=row?.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
+  function rows(){return Array.from(document.querySelectorAll('.backend-session-control-event-row'))}
   function activeRow(){return document.querySelector('.backend-session-control-event-row[data-source-map-jump-target="true"]')||document.querySelector('.backend-session-control-event-row[data-source-map-selected="true"]')}
   function selectedPanel(){return document.querySelector('.session-control-source-map-selected')}
   function chip(label,value){const span=document.createElement('span');span.className='session-control-source-focus-trail-chip';span.dataset.proof='session-control-source-focus-trail opencode-session-turn-diff-meta-shape';span.textContent=`${label}: ${value||'unknown'}`;return span}
+  function sameGroup(a,b){const av=receipt(a),bv=receipt(b);return (av.source||'forge.webui.session_controls')===(bv.source||'forge.webui.session_controls')&&(av.action||'session_control')===(bv.action||'session_control')}
+  function groupRows(row){return rows().filter(x=>sameGroup(row,x))}
+  function focusRow(row){if(!row)return;rows().forEach(x=>{x.removeAttribute('data-source-map-jump-target');x.removeAttribute('data-source-map-selected')});row.setAttribute('data-source-map-jump-target','true');row.setAttribute('data-source-map-selected','true');row.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});row.setAttribute('tabindex',row.getAttribute('tabindex')||'-1');try{row.focus({preventScroll:true})}catch{row.focus()}ensureTrail()}
+  function navButton(label,row,enabled){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-nav';b.dataset.proof='session-control-source-focus-nav opencode-session-turn-diffs-toggle opencode-session-turn-diffs-more';b.textContent=label;b.disabled=!enabled;b.onclick=e=>{e.stopPropagation();if(enabled)focusRow(row)};return b}
   function ensureTrail(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.session-control-source-focus-trail').forEach(x=>x.remove());
@@ -22,6 +29,7 @@
     const source=value.source||'forge.webui.session_controls';
     const action=value.action||'session_control';
     const id=value.receipt_id||value.sequence||row.getAttribute('data-receipt-id')||'selected';
+    const group=groupRows(row);const pos=Math.max(0,group.indexOf(row));
     const trail=document.createElement('div');
     trail.className='session-control-source-focus-trail';
     trail.dataset.proof='session-control-source-focus-trail opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape';
@@ -29,18 +37,24 @@
     meta.className='session-control-source-focus-trail-meta';
     meta.appendChild(chip('source',source));
     meta.appendChild(chip('action',action));
+    meta.appendChild(chip('position',`${pos+1}/${group.length||1}`));
+    meta.lastChild.dataset.proof+=' session-control-source-focus-position opencode-session-turn-diffs-group-shape';
     const title=document.createElement('strong');
     title.dataset.proof='opencode-session-turn-diff-path-shape';
     title.textContent=`focused receipt · ${id}`;
     meta.appendChild(title);
+    const actions=document.createElement('div');actions.className='session-control-source-focus-trail-actions';
+    actions.appendChild(navButton('previous source receipt',group[pos-1],pos>0));
+    actions.appendChild(navButton('next source receipt',group[pos+1],pos<group.length-1));
     const back=document.createElement('button');
     back.type='button';
     back.className='mini-btn session-control-source-focus-return';
     back.dataset.proof='session-control-source-focus-return opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape';
     back.textContent='return to selected receipt';
     back.onclick=e=>{e.stopPropagation();const target=panel||document.querySelector('.session-control-source-map-selected');if(target){target.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});target.setAttribute('tabindex',target.getAttribute('tabindex')||'-1');try{target.focus({preventScroll:true})}catch{target.focus()}}};
+    actions.appendChild(back);
     trail.appendChild(meta);
-    trail.appendChild(back);
+    trail.appendChild(actions);
     ledger.insertAdjacentElement('beforebegin',trail);
   }
   const observer=new MutationObserver(ensureTrail);
