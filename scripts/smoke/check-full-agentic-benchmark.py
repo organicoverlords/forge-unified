@@ -14,11 +14,22 @@ from pathlib import Path
 from typing import Any
 
 AGENT_TEST = ".agent_test"
+PROJECT_STATE = "PROJECT_STATE.md"
 EXPECTED_AGENT_FILES = {
     f"{AGENT_TEST}/repo_summary.md",
     f"{AGENT_TEST}/investigation.md",
     f"{AGENT_TEST}/action_plan.json",
 }
+PHASE4_VALIDATION_FRAGMENTS = [
+    "bash -n scripts/smoke/live-webui-feature-sprint.sh",
+    "echo \"EXIT:$?\"",
+    "echo '---STATUS---'",
+    "git status --short",
+    "echo '---DIFF---'",
+    "git diff -- PROJECT_STATE.md",
+    "echo '---AGENT_TEST---'",
+    "find .agent_test -maxdepth 1 -type f -print | sort",
+]
 
 
 def load_json(path: Path) -> Any:
@@ -211,6 +222,76 @@ def claims_build_check_success(final: str) -> bool:
     return False
 
 
+def phase4_validation_command_matches(command: str) -> bool:
+    return all(fragment in command for fragment in PHASE4_VALIDATION_FRAGMENTS)
+
+
+def phase4_validation_output_matches(output: str) -> bool:
+    return all(fragment in output for fragment in ["EXIT:0", "---STATUS---", "---DIFF---", "---AGENT_TEST---", f"{AGENT_TEST}/repo_summary.md", f"{AGENT_TEST}/action_plan.json"]) and f"{AGENT_TEST}/investigation.md" not in output.split("---AGENT_TEST---")[-1]
+
+
+def phase4_project_state_edit(result: dict[str, Any]) -> bool:
+    return (
+        result.get("success") is True
+        and result.get("kind") in {"FileEdit", "FileWrite", "ApplyPatch"}
+        and result_path(result) == PROJECT_STATE
+    )
+
+
+def phase4_sequence(results: list[dict[str, Any]]) -> dict[str, Any]:
+    edits = [(idx, r) for idx, r in enumerate(results) if phase4_project_state_edit(r)]
+    if not edits:
+        return {
+            "has_edit": False,
+            "has_validation_after_edit": False,
+            "validation_output_ok": False,
+            "no_tool_results_after_validation": False,
+            "edit": None,
+            "validation": None,
+            "tool_results_after_validation": [],
+        }
+    edit_idx, edit = edits[-1]
+    validations = [
+        (idx, r)
+        for idx, r in enumerate(results[edit_idx + 1 :], start=edit_idx + 1)
+        if r.get("success") is True
+        and r.get("kind") == "ShellCommand"
+        and phase4_validation_command_matches(result_command(r))
+    ]
+    validation_idx = None
+    validation = None
+    output_ok = False
+    for idx, result in validations:
+        if phase4_validation_output_matches(result_output(result)):
+            validation_idx = idx
+            validation = result
+            output_ok = True
+            break
+    if validation is None and validations:
+        validation_idx, validation = validations[0]
+    after = results[validation_idx + 1 :] if validation_idx is not None else []
+    return {
+        "has_edit": True,
+        "has_validation_after_edit": validation is not None,
+        "validation_output_ok": output_ok,
+        "no_tool_results_after_validation": validation is not None and not after,
+        "edit": {"index": edit_idx, "kind": edit.get("kind"), "path": result_path(edit)},
+        "validation": None if validation is None else {"index": validation_idx, "command": result_command(validation), "output_excerpt": result_output(validation)[:2000]},
+        "tool_results_after_validation": [{"kind": r.get("kind"), "path": result_path(r), "command": result_command(r)} for r in after],
+    }
+
+
+def final_defers_required_validation(final: str) -> bool:
+    lowered = prose_for_claim_detection(final)
+    risky_patterns = [
+        r"next (recommendation|step).*validat",
+        r"recommendation is to validate",
+        r"validation .*next",
+        r"phase 4 .*attempted",
+    ]
+    return any(re.search(pattern, lowered, re.S) for pattern in risky_patterns)
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print("usage: check-full-agentic-benchmark.py conversation.json stream.sse output.json", file=sys.stderr)
@@ -257,12 +338,14 @@ def main() -> int:
     verify_after_delete = any(r.get("success") is True and r.get("kind") in {"FileList", "ShellCommand"} and f"{AGENT_TEST}/repo_summary.md" in result_output(r) and f"{AGENT_TEST}/action_plan.json" in result_output(r) and f"{AGENT_TEST}/investigation.md" not in result_output(r) for r in results)
     add(checks, "phase3_verified_remaining_files_after_delete", verify_after_delete, None)
 
-    real_edits = [r for r in results if r.get("success") is True and r.get("kind") in {"FileEdit", "FileWrite", "ApplyPatch"} and not result_path(r).startswith(f"{AGENT_TEST}/")]
-    diff_or_status = ok_result(results, kind="ShellCommand", command_re=r"git diff|git status")
-    validation = ok_result(results, kind="ShellCommand", command_re=r"cargo check|cargo test|bash -n|cargo build|cargo fmt|cargo clippy")
-    add(checks, "phase4_real_low_risk_edit", bool(real_edits), [{"kind": r.get("kind"), "path": result_path(r)} for r in real_edits])
-    add(checks, "phase4_diff_or_status_inspected", bool(diff_or_status), [result_command(r) for r in diff_or_status])
-    add(checks, "phase4_validation_command_succeeded", bool(validation), [result_command(r) for r in validation])
+    phase4 = phase4_sequence(results)
+    exact_phase4_validation = [r for r in results if r.get("success") is True and r.get("kind") == "ShellCommand" and phase4_validation_command_matches(result_command(r))]
+    add(checks, "phase4_real_low_risk_project_state_edit", phase4["has_edit"], phase4["edit"])
+    add(checks, "phase4_exact_validation_after_project_state_edit", phase4["has_validation_after_edit"], phase4["validation"])
+    add(checks, "phase4_validation_output_after_edit_succeeded", phase4["validation_output_ok"], phase4["validation"])
+    add(checks, "phase4_no_tool_results_after_validation", phase4["no_tool_results_after_validation"], phase4["tool_results_after_validation"])
+    add(checks, "phase4_diff_or_status_inspected_in_exact_validation", bool(exact_phase4_validation), [result_command(r) for r in exact_phase4_validation])
+    add(checks, "phase4_final_does_not_defer_required_validation", not final_defers_required_validation(final), None)
     add(checks, "phase4_risk_and_rollback_in_answer", all(re.search(term, final, re.I) for term in ["blast radius", "difficulty", "rollback"]), None)
 
     founder = founder_section(final)
@@ -274,9 +357,9 @@ def main() -> int:
     if claims_build_check_success(final):
         add(checks, "claimed_build_check_is_tool_proven", bool(ok_result(results, kind="ShellCommand", command_re=r"cargo check|cargo build")), None)
 
-    cleanup_shell = ok_result(results, kind="ShellCommand", command_re=r"git status|find .*agent_test|ls .*agent_test|grep -R .*SECRET|grep -R .*TOKEN")
-    add(checks, "phase6_cleanup_or_state_check_present", bool(cleanup_shell), [result_command(r) for r in cleanup_shell])
+    add(checks, "phase6_cleanup_or_state_check_present", phase4["validation_output_ok"], phase4["validation"])
     add(checks, "final_reports_files_tests_risks_confidence", final_has_required_summary_labels(final), None)
+    add(checks, "final_tests_run_names_exact_phase4_validation", all(fragment in final for fragment in ["bash -n scripts/smoke/live-webui-feature-sprint.sh", "git status --short", "git diff -- PROJECT_STATE.md", "find .agent_test -maxdepth 1 -type f -print | sort"]), None)
 
     failed = [check for check in checks if not check["passed"]]
     report = {
@@ -288,6 +371,7 @@ def main() -> int:
         "tool_results": len(results),
         "tool_call_events": stream_text.count("event: tool-call"),
         "tool_result_events": stream_text.count("event: tool-result"),
+        "phase4_sequence": phase4,
         "checks": checks,
         "failed_checks": failed,
     }
