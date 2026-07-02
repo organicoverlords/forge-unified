@@ -9,17 +9,19 @@
 .session-control-source-map-selected-head{display:flex;justify-content:space-between;gap:.5rem;align-items:center;font-weight:600}
 .session-control-source-map-selected-actions{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}
 .session-control-source-map-selected-body{margin-top:.3rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.25rem;color:var(--muted)}
-.session-control-source-map-selected-detail{margin-top:.45rem;padding:.45rem;border:1px solid var(--border);border-radius:.55rem;background:color-mix(in srgb,var(--surface,#111) 86%,transparent);white-space:pre-wrap;max-height:14rem;overflow:auto;font-size:.72rem;color:var(--muted)}
+.session-control-source-map-selected-detail,.session-control-source-map-selected-detail-pending{margin-top:.45rem;padding:.45rem;border:1px solid var(--border);border-radius:.55rem;background:color-mix(in srgb,var(--surface,#111) 86%,transparent);white-space:pre-wrap;max-height:14rem;overflow:auto;font-size:.72rem;color:var(--muted)}
 .backend-session-control-event-row[data-source-map="true"]{outline:1px solid color-mix(in srgb,var(--accent,#7aa2ff) 18%,transparent)}
 .backend-session-control-event-row[data-source-map-selected="true"]{outline:2px solid color-mix(in srgb,var(--accent,#7aa2ff) 58%,transparent)}
 .backend-session-control-event-row[data-source-map-hidden="true"]{display:none!important}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-source-map session-control-source-map-chip session-control-source-map-source session-control-source-map-action session-control-source-map-receipt copy-session-control-source-map session-control-source-map-filter session-control-source-map-clear source-map-filtered-event-count session-control-source-map-selected session-control-source-map-select session-control-source-map-selected-copy session-control-source-map-selected-detail session-control-source-map-selected-detail-toggle opencode-session-turn-diff-meta-shape opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-view-shape crates/webui/src/conversation_controls.rs crates/webui/src/chat_ui_session_controls.html crates/webui/src/chat_ui_session_control_search.html';
+  const PROOF='session-control-source-map session-control-source-map-lazy-detail session-control-source-map-selected-detail-pending session-control-source-map-chip session-control-source-map-source session-control-source-map-action session-control-source-map-receipt copy-session-control-source-map session-control-source-map-filter session-control-source-map-clear source-map-filtered-event-count session-control-source-map-selected session-control-source-map-select session-control-source-map-selected-copy session-control-source-map-selected-detail session-control-source-map-selected-detail-toggle opencode-session-turn-diff-meta-shape opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape crates/webui/src/conversation_controls.rs crates/webui/src/chat_ui_session_controls.html crates/webui/src/chat_ui_session_control_search.html';
   let filter=null;
   let selected=null;
   let detailOpen=false;
+  let detailRenderable=false;
+  let detailFrame=0;
   function receipt(row){const raw=row.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
   function chip(label,value,proof){const span=document.createElement('span');span.className='session-control-source-map-chip';span.dataset.proof=`session-control-source-map-chip ${proof}`;span.textContent=`${label}: ${value||'unknown'}`;return span}
   function summary(row){const value=receipt(row);return {source:value.source||'forge.webui.session_controls',action:value.action||'session_control',receipt_id:value.receipt_id||'',sequence:value.sequence||'',status:value.status||row.dataset.status||'recorded',kind:value.kind||row.dataset.kind||'event'}}
@@ -53,8 +55,15 @@
     `action=${value.action}`,
     `kind=${value.kind}`,
     `status=${value.status}`,
-    detailOpen?`detail=${selectedRawText()}`:''
+    detailOpen&&detailRenderable?`detail=${selectedRawText()}`:''
   ].filter(Boolean).join('\n'):''}
+  function scheduleDetailRender(){
+    detailRenderable=false;
+    detailFrame++;
+    const frame=detailFrame;
+    if(!detailOpen)return;
+    requestAnimationFrame(()=>{if(detailOpen&&frame===detailFrame){detailRenderable=true;enhance()}});
+  }
   function renderSelectedPanel(){
     document.querySelectorAll('.session-control-source-map-selected').forEach(x=>x.remove());
     document.querySelectorAll('.backend-session-control-event-row').forEach(row=>{row.dataset.sourceMapSelected=selected&&selectedKey(row)===selected?'true':'false'});
@@ -74,10 +83,10 @@
     const detailButton=document.createElement('button');
     detailButton.type='button';
     detailButton.className='mini-btn session-control-source-map-selected-detail-toggle';
-    detailButton.dataset.proof='session-control-source-map-selected-detail-toggle opencode-session-turn-diff-trigger-shape opencode-session-turn-diff-view-shape';
+    detailButton.dataset.proof='session-control-source-map-selected-detail-toggle opencode-session-turn-diff-trigger-shape opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape';
     detailButton.setAttribute('aria-expanded',String(detailOpen));
     detailButton.textContent=detailOpen?'hide receipt details':'show receipt details';
-    detailButton.onclick=e=>{e.stopPropagation();detailOpen=!detailOpen;enhance()};
+    detailButton.onclick=e=>{e.stopPropagation();detailOpen=!detailOpen;scheduleDetailRender();enhance()};
     const copyButton=document.createElement('button');
     copyButton.type='button';
     copyButton.className='mini-btn session-control-source-map-selected-copy';
@@ -92,11 +101,19 @@
     [['source',value.source],['status',value.status],['kind',value.kind],['receipt',value.receipt_id||value.sequence||'missing']].forEach(([label,val])=>body.appendChild(chip(label,val,'session-control-source-map-selected')));
     panel.appendChild(top);panel.appendChild(body);
     if(detailOpen){
-      const detail=document.createElement('pre');
-      detail.className='session-control-source-map-selected-detail';
-      detail.dataset.proof='session-control-source-map-selected-detail opencode-session-turn-diff-view-shape';
-      detail.textContent=selectedRawText()||'no raw receipt payload';
-      panel.appendChild(detail);
+      if(!detailRenderable){
+        const pending=document.createElement('div');
+        pending.className='session-control-source-map-selected-detail-pending';
+        pending.dataset.proof='session-control-source-map-lazy-detail session-control-source-map-selected-detail-pending opencode-session-turn-diff-view-lazy-shape';
+        pending.textContent='preparing receipt details…';
+        panel.appendChild(pending);
+      }else{
+        const detail=document.createElement('pre');
+        detail.className='session-control-source-map-selected-detail';
+        detail.dataset.proof='session-control-source-map-selected-detail session-control-source-map-lazy-detail opencode-session-turn-diff-view-shape opencode-session-turn-diff-view-lazy-shape';
+        detail.textContent=selectedRawText()||'no raw receipt payload';
+        panel.appendChild(detail);
+      }
     }
     const ledger=head.querySelector('.backend-session-control-ledger')||head;
     ledger.insertAdjacentElement('beforebegin',panel);
@@ -156,7 +173,7 @@
     selectButton.className='mini-btn session-control-source-map-select';
     selectButton.dataset.proof='session-control-source-map-select session-control-source-map-selected opencode-session-turn-sticky-accordion-header-shape';
     selectButton.textContent='select receipt';
-    selectButton.onclick=e=>{e.stopPropagation();const key=selectedKey(row);if(selected===key){selected=null;detailOpen=false}else{selected=key;detailOpen=false}enhance()};
+    selectButton.onclick=e=>{e.stopPropagation();const key=selectedKey(row);if(selected===key){selected=null;detailOpen=false;scheduleDetailRender()}else{selected=key;detailOpen=false;scheduleDetailRender()}enhance()};
     wrap.appendChild(selectButton);
     const button=document.createElement('button');
     button.type='button';
