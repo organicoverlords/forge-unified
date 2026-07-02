@@ -14,4 +14,5 @@ pub const CHAT_HTML: &str = concat!(
     include_str!("chat_ui_error_history.html"),
     include_str!("chat_ui_session_control_search.html"),
     include_str!("chat_ui_session_control_keyboard.html"),
+    include_str!("chat_ui_session_control_groups.html"),
 );
