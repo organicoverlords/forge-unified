@@ -5,25 +5,23 @@ Updated: 2026-07-02
 - Repo: `organicoverlords/forge-unified`
 - Branch: `mvp/nim-freellmapi-router-20260626`
 - PR: #3 into `master`
-- Current implementation head before this state note: `eba7294ec114eb762c864d9776a6123cb8fa033a`; state-file update head is the next commit after this note.
-- PR state verified live: open, non-draft, mergeable.
+- Current implementation head before this state note: `cd4736860f50460e11baf532127e6517502831bc`; state-file update head is the next commit after this note.
+- PR state verified live: open, non-draft; mergeability was recalculating immediately after the new source/proof commits.
 - Source-of-truth selection: started from the provided branch URL; open PR #3 remains the meaningful current app-change PR for this branch. Open PRs #2 and #1 are older/superseded for this work.
-- Latest same-head status inspected before this slice for `967fdaa6406ade8d72d5dcb3db87c75f485dce44`: CI `28574254035`, Build Proof `28574254100`, Fast WebUI Proof `28574254023`, App Build Proof `28574254060`, and App Multistep Build Proof `28574254050` succeeded; Live WebUI Feature Sprint `28574254128` failed.
-- Failed Live WebUI job inspected: `84718935696`; artifact `8032549033` (`live-webui-feature-sprint-proof`) was uploaded.
-- Live WebUI failure boundary: NVIDIA NIM ran with provider `nvidia_nim` and model `deepseek-ai/deepseek-v4-flash`; OpenCode workflow evidence passed, but the full benchmark checker failed `phase2_confidence_labels_in_answer` and `final_tests_run_names_exact_phase4_validation`.
-- Latest implementation slice: added OpenCode-shaped path metadata and latest-receipt metadata to the WebUI session-control grouped ledger.
+- Latest same-head status inspected before this slice for `5f768df164ee83a2d736e325ec224a20018f0e2a`: Live WebUI Feature Sprint `28577794982`, Build Proof `28577794975`, App Build Proof `28577794993`, Fast WebUI Proof `28577795046`, and App Multistep Build Proof `28577794942` succeeded; CI `28577794923` failed.
+- Failed CI job inspected: Smoke Test `84730397852`; failure was stale state-marker coverage for `crates/webui/src/conversation_controls.rs`, `crates/webui/src/chat_ui_session_controls.html`, and `crates/webui/src/chat_ui_session_control_search.html`.
+- Live WebUI success boundary for the pre-slice head: NVIDIA NIM natural WebUI proof passed on run `28577794982`; this new post-state-update head is not same-head proven yet.
+- Latest implementation slice: added OpenCode-shaped WebUI session-control source-map chips and `copy source map` for backend receipt rows.
 - Do not claim this latest post-state-update head is same-head proven until CI, Build Proof, Fast WebUI Proof, Live WebUI Feature Sprint, App Build Proof, and App Multistep Build Proof complete on that exact head and artifacts/screenshots are inspected.
 
 ## Latest implementation changes
 
-- Updated `crates/webui/src/chat_ui_session_control_groups.html`.
-- The WebUI grouped session-control ledger now groups by `status`, `action`, and target path when path metadata exists.
-- Each grouped row now exposes an OpenCode-shaped two-line path display with directory and filename spans.
-- Added latest-receipt metadata beside the row toggle so dense session-control history is easier to audit.
-- Updated `copy group summary` to include the visible group paths.
-- Preserved status summary chips, show-all/show-fewer overflow behavior, and existing per-group expand/collapse details.
-- The new UI renders proof hooks for `session-control-group-path-meta`, `session-control-group-directory`, `session-control-group-filename`, `session-control-group-meta`, `session-control-group-latest`, `opencode-session-turn-diff-path-shape`, and `opencode-session-turn-diff-meta-shape`.
-- Recorded proof in `docs/generated/proof/session-control-group-path-meta-20260702T1148EEST.md`.
+- Added `crates/webui/src/chat_ui_session_control_source_map.html`.
+- Updated `crates/webui/src/chat_ui.rs` to include the session-control source-map enhancement.
+- Backend session-control event rows now expose source/action/receipt metadata chips derived from each real receipt.
+- Added a `copy source map` action that copies a compact per-row source/action/receipt/status map for audit handoff.
+- The new UI renders proof hooks for `session-control-source-map`, `session-control-source-map-source`, `session-control-source-map-action`, `session-control-source-map-receipt`, `copy-session-control-source-map`, and `opencode-session-turn-diff-meta-shape`.
+- Recorded proof in `docs/generated/proof/session-control-source-map-20260702T1246EEST.md`.
 
 ## Preserved implementation and proof markers
 
@@ -42,9 +40,9 @@ Updated: 2026-07-02
 
 ## Source-backed contracts
 
-- OpenCode source anchor used for this slice: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, especially `data-slot="session-turn-diff-path"`, `data-slot="session-turn-diff-directory"`, `data-slot="session-turn-diff-filename"`, `data-slot="session-turn-diff-meta"`, `DiffChanges`, `showAll()`, `toggleAll()`, `overflow()`, and `visible()`.
+- OpenCode source anchor used for this slice: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, especially `data-slot="session-turn-diff-meta"`, `data-slot="session-turn-diff-path"`, visible metadata beside dense session-turn rows, and copy/action affordances around turn details.
 - Existing OpenCode source anchors preserved: `anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx`, `anomalyco/opencode:packages/session-ui/src/components/message-part.tsx`, `anomalyco/opencode:packages/session-ui/src/components/tool-count-summary.tsx`, and `anomalyco/opencode:packages/opencode/src/cli/cmd/run/turn-summary.ts`.
-- Forge implementation paths for this slice: `crates/webui/src/chat_ui_session_control_groups.html`, `PROJECT_STATE.md`, `docs/generated/proof/session-control-group-path-meta-20260702T1148EEST.md`.
+- Forge implementation paths for this slice: `crates/webui/src/chat_ui_session_control_source_map.html`, `crates/webui/src/chat_ui.rs`, `PROJECT_STATE.md`, `docs/generated/proof/session-control-source-map-20260702T1246EEST.md`.
 - Browser proof gap remains explicit until a same-head workflow artifact from the new head contains valid readable PNGs from the browser-real capture path and the natural-language NVIDIA NIM WebUI run passes its proof checker.
 
 ## State markers kept for CI proof harness
@@ -78,8 +76,9 @@ Updated: 2026-07-02
 - search session events
 - data-session-search-hidden
 - session-control keyboard navigation
-- session-control grouped ledger
-- grouped action/status rows
-- expandable grouped receipt details
-- session-control group path metadata
-- session-control group latest receipt metadata
+- crates/webui/src/conversation_controls.rs
+- crates/webui/src/chat_ui_session_controls.html
+- crates/webui/src/chat_ui_session_control_search.html
+- session-control source map
+- copy session-control source map
+- source/action/receipt metadata chips
