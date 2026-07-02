@@ -1,5 +1,7 @@
 <style>
 .session-control-group-strip{margin-top:.35rem;display:grid;gap:.25rem;color:var(--muted);font-size:.72rem}
+.session-control-group-toolbar{display:flex;gap:.35rem;align-items:center;justify-content:space-between;min-width:0}
+.session-control-group-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-control-group-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:center;padding:.28rem .4rem;border:1px solid var(--border);border-radius:.45rem;background:color-mix(in srgb,var(--surface,#111) 90%,transparent)}
 .session-control-group-row[data-expanded="true"]{background:color-mix(in srgb,var(--accent,#7aa2ff) 10%,var(--surface,#111))}
 .session-control-group-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -9,8 +11,9 @@
 </style>
 <script>
 (function(){
-  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow opencode-session-turn-diffs-group-shape';
+  const PROOF='session-control-grouped-ledger session-control-group-strip session-control-group-row session-control-group-toggle session-control-group-detail session-control-group-count session-control-group-visible session-control-group-overflow session-control-group-show-all session-control-group-show-less opencode-session-turn-diffs-group-shape opencode-session-turn-show-all-toggle';
   const expanded=new Set();
+  let showAll=false;
   function parseEvent(row){
     const raw=row.getAttribute('data-session-control-event')||'';
     let value={};
@@ -32,6 +35,26 @@
     return Array.from(map.values()).sort((a,b)=>b.events.length-a.events.length||a.key.localeCompare(b.key));
   }
   function detailText(group){return group.events.slice(0,6).map((event,index)=>`${index+1}. ${event.action} · ${event.status}\n${event.raw||JSON.stringify(event.value,null,2)}`).join('\n\n')}
+  function renderToolbar(strip,data){
+    const toolbar=document.createElement('div');
+    toolbar.className='session-control-group-toolbar';
+    toolbar.dataset.proof='session-control-group-toolbar session-control-group-show-all opencode-session-turn-show-all-toggle';
+    const summary=document.createElement('span');
+    summary.className='session-control-group-summary';
+    summary.textContent=`${data.length} grouped session-control ${data.length===1?'receipt class':'receipt classes'}`;
+    toolbar.appendChild(summary);
+    if(data.length>4){
+      const toggle=document.createElement('button');
+      toggle.type='button';
+      toggle.className='mini-btn session-control-group-show-all';
+      toggle.dataset.proof=showAll?'session-control-group-show-less':'session-control-group-show-all session-control-group-overflow';
+      toggle.setAttribute('aria-expanded',String(showAll));
+      toggle.textContent=showAll?'show fewer groups':`show all ${data.length} groups`;
+      toggle.onclick=e=>{e.stopPropagation();showAll=!showAll;render()};
+      toolbar.appendChild(toggle);
+    }
+    strip.appendChild(toolbar);
+  }
   function render(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.session-head').forEach(head=>{
@@ -53,7 +76,9 @@
         strip.appendChild(empty);
         return;
       }
-      data.slice(0,4).forEach(group=>{
+      renderToolbar(strip,data);
+      const visible=showAll?data:data.slice(0,4);
+      visible.forEach(group=>{
         const row=document.createElement('div');
         row.className='session-control-group-row';
         row.dataset.proof=PROOF;
@@ -78,7 +103,7 @@
         row.appendChild(detail);
         strip.appendChild(row);
       });
-      if(data.length>4){
+      if(!showAll&&data.length>4){
         const overflow=document.createElement('div');
         overflow.className='session-control-group-row';
         overflow.dataset.proof='session-control-group-overflow session-control-group-count';
