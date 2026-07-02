@@ -3,14 +3,15 @@
 .session-control-source-focus-trail strong{color:var(--text);font-weight:600;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-control-source-focus-trail-meta{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;min-width:0}
 .session-control-source-focus-trail-actions{display:flex;gap:.28rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.session-control-source-focus-trail-chip,.session-control-source-focus-return,.session-control-source-focus-nav,.session-control-source-focus-lock,.session-control-source-focus-copy{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-focus-trail-chip,.session-control-source-focus-return,.session-control-source-focus-nav,.session-control-source-focus-lock,.session-control-source-focus-copy,.session-control-source-focus-kbd{padding:.16rem .38rem;border:1px solid var(--border);border-radius:999px;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-control-source-focus-kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);background:color-mix(in srgb,var(--surface,#111) 86%,var(--text,#fff) 8%)}
 .session-control-source-focus-nav[disabled]{opacity:.45;cursor:not-allowed}
 .session-control-source-focus-lock[aria-pressed="true"]{border-color:color-mix(in srgb,var(--accent,#7aa2ff) 70%,var(--border));color:var(--text);background:color-mix(in srgb,var(--accent,#7aa2ff) 18%,transparent)}
 .session-control-source-focus-copy[data-copied="true"]{border-color:color-mix(in srgb,var(--accent,#7aa2ff) 65%,var(--border));color:var(--text)}
 </style>
 <script>
 (function(){
-  const PROOF='session-control-source-focus-trail session-control-source-focus-return session-control-source-focus-nav session-control-source-focus-position session-control-source-focus-lock session-control-source-focus-follow-paused session-control-source-focus-copy session-control-source-focus-context opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-autoscroll-pause-shape opencode-session-turn-assistant-copy-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
+  const PROOF='session-control-source-focus-trail session-control-source-focus-return session-control-source-focus-nav session-control-source-focus-position session-control-source-focus-lock session-control-source-focus-follow-paused session-control-source-focus-copy session-control-source-focus-context session-control-source-focus-keyboard session-control-source-focus-command-map opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-autoscroll-pause-shape opencode-session-turn-assistant-copy-shape opencode-session-turn-keyboard-interaction-shape crates/webui/src/chat_ui_session_control_source_focus_trail.html';
   let followPaused=false;
   let lockedKey='';
   function receipt(row){const raw=row?.getAttribute('data-session-control-event')||'';try{return raw?JSON.parse(raw):{}}catch{return {raw}}}
@@ -24,11 +25,13 @@
   function groupRows(row){return rows().filter(x=>sameGroup(row,x))}
   function markFocused(row){rows().forEach(x=>{x.removeAttribute('data-source-map-jump-target');x.removeAttribute('data-source-map-selected')});row.setAttribute('data-source-map-jump-target','true');row.setAttribute('data-source-map-selected','true');lockedKey=rowKey(row)||lockedKey}
   function focusRow(row){if(!row)return;markFocused(row);row.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});row.setAttribute('tabindex',row.getAttribute('tabindex')||'-1');try{row.focus({preventScroll:true})}catch{row.focus()}ensureTrail()}
-  function navButton(label,row,enabled){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-nav';b.dataset.proof='session-control-source-focus-nav opencode-session-turn-diffs-toggle opencode-session-turn-diffs-more';b.textContent=label;b.disabled=!enabled;b.onclick=e=>{e.stopPropagation();if(enabled)focusRow(row)};return b}
-  function lockButton(row){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-lock';b.dataset.proof='session-control-source-focus-lock opencode-session-turn-autoscroll-pause-shape';b.setAttribute('aria-pressed',followPaused?'true':'false');b.textContent=followPaused?'resume live focus':'pause focus follow';b.onclick=e=>{e.stopPropagation();followPaused=!followPaused;if(followPaused){lockedKey=rowKey(row)||lockedKey;document.body?.setAttribute('data-source-focus-follow-paused','true')}else{document.body?.removeAttribute('data-source-focus-follow-paused')}ensureTrail()};return b}
+  function navButton(label,row,enabled,command){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-nav';b.dataset.proof='session-control-source-focus-nav opencode-session-turn-diffs-toggle opencode-session-turn-diffs-more opencode-session-turn-keyboard-interaction-shape';b.dataset.sourceFocusCommand=command;b.textContent=label;b.disabled=!enabled;b.onclick=e=>{e.stopPropagation();if(enabled)focusRow(row)};return b}
+  function lockButton(row){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-lock';b.dataset.proof='session-control-source-focus-lock opencode-session-turn-autoscroll-pause-shape opencode-session-turn-keyboard-interaction-shape';b.dataset.sourceFocusCommand='toggle-follow';b.setAttribute('aria-pressed',followPaused?'true':'false');b.textContent=followPaused?'resume live focus':'pause focus follow';b.onclick=e=>{e.stopPropagation();followPaused=!followPaused;if(followPaused){lockedKey=rowKey(row)||lockedKey;document.body?.setAttribute('data-source-focus-follow-paused','true')}else{document.body?.removeAttribute('data-source-focus-follow-paused')}ensureTrail()};return b}
   function focusContext(row,group,pos){const value=receipt(row);const id=value.receipt_id||value.sequence||row.getAttribute('data-receipt-id')||'selected';const source=value.source||'forge.webui.session_controls';const action=value.action||'session_control';const status=value.status||value.state||row.getAttribute('data-status')||'unknown';const file=value.path||value.file||value.filename||row.getAttribute('data-path')||'';return ['Forge source focus context',`receipt: ${id}`,`source: ${source}`,`action: ${action}`,`status: ${status}`,`position: ${pos+1}/${group.length||1}`,file?`path: ${file}`:'path: unknown',`follow: ${followPaused?'paused':'live'}`].join('\n')}
   function writeClipboard(text){if(navigator.clipboard?.writeText)return navigator.clipboard.writeText(text);const area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();return Promise.resolve()}
-  function copyButton(row,group,pos){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-copy';b.dataset.proof='session-control-source-focus-copy session-control-source-focus-context opencode-session-turn-assistant-copy-shape opencode-session-turn-diff-meta-shape';b.textContent='copy focus context';b.onclick=e=>{e.stopPropagation();if(!followPaused){followPaused=true;lockedKey=rowKey(row)||lockedKey;document.body?.setAttribute('data-source-focus-follow-paused','true')}writeClipboard(focusContext(row,group,pos)).then(()=>{b.dataset.copied='true';b.textContent='copied focus context';setTimeout(()=>ensureTrail(),900)}).catch(()=>{b.textContent='copy unavailable'});};return b}
+  function copyButton(row,group,pos){const b=document.createElement('button');b.type='button';b.className='mini-btn session-control-source-focus-copy';b.dataset.proof='session-control-source-focus-copy session-control-source-focus-context opencode-session-turn-assistant-copy-shape opencode-session-turn-diff-meta-shape opencode-session-turn-keyboard-interaction-shape';b.dataset.sourceFocusCommand='copy-context';b.textContent='copy focus context';b.onclick=e=>{e.stopPropagation();if(!followPaused){followPaused=true;lockedKey=rowKey(row)||lockedKey;document.body?.setAttribute('data-source-focus-follow-paused','true')}writeClipboard(focusContext(row,group,pos)).then(()=>{b.dataset.copied='true';b.textContent='copied focus context';setTimeout(()=>ensureTrail(),900)}).catch(()=>{b.textContent='copy unavailable'});};return b}
+  function kbdHelp(){const span=document.createElement('span');span.className='session-control-source-focus-kbd';span.dataset.proof='session-control-source-focus-keyboard session-control-source-focus-command-map opencode-session-turn-keyboard-interaction-shape';span.textContent='keys: [ prev · ] next · f follow · c copy · r return';return span}
+  function clickCommand(name){const trail=document.querySelector('.session-control-source-focus-trail');const button=trail?.querySelector(`[data-source-focus-command="${name}"]`);if(button&&!button.disabled){button.click();return true}return false}
   function ensureTrail(){
     document.body?.setAttribute('data-proof',((document.body?.getAttribute('data-proof')||'')+' '+PROOF).trim());
     document.querySelectorAll('.session-control-source-focus-trail').forEach(x=>x.remove());
@@ -44,7 +47,7 @@
     const group=groupRows(row);const pos=Math.max(0,group.indexOf(row));
     const trail=document.createElement('div');
     trail.className='session-control-source-focus-trail';
-    trail.dataset.proof='session-control-source-focus-trail opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape';
+    trail.dataset.proof='session-control-source-focus-trail session-control-source-focus-keyboard session-control-source-focus-command-map opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-diff-path-shape opencode-session-turn-diff-meta-shape opencode-session-turn-keyboard-interaction-shape';
     if(followPaused)trail.dataset.proof+=' session-control-source-focus-follow-paused';
     const meta=document.createElement('div');
     meta.className='session-control-source-focus-trail-meta';
@@ -57,15 +60,17 @@
     title.dataset.proof='opencode-session-turn-diff-path-shape';
     title.textContent=`focused receipt · ${id}`;
     meta.appendChild(title);
+    meta.appendChild(kbdHelp());
     const actions=document.createElement('div');actions.className='session-control-source-focus-trail-actions';
-    actions.appendChild(navButton('previous source receipt',group[pos-1],pos>0));
-    actions.appendChild(navButton('next source receipt',group[pos+1],pos<group.length-1));
+    actions.appendChild(navButton('previous source receipt',group[pos-1],pos>0,'previous'));
+    actions.appendChild(navButton('next source receipt',group[pos+1],pos<group.length-1,'next'));
     actions.appendChild(lockButton(row));
     actions.appendChild(copyButton(row,group,pos));
     const back=document.createElement('button');
     back.type='button';
     back.className='mini-btn session-control-source-focus-return';
-    back.dataset.proof='session-control-source-focus-return opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape';
+    back.dataset.proof='session-control-source-focus-return opencode-session-turn-diff-trigger-shape opencode-session-turn-sticky-accordion-header-shape opencode-session-turn-keyboard-interaction-shape';
+    back.dataset.sourceFocusCommand='return-selected';
     back.textContent='return to selected receipt';
     back.onclick=e=>{e.stopPropagation();const target=panel||document.querySelector('.session-control-source-map-selected');if(target){target.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});target.setAttribute('tabindex',target.getAttribute('tabindex')||'-1');try{target.focus({preventScroll:true})}catch{target.focus()}}};
     actions.appendChild(back);
@@ -73,6 +78,8 @@
     trail.appendChild(actions);
     ledger.insertAdjacentElement('beforebegin',trail);
   }
+  function editableTarget(target){return !!target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]')}
+  document.addEventListener('keydown',e=>{if(editableTarget(e.target))return;const key=e.key?.toLowerCase();const map={'[':'previous',']':'next','f':'toggle-follow','c':'copy-context','r':'return-selected'};const command=map[key];if(!command||!document.querySelector('.session-control-source-focus-trail'))return;if(clickCommand(command)){e.preventDefault();e.stopPropagation();document.body?.setAttribute('data-source-focus-keyboard-command',command)}});
   const observer=new MutationObserver(ensureTrail);
   observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-source-map-jump-target','data-source-map-selected','data-session-control-event']});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureTrail,{once:true});else ensureTrail();
