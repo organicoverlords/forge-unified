@@ -1,0 +1,79 @@
+<style>
+.session-error-history-rail{margin-top:.35rem;padding:.4rem .5rem;border:1px solid var(--border);border-radius:.55rem;background:color-mix(in srgb,var(--bg-elevated,#161922) 88%,transparent);font-size:.7rem;color:var(--muted)}
+.session-error-history-rail[data-empty="true"]{display:none}
+.session-error-history-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.25rem;color:var(--fg,#f4f5f8)}
+.session-error-history-count{color:var(--muted);font-variant-numeric:tabular-nums}
+.session-error-history-list{display:grid;gap:.25rem}
+.session-error-history-item{display:grid;grid-template-columns:auto 1fr;gap:.35rem;align-items:start;padding:.28rem .32rem;border:1px solid color-mix(in srgb,var(--danger,#ff8a8a) 30%,var(--border));border-radius:.45rem;background:color-mix(in srgb,var(--danger,#ff8a8a) 5%,transparent);overflow-wrap:anywhere}
+.session-error-history-index{color:var(--danger,#ff8a8a);font-variant-numeric:tabular-nums}
+.session-error-history-text{color:var(--fg,#f4f5f8)}
+.session-error-history-more{margin-top:.3rem;color:var(--accent,#8ab4ff);cursor:pointer;user-select:none}
+</style>
+<script>
+(function(){
+  // Source-backed parity anchors:
+  // - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx error Card rendering
+  // - anomalyco/opencode:packages/session-ui/src/components/session-turn.tsx showAll/overflow/visible diff group
+  // Forge applies the same visible overflow pattern to browser session-control error receipts.
+  const PROOF='session-error-history-rail session-error-history-overflow opencode-error-card-parity opencode-showall-overflow-parity copy-session-control-error-history packages/session-ui/src/components/session-turn.tsx';
+  const MAX_VISIBLE=3;
+  const state={showAll:false,errors:[]};
+  function record(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
+  function parse(value){try{return JSON.parse(value)}catch{return undefined}}
+  function read(value){const first=parse(value);if(typeof first!=='string')return first;return parse(first.trim())}
+  function unwrap(message){
+    const text=String(message||'').replace(/^Error:\s*/,'').trim();
+    let json=read(text);
+    if(json===undefined){const start=text.indexOf('{');const end=text.lastIndexOf('}');if(start!==-1&&end>start)json=read(text.slice(start,end+1))}
+    if(!record(json))return text||String(message||'session control failed');
+    const err=record(json.error)?json.error:undefined;
+    if(err){const type=typeof err.type==='string'?err.type:undefined;const msg=typeof err.message==='string'?err.message:undefined;if(type&&msg)return `${type}: ${msg}`;if(msg)return msg;if(type)return type;const code=typeof err.code==='string'?err.code:undefined;if(code)return code}
+    if(typeof json.message==='string')return json.message;
+    if(typeof json.error==='string')return json.error;
+    return text||String(message||'session control failed');
+  }
+  function payloadOf(value){return record(value&&value.payload)?value.payload:{}}
+  function rawError(value){
+    if(!value)return 'No session control errors recorded.';
+    if(typeof value.error==='string')return value.error;
+    const p=payloadOf(value);
+    if(typeof p.error==='string')return p.error;
+    if(record(p.error)&&typeof p.error.message==='string')return p.error.message;
+    if(record(value.error)&&typeof value.error.message==='string')return value.error.message;
+    return value.action?`${value.action} failed`:'session control failed';
+  }
+  function rawText(value){try{return JSON.stringify(value,null,2)}catch{return String(value)}}
+  function addProof(el){if(!el)return;const have=new Set(String(el.getAttribute('data-proof')||'').split(/\s+/).filter(Boolean));for(const token of PROOF.split(' '))have.add(token);el.setAttribute('data-proof',[...have].join(' '))}
+  function railNode(){const node=document.createElement('div');node.className='session-error-history-rail';node.dataset.proof='session-error-history-rail session-error-history-overflow opencode-showall-overflow-parity opencode-error-card-parity';node.dataset.empty='true';return node}
+  function controls(){return Array.from(document.querySelectorAll('.backend-session-controls'))}
+  function copyButton(){const b=document.createElement('button');b.type='button';b.className='mini-btn';b.dataset.proof='copy-session-control-error-history session-error-history-rail';b.textContent='copy error history';b.onclick=async e=>{e.stopPropagation();const lines=state.errors.map((err,i)=>`${i+1}. ${unwrap(rawError(err))}\n${rawText(err)}`).join('\n\n');await navigator.clipboard?.writeText?.(lines||'No session control errors recorded.');if(typeof toast==='function')toast(state.errors.length?'session error history copied':'no session errors to copy')};return b}
+  function render(){
+    document.querySelectorAll('.session-error-history-rail').forEach(rail=>{
+      const total=state.errors.length;
+      const visible=state.showAll?state.errors:state.errors.slice(0,MAX_VISIBLE);
+      const overflow=Math.max(0,total-visible.length);
+      rail.dataset.empty=total?'false':'true';
+      rail.dataset.errorCount=String(total);
+      rail.dataset.showAll=state.showAll?'true':'false';
+      rail.textContent='';
+      if(!total)return;
+      const head=document.createElement('div');head.className='session-error-history-head';head.dataset.proof='session-error-history-header';
+      const title=document.createElement('strong');title.textContent='Session error history';
+      const count=document.createElement('span');count.className='session-error-history-count';count.textContent=`${total} recorded`;
+      head.append(title,count);rail.appendChild(head);
+      const list=document.createElement('div');list.className='session-error-history-list';list.dataset.proof='session-error-history-list';
+      visible.forEach((err,i)=>{const item=document.createElement('div');item.className='session-error-history-item';item.dataset.proof='session-error-history-item readable-session-control-error-card';item.dataset.sessionControlEvent=rawText(err);const ix=document.createElement('span');ix.className='session-error-history-index';ix.textContent=`#${i+1}`;const text=document.createElement('span');text.className='session-error-history-text';text.textContent=unwrap(rawError(err));item.append(ix,text);list.appendChild(item)});
+      rail.appendChild(list);
+      if(overflow>0||state.showAll){const more=document.createElement('div');more.className='session-error-history-more';more.dataset.proof='session-error-history-overflow opencode-showall-overflow-parity';more.textContent=state.showAll?'show fewer errors':`show ${overflow} older errors`;more.onclick=e=>{e.stopPropagation();state.showAll=!state.showAll;render()};rail.appendChild(more)}
+    });
+  }
+  function enhance(){
+    addProof(document.body);
+    document.querySelectorAll('.session-head').forEach(head=>{if(!head.querySelector('.session-error-history-rail')){const after=head.querySelector('.session-error-unwrap-card')||head.querySelector('.backend-session-control-error-card')||head.querySelector('.backend-session-control-receipt');if(after)after.insertAdjacentElement('afterend',railNode());else head.appendChild(railNode())}});
+    controls().forEach(row=>{if(!row.querySelector('[data-proof*="copy-session-control-error-history"]'))row.appendChild(copyButton())});
+    render();
+  }
+  document.addEventListener('forge:session-control',event=>{const detail=event.detail||{};if(detail.status==='error'){state.errors.unshift(detail);state.errors.splice(20)}render()});
+  const observer=new MutationObserver(()=>enhance());observer.observe(document.documentElement,{childList:true,subtree:true});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
+</script>
